@@ -220,7 +220,7 @@ export const revenueService = {
       month: item.month,
       customer: item.customer,
       model: item.model,
-      qty: item.qty,
+      qty: Math.round(item.qty || 0),  // INTEGER 타입에 맞게 반올림
       amount: item.amount
     }));
 
@@ -335,7 +335,7 @@ export const purchaseService = {
       item_name: item.itemName,
       spec: item.spec,
       unit: item.unit,
-      qty: item.qty,
+      qty: Math.round(item.qty || 0),
       unit_price: item.unitPrice,
       amount: item.amount
     }));
@@ -423,7 +423,7 @@ export const inventoryService = {
       type: item.type,
       code: item.code,
       name: item.name,
-      qty: item.qty,
+      qty: Math.round(item.qty || 0),
       spec: item.spec,
       unit: item.unit,
       location: item.location,
@@ -573,7 +573,7 @@ export const rfqService = {
       date_quotation: item.dateQuotation || null,
       date_po: item.datePO || null,
       model: item.model,
-      qty: item.qty,
+      qty: Math.round(item.qty || 0),
       unit_price: item.unitPrice,
       amount: item.amount,
       remark: item.remark
@@ -604,7 +604,7 @@ export const rfqService = {
       date_quotation: item.dateQuotation || null,
       date_po: item.datePO || null,
       model: item.model,
-      qty: item.qty,
+      qty: Math.round(item.qty || 0),
       unit_price: item.unitPrice,
       amount: item.amount,
       remark: item.remark
@@ -638,7 +638,7 @@ export const rfqService = {
         date_quotation: item.dateQuotation || null,
         date_po: item.datePO || null,
         model: item.model,
-        qty: item.qty,
+        qty: Math.round(item.qty || 0),
         unit_price: item.unitPrice,
         amount: item.amount,
         remark: item.remark
