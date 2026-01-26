@@ -116,18 +116,43 @@ const SalesView: React.FC = () => {
   });
   const [rfqSortConfig, setRfqSortConfig] = useState<{ key: keyof RFQItem; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- NO AUTO SUPABASE LOAD - Use localStorage only, manual sync via Cloud button ---
-  // Supabase 자동 로드 제거 - 데이터 손실 방지
-  // "클라우드에서 다운로드" 버튼으로만 Supabase 데이터 사용
+  // --- Smart Supabase Load: 다중 사용자 동기화 ---
+  // Supabase에 데이터가 있으면 사용, 없으면 localStorage 유지 (데이터 손실 방지)
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
 
-  // --- Persistence Effects (localStorage ONLY - NO AUTO SUPABASE) ---
-  // Supabase는 "클라우드로 업로드" 버튼으로만 저장
+      try {
+        // Revenue 데이터 로드
+        const supabaseRevenue = await revenueService.getAll();
+        if (supabaseRevenue && supabaseRevenue.length > 0) {
+          // Supabase에 데이터가 있으면 사용
+          setRevenueData(supabaseRevenue);
+          localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
+          console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
+        } else {
+          // Supabase가 비어있으면 localStorage 유지 (덮어쓰지 않음!)
+          console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
+        }
+      } catch (err) {
+        console.error('Supabase 로드 실패 - localStorage 유지:', err);
+        // 에러 시 localStorage 유지 (덮어쓰지 않음)
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
+
+  // --- Persistence Effects (localStorage 저장) ---
   useEffect(() => {
     localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
   }, [salesData]);
 
   useEffect(() => {
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
+    // revenueData가 비어있지 않을 때만 저장 (초기 빈 상태에서 덮어쓰기 방지)
+    if (revenueData.length > 0) {
+      localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
+    }
     const years = Array.from(new Set(revenueData.map(d => d.year))).sort();
     setAvailableYears(years.length > 0 ? years : [2023, 2024]);
   }, [revenueData]);
