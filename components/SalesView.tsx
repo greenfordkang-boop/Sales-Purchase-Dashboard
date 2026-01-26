@@ -325,10 +325,10 @@ const SalesView: React.FC = () => {
   }, [rfqData, rfqFilter, rfqSortConfig]);
 
   // --- Handlers ---
-  const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setSalesData(parseSalesCSV(event.target?.result as string)); reader.readAsText(file); }};
-  const handleRevFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { const newData = parseRevenueCSV(event.target?.result as string, uploadYear); setRevenueData(prev => [...prev, ...newData]); if (!selectedYears.includes(uploadYear)) setSelectedYears(prev => [...prev, uploadYear].sort()); }; reader.readAsText(file); }};
-  const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setCrData(parseCRCSV(event.target?.result as string)); reader.readAsText(file); }};
-  const handleRfqFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setRfqData(parseRFQCSV(event.target?.result as string)); reader.readAsText(file); }};
+  const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setSalesData(parseSalesCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
+  const handleRevFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { const newData = parseRevenueCSV(event.target?.result as string, uploadYear); setRevenueData(newData); setSelectedYears([uploadYear]); }; reader.readAsText(file); } e.target.value = ''; };
+  const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setCrData(parseCRCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
+  const handleRfqFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setRfqData(parseRFQCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
 
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
     const numValue = parseFloat(value); const finalVal = isNaN(numValue) ? 0 : numValue;
