@@ -215,18 +215,19 @@ export const revenueService = {
 
     if (deleteError) handleError(deleteError, 'revenue delete');
 
+    // localStorage에 먼저 저장 (데이터 손실 방지)
+    localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+
     const rows = data.map(item => ({
       year: item.year,
       month: item.month,
       customer: item.customer,
       model: item.model,
-      qty: Math.round(item.qty || 0),  // INTEGER 타입에 맞게 반올림
-      amount: item.amount
+      qty: Math.round(item.qty || 0),
+      amount: Math.round(item.amount || 0)  // 소수점 값 방지
     }));
 
     await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
-
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
   },
 
   async saveByYear(data: RevenueItem[], year: number): Promise<void> {
