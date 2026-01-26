@@ -73,8 +73,8 @@ CREATE INDEX IF NOT EXISTS idx_purchase_category ON purchase_data(category);
 CREATE TABLE IF NOT EXISTS inventory_data (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   type TEXT CHECK (type IN ('warehouse', 'material', 'parts', 'product')),
-  code TEXT NOT NULL,
-  name TEXT NOT NULL,
+  code TEXT,
+  name TEXT,
   qty INTEGER DEFAULT 0,
   spec TEXT,
   unit TEXT,
@@ -87,6 +87,11 @@ CREATE TABLE IF NOT EXISTS inventory_data (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Optional: allow inventory uploads even when some rows are missing codes/names.
+ALTER TABLE inventory_data
+  ALTER COLUMN code DROP NOT NULL,
+  ALTER COLUMN name DROP NOT NULL;
 
 -- Index for faster queries
 CREATE INDEX IF NOT EXISTS idx_inventory_type ON inventory_data(type);

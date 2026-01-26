@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ComposedChart, Bar, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 import MetricCard from './MetricCard';
-import { parseRevenueCSV } from '../utils/revenueDataParser';
-import { parsePartsCSV, parseMaterialCSV } from '../utils/purchaseDataParser';
+import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
+import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
@@ -20,7 +20,11 @@ const Overview: React.FC = () => {
     purchaseRatio: 0
   });
 
-  // --- Data Loading & Aggregation ---
+  // --- Load from Supabase on Mount ---
+  const [revenueData, setRevenueData] = useState<RevenueItem[]>([]);
+  const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+
   useEffect(() => {
     const loadAndAggregate = async () => {
       // 1. Load Sales Data from Supabase first, then localStorage
