@@ -7,8 +7,8 @@ import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchase
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
-// Supabase imports removed - using localStorage only to prevent data loss
-// Use "클라우드 업로드/다운로드" buttons in SalesView for Supabase sync
+import { isSupabaseConfigured } from '../lib/supabase';
+import { revenueService } from '../services/supabaseService';
 
 const Overview: React.FC = () => {
   const [year, setYear] = useState<number>(2026);
@@ -26,22 +26,34 @@ const Overview: React.FC = () => {
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
 
   useEffect(() => {
-    const loadAndAggregate = () => {
-      // 1. Load Sales Data from localStorage ONLY
+    const loadAndAggregate = async () => {
+      // 1. Load Sales Data - Supabase 우선, 없으면 localStorage
       let salesItems: any[] = [];
       try {
-        const storedSales = localStorage.getItem('dashboard_revenueData');
-        if (storedSales) {
-          salesItems = JSON.parse(storedSales);
-        } else {
-          salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
+        // Supabase에서 먼저 로드 시도
+        if (isSupabaseConfigured()) {
+          const supabaseData = await revenueService.getAll();
+          if (supabaseData && supabaseData.length > 0) {
+            salesItems = supabaseData;
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseData));
+          }
+        }
+        // Supabase 데이터 없으면 localStorage에서 로드
+        if (salesItems.length === 0) {
+          const storedSales = localStorage.getItem('dashboard_revenueData');
+          if (storedSales) {
+            salesItems = JSON.parse(storedSales);
+          } else {
+            salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
+          }
         }
       } catch (e) {
         console.error('Failed to load sales:', e);
-        salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
+        const storedSales = localStorage.getItem('dashboard_revenueData');
+        salesItems = storedSales ? JSON.parse(storedSales) : parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
       }
 
-      // 2. Load Purchase Data from localStorage ONLY
+      // 2. Load Purchase Data from localStorage
       let purchaseItems: any[] = [];
       try {
         const storedPurchase = localStorage.getItem('dashboard_purchaseData');
