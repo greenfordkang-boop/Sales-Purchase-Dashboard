@@ -123,8 +123,8 @@ export const revenueService = {
 
     if (error) handleError(error, 'revenue getAll');
 
-    return data?.map((row: any) => ({
-      id: row.id,
+    return data?.map((row: any, index: number) => ({
+      id: typeof row.id === 'number' ? row.id : (Date.now() + index),
       year: row.year,
       month: row.month,
       customer: row.customer,
@@ -162,6 +162,60 @@ export const revenueService = {
     }
 
     localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+  },
+
+  async saveByYear(data: RevenueItem[], year: number): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      // For localStorage, filter and merge
+      const stored = localStorage.getItem('dashboard_revenueData');
+      const existing: RevenueItem[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(item => item.year !== year);
+      const merged = [...filtered, ...data];
+      localStorage.setItem('dashboard_revenueData', JSON.stringify(merged));
+      return;
+    }
+
+    try {
+      // Delete data for the specific year
+      const { error: deleteError } = await supabase!
+        .from('revenue_data')
+        .delete()
+        .eq('year', year);
+
+      if (deleteError) {
+        console.error('Error deleting revenue data for year', year, deleteError);
+        handleError(deleteError, 'revenue delete by year');
+      }
+
+      // Insert new data for the year
+      if (data.length > 0) {
+        const rows = data.map(item => ({
+          year: item.year,
+          month: item.month,
+          customer: item.customer,
+          model: item.model || '',
+          qty: item.qty || 0,
+          amount: item.amount || 0
+        }));
+
+        const { error: insertError } = await supabase!
+          .from('revenue_data')
+          .insert(rows);
+
+        if (insertError) {
+          console.error('Error inserting revenue data for year', year, insertError);
+          handleError(insertError, 'revenue insert by year');
+        }
+      }
+
+      // Reload all data from Supabase to update localStorage
+      const allData = await this.getAll();
+      localStorage.setItem('dashboard_revenueData', JSON.stringify(allData));
+      console.log(`Revenue data for year ${year} saved to Supabase successfully`);
+    } catch (error) {
+      console.error('Failed to save revenue data by year:', error);
+      throw error;
+    }
   }
 };
 

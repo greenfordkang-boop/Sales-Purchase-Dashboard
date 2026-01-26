@@ -35,28 +35,23 @@ const SalesView: React.FC = () => {
 
   // 2. Revenue Data Initializer
   const getInitialRevenueData = (): RevenueItem[] => {
-    const generateDefaultData = () => {
-      const data2024 = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
-      const data2023 = data2024.map(item => ({
-        ...item,
-        id: item.id + 100000,
-        year: 2023,
-        amount: Math.floor(item.amount * 0.9),
-        qty: Math.floor(item.qty * 0.92)
-      }));
-      return [...data2023, ...data2024];
-    };
-
-    if (typeof window === 'undefined') return generateDefaultData();
+    // 초기 데이터 생성은 Supabase와 localStorage 모두에 데이터가 없을 때만 실행
+    // Supabase에 데이터가 있으면 Supabase에서 로드하므로 여기서는 빈 배열 반환
+    if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem('dashboard_revenueData');
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        // localStorage에 데이터가 있으면 사용 (Supabase에서 로드된 데이터일 수 있음)
+        if (parsed && parsed.length > 0) {
+          return parsed;
+        }
       }
-      return generateDefaultData();
+      // localStorage에도 없으면 빈 배열 반환 (Supabase에서 로드될 예정)
+      return [];
     } catch (e) {
       console.error("Failed to load revenue data", e);
-      return generateDefaultData();
+      return [];
     }
   };
 
@@ -126,6 +121,28 @@ const SalesView: React.FC = () => {
     const loadFromSupabase = async () => {
       if (!isSupabaseConfigured()) {
         console.log('Supabase not configured, using localStorage');
+        // Supabase가 없으면 localStorage에서 로드하거나 기본 데이터 생성
+        const stored = localStorage.getItem('dashboard_revenueData');
+        if (!stored || JSON.parse(stored).length === 0) {
+          // localStorage에도 없으면 기본 데이터 생성
+          const generateDefaultData = () => {
+            const data2024 = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
+            const data2023 = data2024.map(item => ({
+              ...item,
+              id: item.id + 100000,
+              year: 2023,
+              amount: Math.floor(item.amount * 0.9),
+              qty: Math.floor(item.qty * 0.92)
+            }));
+            return [...data2023, ...data2024];
+          };
+          const defaultData = generateDefaultData();
+          setRevenueData(defaultData);
+          localStorage.setItem('dashboard_revenueData', JSON.stringify(defaultData));
+          const years = Array.from(new Set(defaultData.map(d => d.year))).sort();
+          setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+          setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
+        }
         return;
       }
       console.log('Loading data from Supabase...');
@@ -142,12 +159,21 @@ const SalesView: React.FC = () => {
           setSalesData(sales);
           localStorage.setItem('dashboard_salesData', JSON.stringify(sales));
         }
-        if (revenue && revenue.length > 0) {
-          setRevenueData(revenue);
-          localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
-          const years = Array.from(new Set(revenue.map(d => d.year))).sort();
-          setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-          setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
+        // Supabase에서 revenue 데이터가 있으면 무조건 사용 (빈 배열이어도)
+        if (revenue !== undefined && revenue !== null) {
+          if (revenue.length > 0) {
+            setRevenueData(revenue);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
+            const years = Array.from(new Set(revenue.map(d => d.year))).sort();
+            setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+            setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
+          } else {
+            // Supabase에 데이터가 없으면 빈 배열로 설정 (초기 데이터 생성 안 함)
+            setRevenueData([]);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify([]));
+            setAvailableYears([2023, 2024]);
+            setSelectedYears([2024]);
+          }
         }
         if (cr && cr.length > 0) {
           setCrData(cr);
@@ -159,6 +185,17 @@ const SalesView: React.FC = () => {
         }
       } catch (err) {
         console.error('Failed to load from Supabase:', err);
+        // 에러 발생 시 localStorage에서 로드 시도
+        const stored = localStorage.getItem('dashboard_revenueData');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && parsed.length > 0) {
+            setRevenueData(parsed);
+            const years = Array.from(new Set(parsed.map((d: RevenueItem) => d.year))).sort();
+            setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+            setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
+          }
+        }
       }
     };
     loadFromSupabase();
@@ -414,15 +451,36 @@ const SalesView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
-        const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
-        // 함수형 업데이트로 최신 상태 사용 (stale closure 방지)
-        setRevenueData(prev => {
-          const filtered = prev.filter(d => d.year !== uploadYear);
-          return [...filtered, ...newData];
-        });
-        if (!selectedYears.includes(uploadYear)) {
-          setSelectedYears(prev => [...prev, uploadYear].sort());
+      reader.onload = async (event) => {
+        try {
+          const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
+          
+          // Update local state
+          setRevenueData(prev => {
+            const filtered = prev.filter(d => d.year !== uploadYear);
+            return [...filtered, ...newData];
+          });
+          
+          if (!selectedYears.includes(uploadYear)) {
+            setSelectedYears(prev => [...prev, uploadYear].sort());
+          }
+
+          // Save to Supabase if configured
+          if (isSupabaseConfigured()) {
+            try {
+              await revenueService.saveByYear(newData, uploadYear);
+              console.log(`✅ Revenue data for year ${uploadYear} saved to Supabase successfully`);
+            } catch (err) {
+              console.error('❌ Failed to save revenue data to Supabase:', err);
+              alert(`데이터 저장 중 오류가 발생했습니다: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            }
+          } else {
+            // If Supabase not configured, just save to localStorage (already done by useEffect)
+            console.log('Supabase not configured, data saved to localStorage only');
+          }
+        } catch (error) {
+          console.error('Error processing file upload:', error);
+          alert(`파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
       };
       reader.readAsText(file);
