@@ -252,6 +252,7 @@ const PurchaseView: React.FC = () => {
       reader.onload = (event) => {
         const newParts = parsePartsCSV(event.target?.result as string);
         setPurchaseData(prev => {
+          // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
           const existingMaterials = prev.filter(d => d.category === 'Material');
           const updatedData = [...existingMaterials, ...newParts];
           // localStorage 즉시 저장
@@ -277,6 +278,7 @@ const PurchaseView: React.FC = () => {
       reader.onload = (event) => {
         const newMaterials = parseMaterialCSV(event.target?.result as string);
         setPurchaseData(prev => {
+          // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
           const existingParts = prev.filter(d => d.category === 'Parts');
           const updatedData = [...existingParts, ...newMaterials];
           // localStorage 즉시 저장
