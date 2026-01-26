@@ -2,11 +2,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ComposedChart, Bar, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList } from 'recharts';
 import MetricCard from './MetricCard';
-import { parseRevenueCSV } from '../utils/revenueDataParser';
-import { parsePartsCSV, parseMaterialCSV } from '../utils/purchaseDataParser';
+import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
+import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { revenueService, purchaseService } from '../services/supabaseService';
 
 const Overview: React.FC = () => {
   const [year, setYear] = useState<number>(2026);
@@ -18,35 +20,214 @@ const Overview: React.FC = () => {
     purchaseRatio: 0
   });
 
+  // --- Load from Supabase on Mount ---
+  const [revenueData, setRevenueData] = useState<RevenueItem[]>([]);
+  const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      try {
+        if (isSupabaseConfigured()) {
+          console.log('Overview: Loading data from Supabase...');
+          const [revenue, purchase] = await Promise.all([
+            revenueService.getAll(),
+            purchaseService.getAll()
+          ]);
+          
+          if (revenue && revenue.length > 0) {
+            setRevenueData(revenue);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
+            console.log('Overview: Revenue data loaded from Supabase:', revenue.length, 'items');
+          } else {
+            // Supabase에 데이터가 없으면 localStorage 확인
+            const stored = localStorage.getItem('dashboard_revenueData');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (parsed && parsed.length > 0) {
+                setRevenueData(parsed);
+                console.log('Overview: Revenue data loaded from localStorage:', parsed.length, 'items');
+              } else {
+                setRevenueData([]);
+              }
+            } else {
+              setRevenueData([]);
+            }
+          }
+
+          if (purchase && purchase.length > 0) {
+            setPurchaseData(purchase);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchase));
+            console.log('Overview: Purchase data loaded from Supabase:', purchase.length, 'items');
+          } else {
+            // Supabase에 데이터가 없으면 localStorage 확인
+            const stored = localStorage.getItem('dashboard_purchaseData');
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (parsed && parsed.length > 0) {
+                setPurchaseData(parsed);
+                console.log('Overview: Purchase data loaded from localStorage:', parsed.length, 'items');
+              } else {
+                setPurchaseData([]);
+              }
+            } else {
+              setPurchaseData([]);
+            }
+          }
+        } else {
+          // Supabase가 설정되지 않았으면 localStorage에서 로드
+          console.log('Overview: Supabase not configured, loading from localStorage');
+          const storedRevenue = localStorage.getItem('dashboard_revenueData');
+          const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+          
+          if (storedRevenue) {
+            const parsed = JSON.parse(storedRevenue);
+            if (parsed && parsed.length > 0) {
+              setRevenueData(parsed);
+            } else {
+              setRevenueData([]);
+            }
+          } else {
+            setRevenueData([]);
+          }
+
+          if (storedPurchase) {
+            const parsed = JSON.parse(storedPurchase);
+            if (parsed && parsed.length > 0) {
+              setPurchaseData(parsed);
+            } else {
+              setPurchaseData([]);
+            }
+          } else {
+            setPurchaseData([]);
+          }
+        }
+      } catch (err) {
+        console.error('Overview: Failed to load data:', err);
+        // 에러 발생 시 localStorage에서 로드
+        const storedRevenue = localStorage.getItem('dashboard_revenueData');
+        const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+        
+        if (storedRevenue) {
+          try {
+            const parsed = JSON.parse(storedRevenue);
+            if (parsed && parsed.length > 0) {
+              setRevenueData(parsed);
+            }
+          } catch (e) {
+            console.error('Failed to parse revenue data:', e);
+          }
+        }
+        
+        if (storedPurchase) {
+          try {
+            const parsed = JSON.parse(storedPurchase);
+            if (parsed && parsed.length > 0) {
+              setPurchaseData(parsed);
+            }
+          } catch (e) {
+            console.error('Failed to parse purchase data:', e);
+          }
+        }
+      } finally {
+        setIsDataLoaded(true);
+      }
+    };
+
+    loadFromSupabase();
+
+    // 데이터 업데이트 감지 (다른 탭 또는 같은 탭에서 업데이트된 경우)
+    const handleDataUpdate = async () => {
+      if (isSupabaseConfigured()) {
+        try {
+          const [revenue, purchase] = await Promise.all([
+            revenueService.getAll(),
+            purchaseService.getAll()
+          ]);
+          
+          if (revenue && revenue.length > 0) {
+            setRevenueData(revenue);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
+            console.log('Overview: Revenue data refreshed from Supabase');
+          }
+          
+          if (purchase && purchase.length > 0) {
+            setPurchaseData(purchase);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchase));
+            console.log('Overview: Purchase data refreshed from Supabase');
+          }
+        } catch (err) {
+          console.error('Overview: Failed to refresh data:', err);
+        }
+      } else {
+        // Supabase가 없으면 localStorage에서 다시 로드
+        const storedRevenue = localStorage.getItem('dashboard_revenueData');
+        const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+        
+        if (storedRevenue) {
+          try {
+            const parsed = JSON.parse(storedRevenue);
+            if (parsed && parsed.length > 0) {
+              setRevenueData(parsed);
+            }
+          } catch (e) {
+            console.error('Failed to parse revenue data:', e);
+          }
+        }
+        
+        if (storedPurchase) {
+          try {
+            const parsed = JSON.parse(storedPurchase);
+            if (parsed && parsed.length > 0) {
+              setPurchaseData(parsed);
+            }
+          } catch (e) {
+            console.error('Failed to parse purchase data:', e);
+          }
+        }
+      }
+    };
+
+    // 다른 탭에서 업데이트된 경우 감지
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'dashboard_revenueData' || e.key === 'dashboard_purchaseData') {
+        handleDataUpdate();
+      }
+    };
+
+    // 같은 탭에서 업데이트된 경우 감지 (커스텀 이벤트)
+    const handleCustomStorageEvent = () => {
+      handleDataUpdate();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('revenueDataUpdated', handleCustomStorageEvent);
+    window.addEventListener('purchaseDataUpdated', handleCustomStorageEvent);
+    
+    // 주기적으로 Supabase에서 데이터 확인 (30초마다)
+    const intervalId = setInterval(() => {
+      if (isSupabaseConfigured()) {
+        handleDataUpdate();
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('revenueDataUpdated', handleCustomStorageEvent);
+      window.removeEventListener('purchaseDataUpdated', handleCustomStorageEvent);
+      clearInterval(intervalId);
+    };
+  }, []);
+
   // --- Data Loading & Aggregation ---
   useEffect(() => {
-    // 1. Load Sales Data
-    let salesItems: any[] = [];
-    try {
-      const storedSales = localStorage.getItem('dashboard_revenueData');
-      if (storedSales) {
-        salesItems = JSON.parse(storedSales);
-      } else {
-        salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024); // Fallback defaults
-        // Since INITIAL_REVENUE_CSV in previous context was generic, we simulate loading
-        // For accurate demo, let's load 2026 if available or parse initial
-        const data2026 = parseRevenueCSV(INITIAL_REVENUE_CSV, 2026); 
-        salesItems = [...data2026];
-      }
-    } catch (e) { console.error(e); }
+    if (!isDataLoaded) return; // 데이터 로드 완료 전에는 실행하지 않음
 
-    // 2. Load Purchase Data
-    let purchaseItems: any[] = [];
-    try {
-      const storedPurchase = localStorage.getItem('dashboard_purchaseData');
-      if (storedPurchase) {
-        purchaseItems = JSON.parse(storedPurchase);
-      } else {
-        const parts = parsePartsCSV(INITIAL_PARTS_CSV);
-        const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
-        purchaseItems = [...parts, ...materials];
-      }
-    } catch (e) { console.error(e); }
+    // 1. Use loaded revenue data
+    const salesItems = revenueData || [];
+
+    // 2. Use loaded purchase data
+    const purchaseItems = purchaseData || [];
 
     // 3. Aggregate by Month for the selected Year
     const monthlyStats = Array.from({ length: 12 }, (_, i) => {
@@ -100,7 +281,7 @@ const Overview: React.FC = () => {
       purchaseRatio: parseFloat(pRatio.toFixed(1))
     });
 
-  }, [year]);
+  }, [year, revenueData, purchaseData, isDataLoaded]);
 
   const handleDownload = () => {
     const headers = ['월(Month)', '매출액(Sales)', '매입액(Purchase)', '매입비율(%)', '이익금(Profit)'];

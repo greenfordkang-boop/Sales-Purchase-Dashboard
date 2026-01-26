@@ -470,6 +470,19 @@ const SalesView: React.FC = () => {
             try {
               await revenueService.saveByYear(newData, uploadYear);
               console.log(`✅ Revenue data for year ${uploadYear} saved to Supabase successfully`);
+              
+              // Supabase 저장 후 전체 데이터를 다시 로드하여 확실하게 동기화
+              const allData = await revenueService.getAll();
+              if (allData && allData.length > 0) {
+                setRevenueData(allData);
+                localStorage.setItem('dashboard_revenueData', JSON.stringify(allData));
+                const years = Array.from(new Set(allData.map(d => d.year))).sort();
+                setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+                console.log(`✅ Revenue data reloaded from Supabase: ${allData.length} items, years: ${years.join(', ')}`);
+                
+                // 다른 컴포넌트(Overview)에 데이터 업데이트 알림
+                window.dispatchEvent(new CustomEvent('revenueDataUpdated'));
+              }
             } catch (err) {
               console.error('❌ Failed to save revenue data to Supabase:', err);
               alert(`데이터 저장 중 오류가 발생했습니다: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -477,6 +490,8 @@ const SalesView: React.FC = () => {
           } else {
             // If Supabase not configured, just save to localStorage (already done by useEffect)
             console.log('Supabase not configured, data saved to localStorage only');
+            // localStorage 업데이트 알림
+            window.dispatchEvent(new Event('storage'));
           }
         } catch (error) {
           console.error('Error processing file upload:', error);
