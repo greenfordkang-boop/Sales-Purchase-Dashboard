@@ -121,6 +121,33 @@ const SalesView: React.FC = () => {
   });
   const [rfqSortConfig, setRfqSortConfig] = useState<{ key: keyof RFQItem; direction: 'asc' | 'desc' } | null>(null);
 
+  // --- Load from Supabase on Mount ---
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        const [sales, revenue, cr, rfq] = await Promise.all([
+          salesService.getAll(),
+          revenueService.getAll(),
+          crService.getAll(),
+          rfqService.getAll()
+        ]);
+        if (sales && sales.length > 0) setSalesData(sales);
+        if (revenue && revenue.length > 0) {
+          setRevenueData(revenue);
+          const years = Array.from(new Set(revenue.map(d => d.year))).sort();
+          setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+          setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
+        }
+        if (cr && cr.length > 0) setCrData(cr);
+        if (rfq && rfq.length > 0) setRfqData(rfq);
+      } catch (err) {
+        console.error('Failed to load from Supabase:', err);
+      }
+    };
+    loadFromSupabase();
+  }, []);
+
   // --- Persistence Effects ---
   useEffect(() => { localStorage.setItem('dashboard_salesData', JSON.stringify(salesData)); }, [salesData]);
   useEffect(() => { 
