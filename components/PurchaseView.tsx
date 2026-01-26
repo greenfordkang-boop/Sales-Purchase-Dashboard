@@ -5,8 +5,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
-// Supabase imports removed - using localStorage only to prevent data loss
-// Use SalesView "클라우드 업로드/다운로드" buttons for Supabase sync
+import { isSupabaseConfigured } from '../lib/supabase';
+import { purchaseService } from '../services/supabaseService';
 
 const PurchaseView: React.FC = () => {
   // --- Initialization Helpers ---
@@ -53,14 +53,33 @@ const PurchaseView: React.FC = () => {
   const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [supplierSortConfig, setSupplierSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- NO AUTO SUPABASE LOAD - Use localStorage only (prevents data loss) ---
-  // Supabase는 SalesView에서 "클라우드 업로드/다운로드" 버튼으로만 사용
-
-  // isInitialLoadComplete 제거 - auto-Supabase 저장 제거로 더 이상 필요 없음
-
-  // --- Persistence & Derived Year State (localStorage ONLY - NO AUTO SUPABASE) ---
+  // --- Smart Supabase Load: 다중 사용자 동기화 ---
   useEffect(() => {
-    localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+
+      try {
+        const supabaseData = await purchaseService.getAll();
+        if (supabaseData && supabaseData.length > 0) {
+          setPurchaseData(supabaseData);
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(supabaseData));
+          console.log(`✅ Supabase에서 구매 데이터 로드: ${supabaseData.length}개`);
+        } else {
+          console.log('ℹ️ Supabase 구매 데이터 없음 - localStorage 유지');
+        }
+      } catch (err) {
+        console.error('Supabase 구매 로드 실패 - localStorage 유지:', err);
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
+
+  // --- Persistence & Derived Year State ---
+  useEffect(() => {
+    if (purchaseData.length > 0) {
+      localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
+    }
 
     // Update available years based on data
     const years = Array.from(new Set(purchaseData.map(d => d.year))).sort();
@@ -70,8 +89,6 @@ const PurchaseView: React.FC = () => {
         setSelectedYears([years[years.length - 1]]);
       }
     }
-    // Auto-Supabase save 제거 - 데이터 손실 방지
-    // SalesView "클라우드로 업로드" 버튼으로만 Supabase 저장
   }, [purchaseData]);
 
   // Generic Sorting Helper
@@ -236,11 +253,21 @@ const PurchaseView: React.FC = () => {
         const newParts = parsePartsCSV(event.target?.result as string);
         setPurchaseData(prev => {
           const existingMaterials = prev.filter(d => d.category === 'Material');
-          return [...existingMaterials, ...newParts];
+          const updatedData = [...existingMaterials, ...newParts];
+          // localStorage 즉시 저장
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+          // Supabase 백그라운드 저장
+          if (isSupabaseConfigured()) {
+            purchaseService.saveAll(updatedData)
+              .then(() => console.log('✅ 부품 데이터 Supabase 동기화 완료'))
+              .catch(err => console.error('Supabase 동기화 실패:', err));
+          }
+          return updatedData;
         });
       };
       reader.readAsText(file);
     }
+    e.target.value = '';
   };
 
   const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -251,11 +278,21 @@ const PurchaseView: React.FC = () => {
         const newMaterials = parseMaterialCSV(event.target?.result as string);
         setPurchaseData(prev => {
           const existingParts = prev.filter(d => d.category === 'Parts');
-          return [...existingParts, ...newMaterials];
+          const updatedData = [...existingParts, ...newMaterials];
+          // localStorage 즉시 저장
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+          // Supabase 백그라운드 저장
+          if (isSupabaseConfigured()) {
+            purchaseService.saveAll(updatedData)
+              .then(() => console.log('✅ 원재료 데이터 Supabase 동기화 완료'))
+              .catch(err => console.error('Supabase 동기화 실패:', err));
+          }
+          return updatedData;
         });
       };
       reader.readAsText(file);
     }
+    e.target.value = '';
   };
 
   const handleFilterChange = (field: keyof typeof filter, value: string) => {

@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { parseInventoryCSV, InventoryItem } from '../utils/inventoryDataParser';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { inventoryService } from '../services/supabaseService';
 
 // Type definition for column configuration
 interface ColumnDef {
@@ -72,9 +74,42 @@ const InventoryView: React.FC = () => {
   // Pivot Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
+  // --- Smart Supabase Load: 다중 사용자 동기화 ---
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+
+      try {
+        const supabaseData = await inventoryService.getAll();
+        const hasData = supabaseData.warehouse.length > 0 ||
+                       supabaseData.material.length > 0 ||
+                       supabaseData.parts.length > 0 ||
+                       supabaseData.product.length > 0;
+
+        if (hasData) {
+          setInventoryData(supabaseData);
+          localStorage.setItem('dashboard_inventoryData', JSON.stringify(supabaseData));
+          console.log('✅ Supabase에서 재고 데이터 로드');
+        } else {
+          console.log('ℹ️ Supabase 재고 데이터 없음 - localStorage 유지');
+        }
+      } catch (err) {
+        console.error('Supabase 재고 로드 실패 - localStorage 유지:', err);
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
+
   // --- Persistence ---
   useEffect(() => {
-    localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
+    const hasData = inventoryData.warehouse.length > 0 ||
+                   inventoryData.material.length > 0 ||
+                   inventoryData.parts.length > 0 ||
+                   inventoryData.product.length > 0;
+    if (hasData) {
+      localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
+    }
   }, [inventoryData]);
 
   // Reset Filters when type changes
@@ -262,11 +297,23 @@ const InventoryView: React.FC = () => {
         const reader = new FileReader();
         reader.onload = (event) => {
             const data = parseInventoryCSV(event.target?.result as string, type);
-            setInventoryData(prev => ({ ...prev, [type]: data }));
+            setInventoryData(prev => {
+              const updatedData = { ...prev, [type]: data };
+              // localStorage 즉시 저장
+              localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
+              // Supabase 백그라운드 저장
+              if (isSupabaseConfigured()) {
+                inventoryService.saveAll(updatedData)
+                  .then(() => console.log(`✅ ${type} 재고 Supabase 동기화 완료`))
+                  .catch(err => console.error('Supabase 동기화 실패:', err));
+              }
+              return updatedData;
+            });
             if (viewMode === 'list') setActiveInventoryType(type);
         };
         reader.readAsText(file);
     }
+    e.target.value = '';
   };
 
   const handleFilterChange = (key: string, value: string) => {
