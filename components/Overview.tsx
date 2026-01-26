@@ -7,6 +7,8 @@ import { parsePartsCSV, parseMaterialCSV } from '../utils/purchaseDataParser';
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { revenueService, purchaseService } from '../services/supabaseService';
 
 const Overview: React.FC = () => {
   const [year, setYear] = useState<number>(2026);
@@ -20,86 +22,108 @@ const Overview: React.FC = () => {
 
   // --- Data Loading & Aggregation ---
   useEffect(() => {
-    // 1. Load Sales Data
-    let salesItems: any[] = [];
-    try {
-      const storedSales = localStorage.getItem('dashboard_revenueData');
-      if (storedSales) {
-        salesItems = JSON.parse(storedSales);
-      } else {
-        salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024); // Fallback defaults
-        // Since INITIAL_REVENUE_CSV in previous context was generic, we simulate loading
-        // For accurate demo, let's load 2026 if available or parse initial
-        const data2026 = parseRevenueCSV(INITIAL_REVENUE_CSV, 2026); 
-        salesItems = [...data2026];
-      }
-    } catch (e) { console.error(e); }
-
-    // 2. Load Purchase Data
-    let purchaseItems: any[] = [];
-    try {
-      const storedPurchase = localStorage.getItem('dashboard_purchaseData');
-      if (storedPurchase) {
-        purchaseItems = JSON.parse(storedPurchase);
-      } else {
-        const parts = parsePartsCSV(INITIAL_PARTS_CSV);
-        const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
-        purchaseItems = [...parts, ...materials];
-      }
-    } catch (e) { console.error(e); }
-
-    // 3. Aggregate by Month for the selected Year
-    const monthlyStats = Array.from({ length: 12 }, (_, i) => {
-      const monthStr = `${(i + 1).toString().padStart(2, '0')}월`;
-      return { month: monthStr, sales: 0, purchase: 0, ratio: 0, profit: 0 };
-    });
-
-    let yearTotalSales = 0;
-    let yearTotalPurchase = 0;
-
-    // Sum Sales
-    salesItems.forEach(item => {
-      if (item.year === year) {
-        const monthIdx = parseInt(item.month.replace('월', '')) - 1;
-        if (monthIdx >= 0 && monthIdx < 12) {
-          monthlyStats[monthIdx].sales += item.amount;
-          yearTotalSales += item.amount;
+    const loadAndAggregate = async () => {
+      // 1. Load Sales Data from Supabase first, then localStorage
+      let salesItems: any[] = [];
+      try {
+        if (isSupabaseConfigured()) {
+          salesItems = await revenueService.getAll();
+          if (salesItems.length > 0) {
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(salesItems));
+          }
         }
-      }
-    });
-
-    // Sum Purchase
-    purchaseItems.forEach(item => {
-      if (item.year === year) {
-        const monthIdx = parseInt(item.month.replace('월', '')) - 1;
-        if (monthIdx >= 0 && monthIdx < 12) {
-          monthlyStats[monthIdx].purchase += item.amount;
-          yearTotalPurchase += item.amount;
+        if (salesItems.length === 0) {
+          const storedSales = localStorage.getItem('dashboard_revenueData');
+          if (storedSales) {
+            salesItems = JSON.parse(storedSales);
+          } else {
+            salesItems = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
+          }
         }
+      } catch (e) {
+        console.error('Failed to load sales:', e);
+        const storedSales = localStorage.getItem('dashboard_revenueData');
+        if (storedSales) salesItems = JSON.parse(storedSales);
       }
-    });
 
-    // Calculate Ratios & Profit
-    monthlyStats.forEach(stat => {
-      stat.profit = stat.sales - stat.purchase;
-      // Purchase Ratio = (Purchase / Sales) * 100
-      stat.ratio = stat.sales > 0 ? parseFloat(((stat.purchase / stat.sales) * 100).toFixed(1)) : 0;
-    });
+      // 2. Load Purchase Data from Supabase first, then localStorage
+      let purchaseItems: any[] = [];
+      try {
+        if (isSupabaseConfigured()) {
+          purchaseItems = await purchaseService.getAll();
+          if (purchaseItems.length > 0) {
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseItems));
+          }
+        }
+        if (purchaseItems.length === 0) {
+          const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+          if (storedPurchase) {
+            purchaseItems = JSON.parse(storedPurchase);
+          } else {
+            const parts = parsePartsCSV(INITIAL_PARTS_CSV);
+            const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
+            purchaseItems = [...parts, ...materials];
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load purchase:', e);
+        const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+        if (storedPurchase) purchaseItems = JSON.parse(storedPurchase);
+      }
 
-    setChartData(monthlyStats);
+      // 3. Aggregate by Month for the selected Year
+      const monthlyStats = Array.from({ length: 12 }, (_, i) => {
+        const monthStr = `${(i + 1).toString().padStart(2, '0')}월`;
+        return { month: monthStr, sales: 0, purchase: 0, ratio: 0, profit: 0 };
+      });
 
-    // Update Summary Metrics
-    const profit = yearTotalSales - yearTotalPurchase;
-    const margin = yearTotalSales > 0 ? (profit / yearTotalSales) * 100 : 0;
-    const pRatio = yearTotalSales > 0 ? (yearTotalPurchase / yearTotalSales) * 100 : 0;
+      let yearTotalSales = 0;
+      let yearTotalPurchase = 0;
 
-    setSummaryMetrics({
-      totalSales: yearTotalSales,
-      totalPurchase: yearTotalPurchase,
-      profitMargin: parseFloat(margin.toFixed(1)),
-      purchaseRatio: parseFloat(pRatio.toFixed(1))
-    });
+      // Sum Sales
+      salesItems.forEach(item => {
+        if (item.year === year) {
+          const monthIdx = parseInt(item.month.replace('월', '')) - 1;
+          if (monthIdx >= 0 && monthIdx < 12) {
+            monthlyStats[monthIdx].sales += item.amount;
+            yearTotalSales += item.amount;
+          }
+        }
+      });
 
+      // Sum Purchase
+      purchaseItems.forEach(item => {
+        if (item.year === year) {
+          const monthIdx = parseInt(item.month.replace('월', '')) - 1;
+          if (monthIdx >= 0 && monthIdx < 12) {
+            monthlyStats[monthIdx].purchase += item.amount;
+            yearTotalPurchase += item.amount;
+          }
+        }
+      });
+
+      // Calculate Ratios & Profit
+      monthlyStats.forEach(stat => {
+        stat.profit = stat.sales - stat.purchase;
+        stat.ratio = stat.sales > 0 ? parseFloat(((stat.purchase / stat.sales) * 100).toFixed(1)) : 0;
+      });
+
+      setChartData(monthlyStats);
+
+      // Update Summary Metrics
+      const profit = yearTotalSales - yearTotalPurchase;
+      const margin = yearTotalSales > 0 ? (profit / yearTotalSales) * 100 : 0;
+      const pRatio = yearTotalSales > 0 ? (yearTotalPurchase / yearTotalSales) * 100 : 0;
+
+      setSummaryMetrics({
+        totalSales: yearTotalSales,
+        totalPurchase: yearTotalPurchase,
+        profitMargin: parseFloat(margin.toFixed(1)),
+        purchaseRatio: parseFloat(pRatio.toFixed(1))
+      });
+    };
+
+    loadAndAggregate();
   }, [year]);
 
   const handleDownload = () => {

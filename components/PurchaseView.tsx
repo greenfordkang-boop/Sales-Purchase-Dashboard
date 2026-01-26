@@ -5,6 +5,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { purchaseService } from '../services/supabaseService';
 
 const PurchaseView: React.FC = () => {
   // --- Initialization Helpers ---
@@ -51,20 +53,48 @@ const PurchaseView: React.FC = () => {
   const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [supplierSortConfig, setSupplierSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
+  // --- Load from Supabase on Mount ---
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        const data = await purchaseService.getAll();
+        if (data && data.length > 0) {
+          setPurchaseData(data);
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+        }
+      } catch (err) {
+        console.error('Failed to load purchase from Supabase:', err);
+      }
+    };
+    loadFromSupabase();
+  }, []);
+
+  // --- Track initial load complete ---
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoadComplete(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // --- Persistence & Derived Year State ---
   useEffect(() => {
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
-    
+
     // Update available years based on data
     const years = Array.from(new Set(purchaseData.map(d => d.year))).sort();
     if (years.length > 0) {
       setAvailableYears(years);
-      // If currently selected year is not in available, select the latest
       if (selectedYears.length === 0 || !years.includes(selectedYears[0])) {
         setSelectedYears([years[years.length - 1]]);
       }
     }
-  }, [purchaseData]);
+
+    // Auto-save to Supabase after initial load
+    if (isInitialLoadComplete && isSupabaseConfigured()) {
+      purchaseService.saveAll(purchaseData).catch(err => console.error('Supabase sync error:', err));
+    }
+  }, [purchaseData, isInitialLoadComplete]);
 
   // Generic Sorting Helper
   const sortData = <T,>(data: T[], config: { key: keyof T | string; direction: 'asc' | 'desc' } | null) => {
