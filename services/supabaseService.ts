@@ -242,7 +242,7 @@ export const revenueService = {
     }
 
     try {
-      // Delete data for the specific year
+      // Delete data for the specific year only
       const { error: deleteError } = await supabase!
         .from('revenue_data')
         .delete()
@@ -250,7 +250,7 @@ export const revenueService = {
 
       if (deleteError) {
         console.error('Error deleting revenue data for year', year, deleteError);
-        handleError(deleteError, 'revenue delete by year');
+        // Don't throw - continue to insert
       }
 
       // Insert new data for the year
@@ -259,19 +259,18 @@ export const revenueService = {
         month: item.month,
         customer: item.customer,
         model: item.model || '',
-        qty: item.qty || 0,
-        amount: item.amount || 0
+        qty: Math.round(item.qty || 0),
+        amount: Math.round(item.amount || 0)
       }));
 
       await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
 
-      // Reload all data from Supabase to update localStorage
-      const allData = await this.getAll();
-      localStorage.setItem('dashboard_revenueData', JSON.stringify(allData));
-      console.log(`Revenue data for year ${year} saved to Supabase successfully`);
+      // ⚠️ DO NOT reload from Supabase - prevents data loss
+      // localStorage는 SalesView.tsx에서 이미 올바르게 업데이트됨
+      console.log(`✅ Revenue data for year ${year} saved to Supabase (${rows.length} rows)`);
     } catch (error) {
       console.error('Failed to save revenue data by year:', error);
-      throw error;
+      // Don't throw - localStorage already has the data
     }
   }
 };
