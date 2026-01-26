@@ -298,6 +298,8 @@ const InventoryView: React.FC = () => {
         reader.onload = (event) => {
             const data = parseInventoryCSV(event.target?.result as string, type);
             setInventoryData(prev => {
+              // 해당 type만 새 데이터로 교체 (기존 데이터 제거, 누적 방지)
+              // 다른 타입(warehouse, material, parts, product)은 유지
               const updatedData = { ...prev, [type]: data };
               // localStorage 즉시 저장
               localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
