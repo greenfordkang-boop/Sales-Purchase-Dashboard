@@ -3,6 +3,15 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { parseInventoryCSV, InventoryItem } from '../utils/inventoryDataParser';
 
+// Type definition for column configuration
+interface ColumnDef {
+  key: keyof InventoryItem;
+  label: string;
+  align?: 'left' | 'center' | 'right';
+  format?: (value: any) => string;
+  isFilterable?: boolean;
+}
+
 const InventoryView: React.FC = () => {
   // --- Initialization Helpers ---
   const getInitialInventoryData = () => {
@@ -31,32 +40,85 @@ const InventoryView: React.FC = () => {
 
   const [activeInventoryType, setActiveInventoryType] = useState<'warehouse' | 'material' | 'parts' | 'product'>('warehouse');
   
-  // Filter State
-  const [inventoryFilter, setInventoryFilter] = useState({
-    code: '',
-    name: '',
-    spec: '',
-    location: '',
-    qty: '',
-    amount: ''
-  });
+  // Dynamic Filter State
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   // --- Persistence ---
   useEffect(() => {
     localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
   }, [inventoryData]);
 
-  // Reset Filter when type changes
+  // Reset Filters when type changes
   useEffect(() => {
-    setInventoryFilter({
-      code: '',
-      name: '',
-      spec: '',
-      location: '',
-      qty: '',
-      amount: ''
-    });
+    setFilterValues({});
   }, [activeInventoryType]);
+
+  // --- Configuration per Type ---
+  const COLUMN_CONFIG: Record<string, ColumnDef[]> = {
+    warehouse: [
+      { key: 'code', label: '품목코드', isFilterable: true },
+      { key: 'customerPN', label: '고객사 P/N', isFilterable: true },
+      { key: 'name', label: '품목명', isFilterable: true },
+      { key: 'spec', label: '규격', isFilterable: true },
+      { key: 'model', label: '차종명', align: 'center', isFilterable: true },
+      { key: 'unit', label: '단위', align: 'center' },
+      { key: 'status', label: '상태', align: 'center', isFilterable: true },
+      { key: 'location', label: '창고명', align: 'center', isFilterable: true },
+      { 
+        key: 'qty', 
+        label: '재고', 
+        align: 'right', 
+        format: (v) => typeof v === 'number' ? v.toLocaleString() : '0', 
+        isFilterable: true 
+      },
+    ],
+    material: [
+      { key: 'code', label: '재질코드', isFilterable: true },
+      { key: 'name', label: '재질명', isFilterable: true },
+      { key: 'unit', label: '단위', align: 'center' },
+      { key: 'location', label: '창고명', align: 'center', isFilterable: true },
+      { 
+        key: 'qty', 
+        label: '현재고', 
+        align: 'right', 
+        format: (v) => typeof v === 'number' ? v.toLocaleString() : '0', 
+        isFilterable: true 
+      },
+    ],
+    parts: [
+      { key: 'code', label: '부품코드', isFilterable: true },
+      { key: 'name', label: '부품명', isFilterable: true },
+      { key: 'spec', label: '규격', isFilterable: true },
+      { key: 'unit', label: '단위', align: 'center' },
+      { key: 'location', label: '보관위치', align: 'center', isFilterable: true },
+      { key: 'qty', label: '재고수량', align: 'right', format: (v) => v.toLocaleString(), isFilterable: true },
+      { key: 'unitPrice', label: '단가', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-' },
+      { key: 'amount', label: '금액', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-', isFilterable: true },
+    ],
+    product: [
+      { key: 'code', label: '제품코드', isFilterable: true },
+      { key: 'name', label: '제품명', isFilterable: true },
+      { key: 'spec', label: '규격', isFilterable: true },
+      { key: 'model', label: '모델', align: 'center', isFilterable: true },
+      { key: 'unit', label: '단위', align: 'center' },
+      { key: 'location', label: '출하창고', align: 'center', isFilterable: true },
+      { key: 'qty', label: '제품재고', align: 'right', format: (v) => v.toLocaleString(), isFilterable: true },
+      { key: 'amount', label: '재고금액', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-', isFilterable: true },
+    ]
+  };
+
+  const currentColumns = COLUMN_CONFIG[activeInventoryType];
+  const currentInventoryList = inventoryData[activeInventoryType];
+  
+  // Validate items: Exclude items with empty code from aggregation and display
+  const validInventoryItems = useMemo(() => {
+    return currentInventoryList.filter(item => item.code && item.code.trim() !== '');
+  }, [currentInventoryList]);
+
+  // Calculate Totals
+  const totalInventoryQty = validInventoryItems.reduce((sum, item) => sum + (item.qty || 0), 0);
+  const totalInventoryAmount = validInventoryItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+  const showAmountMetric = validInventoryItems.some(item => item.amount && item.amount > 0);
 
   // --- Handlers ---
   const handleInventoryUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'warehouse' | 'material' | 'parts' | 'product') => {
@@ -72,26 +134,26 @@ const InventoryView: React.FC = () => {
     }
   };
 
-  const handleInventoryFilterChange = (field: keyof typeof inventoryFilter, value: string) => {
-    setInventoryFilter(prev => ({ ...prev, [field]: value }));
+  const handleFilterChange = (key: string, value: string) => {
+    setFilterValues(prev => ({ ...prev, [key]: value }));
   };
 
-  // --- Derived Data ---
-  const currentInventoryList = inventoryData[activeInventoryType];
-  const totalInventoryAmount = currentInventoryList.reduce((sum, item) => sum + item.amount, 0);
-  const totalInventoryQty = currentInventoryList.reduce((sum, item) => sum + item.qty, 0);
-
+  // --- Derived Data (Filtering) ---
   const filteredInventoryList = useMemo(() => {
-    return currentInventoryList.filter(item => {
-      const matchCode = inventoryFilter.code === '' || (item.code && item.code.toLowerCase().includes(inventoryFilter.code.toLowerCase()));
-      const matchName = inventoryFilter.name === '' || (item.name && item.name.toLowerCase().includes(inventoryFilter.name.toLowerCase()));
-      const matchSpec = inventoryFilter.spec === '' || (item.spec && item.spec.toLowerCase().includes(inventoryFilter.spec.toLowerCase()));
-      const matchLocation = inventoryFilter.location === '' || (item.location && item.location.toLowerCase().includes(inventoryFilter.location.toLowerCase()));
-      const matchQty = inventoryFilter.qty === '' || item.qty.toString().includes(inventoryFilter.qty.replace(/,/g, ''));
-      const matchAmount = inventoryFilter.amount === '' || item.amount.toString().includes(inventoryFilter.amount.replace(/,/g, ''));
-      return matchCode && matchName && matchSpec && matchLocation && matchQty && matchAmount;
+    return validInventoryItems.filter(item => {
+      return currentColumns.every(col => {
+        if (!col.isFilterable) return true;
+        const filterVal = filterValues[col.key];
+        if (!filterVal) return true;
+        
+        const itemVal = item[col.key];
+        // Handle number 0 properly (it is falsy in some checks, but valid value here)
+        if (itemVal === undefined || itemVal === null) return false;
+        
+        return String(itemVal).toLowerCase().includes(filterVal.toLowerCase());
+      });
     });
-  }, [currentInventoryList, inventoryFilter]);
+  }, [validInventoryItems, filterValues, currentColumns]);
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-2 duration-500">
@@ -99,7 +161,7 @@ const InventoryView: React.FC = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
               <div>
                   <h2 className="text-xl font-black text-slate-800">현재고 현황 (Inventory Status)</h2>
-                  <p className="text-sm text-slate-500 mt-1">유형별 재고 데이터를 업로드하여 관리합니다.</p>
+                  <p className="text-sm text-slate-500 mt-1">유형별 맞춤형 재고 데이터를 관리합니다.</p>
               </div>
               {/* 4 File Uploaders */}
               <div className="flex flex-wrap gap-2">
@@ -123,7 +185,7 @@ const InventoryView: React.FC = () => {
           </div>
           
           {/* Inventory Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className={`grid grid-cols-1 ${showAmountMetric ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 mb-6`}>
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                     <span className="text-xs font-bold text-slate-400">선택된 유형</span>
                     <h3 className="text-lg font-black text-slate-800 mt-1">
@@ -141,10 +203,12 @@ const InventoryView: React.FC = () => {
                     <span className="text-xs font-bold text-slate-400">총 재고 수량</span>
                     <h3 className="text-lg font-black text-blue-600 mt-1">{totalInventoryQty.toLocaleString()}</h3>
               </div>
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                    <span className="text-xs font-bold text-slate-400">총 재고 평가액</span>
-                    <h3 className="text-lg font-black text-emerald-600 mt-1">₩{totalInventoryAmount.toLocaleString()}</h3>
-              </div>
+              {showAmountMetric && (
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <span className="text-xs font-bold text-slate-400">총 재고 평가액</span>
+                      <h3 className="text-lg font-black text-emerald-600 mt-1">₩{totalInventoryAmount.toLocaleString()}</h3>
+                </div>
+              )}
           </div>
 
           {/* Internal Tabs for Inventory View */}
@@ -168,48 +232,56 @@ const InventoryView: React.FC = () => {
                 ))}
           </div>
 
-          {/* Inventory Table */}
+          {/* Dynamic Inventory Table */}
           <div className="overflow-x-auto border border-slate-200 rounded-2xl">
               <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                       <tr>
-                          <th className="px-4 py-3">품목코드</th>
-                          <th className="px-4 py-3">품명 (Item Name)</th>
-                          <th className="px-4 py-3">규격 (Spec)</th>
-                          <th className="px-4 py-3 text-center">단위</th>
-                          {activeInventoryType === 'warehouse' && <th className="px-4 py-3">창고명</th>}
-                          <th className="px-4 py-3 text-right">재고수량</th>
-                          <th className="px-4 py-3 text-right">평가단가</th>
-                          <th className="px-4 py-3 text-right">재고금액</th>
+                          {currentColumns.map((col) => (
+                              <th key={col.key} className={`px-4 py-3 ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`}>
+                                  {col.label}
+                              </th>
+                          ))}
                       </tr>
+                      {/* Filter Row */}
                       <tr className="bg-slate-50">
-                          <th className="px-2 py-2"><input type="text" placeholder="코드" className="w-full p-1 border rounded text-xs font-normal" value={inventoryFilter.code} onChange={(e) => handleInventoryFilterChange('code', e.target.value)} /></th>
-                          <th className="px-2 py-2"><input type="text" placeholder="품명" className="w-full p-1 border rounded text-xs font-normal" value={inventoryFilter.name} onChange={(e) => handleInventoryFilterChange('name', e.target.value)} /></th>
-                          <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={inventoryFilter.spec} onChange={(e) => handleInventoryFilterChange('spec', e.target.value)} /></th>
-                          <th className="px-2 py-2"></th>
-                          {activeInventoryType === 'warehouse' && <th className="px-2 py-2"><input type="text" placeholder="창고" className="w-full p-1 border rounded text-xs font-normal" value={inventoryFilter.location} onChange={(e) => handleInventoryFilterChange('location', e.target.value)} /></th>}
-                          <th className="px-2 py-2"><input type="text" placeholder="수량" className="w-full p-1 border rounded text-xs font-normal text-right" value={inventoryFilter.qty} onChange={(e) => handleInventoryFilterChange('qty', e.target.value)} /></th>
-                          <th className="px-2 py-2"></th>
-                          <th className="px-2 py-2"><input type="text" placeholder="금액" className="w-full p-1 border rounded text-xs font-normal text-right" value={inventoryFilter.amount} onChange={(e) => handleInventoryFilterChange('amount', e.target.value)} /></th>
+                          {currentColumns.map((col) => (
+                              <th key={`filter-${col.key}`} className="px-2 py-2">
+                                  {col.isFilterable ? (
+                                      <input 
+                                        type="text" 
+                                        placeholder={col.label} 
+                                        className={`w-full p-1 border rounded text-xs font-normal ${col.align === 'right' ? 'text-right' : ''}`}
+                                        value={filterValues[col.key as string] || ''} 
+                                        onChange={(e) => handleFilterChange(col.key as string, e.target.value)} 
+                                      />
+                                  ) : null}
+                              </th>
+                          ))}
                       </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                      {filteredInventoryList.map((item, idx) => (
+                      {filteredInventoryList.map((item) => (
                           <tr key={item.id} className="hover:bg-slate-50">
-                              <td className="px-4 py-3 font-mono text-slate-500">{item.code || '-'}</td>
-                              <td className="px-4 py-3 font-medium text-slate-800 truncate max-w-[200px]" title={item.name}>{item.name}</td>
-                              <td className="px-4 py-3 text-slate-500 truncate max-w-[150px]">{item.spec || '-'}</td>
-                              <td className="px-4 py-3 text-center text-slate-500">{item.unit || '-'}</td>
-                              {activeInventoryType === 'warehouse' && <td className="px-4 py-3 text-slate-600 font-bold">{item.location}</td>}
-                              <td className="px-4 py-3 text-right font-mono">{item.qty.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-slate-500">₩{item.unitPrice.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right font-bold text-slate-700">₩{item.amount.toLocaleString()}</td>
+                              {currentColumns.map((col) => {
+                                  const val = item[col.key];
+                                  const displayVal = col.format ? col.format(val) : val;
+                                  return (
+                                    <td key={`${item.id}-${col.key}`} className={`px-4 py-3 ${col.key === 'code' ? 'font-mono text-slate-500' : 'text-slate-700'} ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`}>
+                                        {displayVal !== undefined && displayVal !== null ? displayVal : '-'}
+                                    </td>
+                                  );
+                              })}
                           </tr>
                       ))}
                       {filteredInventoryList.length === 0 && (
                           <tr>
-                              <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
-                                  데이터가 없습니다. 우측 상단에서 해당 유형의 파일을 업로드해주세요.
+                              <td colSpan={currentColumns.length} className="px-4 py-12 text-center text-slate-400">
+                                  데이터가 없습니다. 우측 상단에서 <strong>{
+                                    activeInventoryType === 'warehouse' ? '창고별' : 
+                                    activeInventoryType === 'material' ? '원재료' :
+                                    activeInventoryType === 'parts' ? '부품' : '제품'
+                                  }</strong> 파일을 업로드해주세요.
                               </td>
                           </tr>
                       )}
