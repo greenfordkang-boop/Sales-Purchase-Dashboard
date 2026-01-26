@@ -11,6 +11,8 @@ import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_CR_CSV } from '../data/initialCRData';
 import { INITIAL_RFQ_CSV } from '../data/initialRfqData';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { salesService, revenueService, crService, rfqService } from '../services/supabaseService';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -325,10 +327,68 @@ const SalesView: React.FC = () => {
   }, [rfqData, rfqFilter, rfqSortConfig]);
 
   // --- Handlers ---
-  const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setSalesData(parseSalesCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
-  const handleRevFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => { const newData = parseRevenueCSV(event.target?.result as string, uploadYear); setRevenueData(prev => { const filtered = prev.filter(d => d.year !== uploadYear); return [...filtered, ...newData]; }); if (!selectedYears.includes(uploadYear)) { setSelectedYears(prev => [...prev, uploadYear].sort()); } }; reader.readAsText(file); } e.target.value = ''; };
-  const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setCrData(parseCRCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
-  const handleRfqFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => { const file = e.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onload = (event) => setRfqData(parseRFQCSV(event.target?.result as string)); reader.readAsText(file); } e.target.value = ''; };
+  const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const parsed = parseSalesCSV(event.target?.result as string);
+        setSalesData(parsed);
+        if (isSupabaseConfigured()) {
+          try { await salesService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+  const handleRevFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
+        const updatedData = revenueData.filter(d => d.year !== uploadYear).concat(newData);
+        setRevenueData(updatedData);
+        if (!selectedYears.includes(uploadYear)) { setSelectedYears(prev => [...prev, uploadYear].sort()); }
+        if (isSupabaseConfigured()) {
+          try { await revenueService.saveAll(updatedData); } catch (err) { console.error('Supabase sync error:', err); }
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+  const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const parsed = parseCRCSV(event.target?.result as string);
+        setCrData(parsed);
+        if (isSupabaseConfigured()) {
+          try { await crService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+  const handleRfqFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const parsed = parseRFQCSV(event.target?.result as string);
+        setRfqData(parsed);
+        if (isSupabaseConfigured()) {
+          try { await rfqService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
 
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
     const numValue = parseFloat(value); const finalVal = isNaN(numValue) ? 0 : numValue;
