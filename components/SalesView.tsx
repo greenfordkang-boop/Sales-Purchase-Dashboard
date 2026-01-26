@@ -116,128 +116,29 @@ const SalesView: React.FC = () => {
   });
   const [rfqSortConfig, setRfqSortConfig] = useState<{ key: keyof RFQItem; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- Load from Supabase on Mount ---
-  useEffect(() => {
-    const loadFromSupabase = async () => {
-      if (!isSupabaseConfigured()) {
-        console.log('Supabase not configured, using localStorage');
-        // Supabase가 없으면 localStorage에서 로드하거나 기본 데이터 생성
-        const stored = localStorage.getItem('dashboard_revenueData');
-        if (!stored || JSON.parse(stored).length === 0) {
-          // localStorage에도 없으면 기본 데이터 생성
-          const generateDefaultData = () => {
-            const data2024 = parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
-            const data2023 = data2024.map(item => ({
-              ...item,
-              id: item.id + 100000,
-              year: 2023,
-              amount: Math.floor(item.amount * 0.9),
-              qty: Math.floor(item.qty * 0.92)
-            }));
-            return [...data2023, ...data2024];
-          };
-          const defaultData = generateDefaultData();
-          setRevenueData(defaultData);
-          localStorage.setItem('dashboard_revenueData', JSON.stringify(defaultData));
-          const years = Array.from(new Set(defaultData.map(d => d.year))).sort();
-          setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-          setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
-        }
-        return;
-      }
-      console.log('Loading data from Supabase...');
-      try {
-        const [sales, revenue, cr, rfq] = await Promise.all([
-          salesService.getAll(),
-          revenueService.getAll(),
-          crService.getAll(),
-          rfqService.getAll()
-        ]);
-        console.log('Supabase data loaded:', { sales: sales?.length, revenue: revenue?.length, cr: cr?.length, rfq: rfq?.length });
+  // --- NO AUTO SUPABASE LOAD - Use localStorage only, manual sync via Cloud button ---
+  // Supabase 자동 로드 제거 - 데이터 손실 방지
+  // "클라우드에서 다운로드" 버튼으로만 Supabase 데이터 사용
 
-        if (sales && sales.length > 0) {
-          setSalesData(sales);
-          localStorage.setItem('dashboard_salesData', JSON.stringify(sales));
-        }
-        // Supabase에서 revenue 데이터가 있으면 무조건 사용 (빈 배열이어도)
-        if (revenue !== undefined && revenue !== null) {
-          if (revenue.length > 0) {
-            setRevenueData(revenue);
-            localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
-            const years = Array.from(new Set(revenue.map(d => d.year))).sort();
-            setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-            setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
-          } else {
-            // Supabase에 데이터가 없으면 빈 배열로 설정 (초기 데이터 생성 안 함)
-            setRevenueData([]);
-            localStorage.setItem('dashboard_revenueData', JSON.stringify([]));
-            setAvailableYears([2023, 2024]);
-            setSelectedYears([2024]);
-          }
-        }
-        if (cr && cr.length > 0) {
-          setCrData(cr);
-          localStorage.setItem('dashboard_crData', JSON.stringify(cr));
-        }
-        if (rfq && rfq.length > 0) {
-          setRfqData(rfq);
-          localStorage.setItem('dashboard_rfqData', JSON.stringify(rfq));
-        }
-      } catch (err) {
-        console.error('Failed to load from Supabase:', err);
-        // 에러 발생 시 localStorage에서 로드 시도
-        const stored = localStorage.getItem('dashboard_revenueData');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed && parsed.length > 0) {
-            setRevenueData(parsed);
-            const years = Array.from(new Set(parsed.map((d: RevenueItem) => d.year))).sort();
-            setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-            setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
-          }
-        }
-      }
-    };
-    loadFromSupabase();
-  }, []);
-
-  // --- Track if initial load is complete ---
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setIsInitialLoadComplete(true), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // --- Persistence Effects (save to localStorage AND Supabase) ---
+  // --- Persistence Effects (localStorage ONLY - NO AUTO SUPABASE) ---
+  // Supabase는 "클라우드로 업로드" 버튼으로만 저장
   useEffect(() => {
     localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
-    if (isInitialLoadComplete && isSupabaseConfigured()) {
-      salesService.saveAll(salesData).catch(err => console.error('Supabase sync error:', err));
-    }
-  }, [salesData, isInitialLoadComplete]);
+  }, [salesData]);
 
   useEffect(() => {
     localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
     const years = Array.from(new Set(revenueData.map(d => d.year))).sort();
     setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-    if (isInitialLoadComplete && isSupabaseConfigured()) {
-      revenueService.saveAll(revenueData).catch(err => console.error('Supabase sync error:', err));
-    }
-  }, [revenueData, isInitialLoadComplete]);
+  }, [revenueData]);
 
   useEffect(() => {
     localStorage.setItem('dashboard_crData', JSON.stringify(crData));
-    if (isInitialLoadComplete && isSupabaseConfigured()) {
-      crService.saveAll(crData).catch(err => console.error('Supabase sync error:', err));
-    }
-  }, [crData, isInitialLoadComplete]);
+  }, [crData]);
 
   useEffect(() => {
     localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
-    if (isInitialLoadComplete && isSupabaseConfigured()) {
-      rfqService.saveAll(rfqData).catch(err => console.error('Supabase sync error:', err));
-    }
-  }, [rfqData, isInitialLoadComplete]);
+  }, [rfqData]);
 
   // --- Derived Data ---
   

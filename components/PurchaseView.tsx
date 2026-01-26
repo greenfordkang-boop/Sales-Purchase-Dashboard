@@ -5,8 +5,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
-import { isSupabaseConfigured } from '../lib/supabase';
-import { purchaseService } from '../services/supabaseService';
+// Supabase imports removed - using localStorage only to prevent data loss
+// Use SalesView "클라우드 업로드/다운로드" buttons for Supabase sync
 
 const PurchaseView: React.FC = () => {
   // --- Initialization Helpers ---
@@ -53,31 +53,12 @@ const PurchaseView: React.FC = () => {
   const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [supplierSortConfig, setSupplierSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- Load from Supabase on Mount ---
-  useEffect(() => {
-    const loadFromSupabase = async () => {
-      if (!isSupabaseConfigured()) return;
-      try {
-        const data = await purchaseService.getAll();
-        if (data && data.length > 0) {
-          setPurchaseData(data);
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
-        }
-      } catch (err) {
-        console.error('Failed to load purchase from Supabase:', err);
-      }
-    };
-    loadFromSupabase();
-  }, []);
+  // --- NO AUTO SUPABASE LOAD - Use localStorage only (prevents data loss) ---
+  // Supabase는 SalesView에서 "클라우드 업로드/다운로드" 버튼으로만 사용
 
-  // --- Track initial load complete ---
-  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setIsInitialLoadComplete(true), 1000);
-    return () => clearTimeout(timer);
-  }, []);
+  // isInitialLoadComplete 제거 - auto-Supabase 저장 제거로 더 이상 필요 없음
 
-  // --- Persistence & Derived Year State ---
+  // --- Persistence & Derived Year State (localStorage ONLY - NO AUTO SUPABASE) ---
   useEffect(() => {
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
 
@@ -89,12 +70,9 @@ const PurchaseView: React.FC = () => {
         setSelectedYears([years[years.length - 1]]);
       }
     }
-
-    // Auto-save to Supabase after initial load
-    if (isInitialLoadComplete && isSupabaseConfigured()) {
-      purchaseService.saveAll(purchaseData).catch(err => console.error('Supabase sync error:', err));
-    }
-  }, [purchaseData, isInitialLoadComplete]);
+    // Auto-Supabase save 제거 - 데이터 손실 방지
+    // SalesView "클라우드로 업로드" 버튼으로만 Supabase 저장
+  }, [purchaseData]);
 
   // Generic Sorting Helper
   const sortData = <T,>(data: T[], config: { key: keyof T | string; direction: 'asc' | 'desc' } | null) => {
