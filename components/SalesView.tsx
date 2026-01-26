@@ -124,7 +124,11 @@ const SalesView: React.FC = () => {
   // --- Load from Supabase on Mount ---
   useEffect(() => {
     const loadFromSupabase = async () => {
-      if (!isSupabaseConfigured()) return;
+      if (!isSupabaseConfigured()) {
+        console.log('Supabase not configured, using localStorage');
+        return;
+      }
+      console.log('Loading data from Supabase...');
       try {
         const [sales, revenue, cr, rfq] = await Promise.all([
           salesService.getAll(),
@@ -132,15 +136,27 @@ const SalesView: React.FC = () => {
           crService.getAll(),
           rfqService.getAll()
         ]);
-        if (sales && sales.length > 0) setSalesData(sales);
+        console.log('Supabase data loaded:', { sales: sales?.length, revenue: revenue?.length, cr: cr?.length, rfq: rfq?.length });
+
+        if (sales && sales.length > 0) {
+          setSalesData(sales);
+          localStorage.setItem('dashboard_salesData', JSON.stringify(sales));
+        }
         if (revenue && revenue.length > 0) {
           setRevenueData(revenue);
+          localStorage.setItem('dashboard_revenueData', JSON.stringify(revenue));
           const years = Array.from(new Set(revenue.map(d => d.year))).sort();
           setAvailableYears(years.length > 0 ? years : [2023, 2024]);
           setSelectedYears(years.length > 0 ? [years[years.length - 1]] : [2024]);
         }
-        if (cr && cr.length > 0) setCrData(cr);
-        if (rfq && rfq.length > 0) setRfqData(rfq);
+        if (cr && cr.length > 0) {
+          setCrData(cr);
+          localStorage.setItem('dashboard_crData', JSON.stringify(cr));
+        }
+        if (rfq && rfq.length > 0) {
+          setRfqData(rfq);
+          localStorage.setItem('dashboard_rfqData', JSON.stringify(rfq));
+        }
       } catch (err) {
         console.error('Failed to load from Supabase:', err);
       }
@@ -148,15 +164,43 @@ const SalesView: React.FC = () => {
     loadFromSupabase();
   }, []);
 
-  // --- Persistence Effects ---
-  useEffect(() => { localStorage.setItem('dashboard_salesData', JSON.stringify(salesData)); }, [salesData]);
-  useEffect(() => { 
+  // --- Track if initial load is complete ---
+  const [isInitialLoadComplete, setIsInitialLoadComplete] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsInitialLoadComplete(true), 1000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // --- Persistence Effects (save to localStorage AND Supabase) ---
+  useEffect(() => {
+    localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
+    if (isInitialLoadComplete && isSupabaseConfigured()) {
+      salesService.saveAll(salesData).catch(err => console.error('Supabase sync error:', err));
+    }
+  }, [salesData, isInitialLoadComplete]);
+
+  useEffect(() => {
     localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
     const years = Array.from(new Set(revenueData.map(d => d.year))).sort();
     setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-  }, [revenueData]);
-  useEffect(() => { localStorage.setItem('dashboard_crData', JSON.stringify(crData)); }, [crData]);
-  useEffect(() => { localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData)); }, [rfqData]);
+    if (isInitialLoadComplete && isSupabaseConfigured()) {
+      revenueService.saveAll(revenueData).catch(err => console.error('Supabase sync error:', err));
+    }
+  }, [revenueData, isInitialLoadComplete]);
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_crData', JSON.stringify(crData));
+    if (isInitialLoadComplete && isSupabaseConfigured()) {
+      crService.saveAll(crData).catch(err => console.error('Supabase sync error:', err));
+    }
+  }, [crData, isInitialLoadComplete]);
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
+    if (isInitialLoadComplete && isSupabaseConfigured()) {
+      rfqService.saveAll(rfqData).catch(err => console.error('Supabase sync error:', err));
+    }
+  }, [rfqData, isInitialLoadComplete]);
 
   // --- Derived Data ---
   
@@ -353,17 +397,14 @@ const SalesView: React.FC = () => {
     return result;
   }, [rfqData, rfqFilter, rfqSortConfig]);
 
-  // --- Handlers ---
+  // --- Handlers (Supabase sync handled by Persistence Effects) ---
   const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const parsed = parseSalesCSV(event.target?.result as string);
         setSalesData(parsed);
-        if (isSupabaseConfigured()) {
-          try { await salesService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
-        }
       };
       reader.readAsText(file);
     }
@@ -373,13 +414,15 @@ const SalesView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
-        const updatedData = revenueData.filter(d => d.year !== uploadYear).concat(newData);
-        setRevenueData(updatedData);
-        if (!selectedYears.includes(uploadYear)) { setSelectedYears(prev => [...prev, uploadYear].sort()); }
-        if (isSupabaseConfigured()) {
-          try { await revenueService.saveAll(updatedData); } catch (err) { console.error('Supabase sync error:', err); }
+        // 함수형 업데이트로 최신 상태 사용 (stale closure 방지)
+        setRevenueData(prev => {
+          const filtered = prev.filter(d => d.year !== uploadYear);
+          return [...filtered, ...newData];
+        });
+        if (!selectedYears.includes(uploadYear)) {
+          setSelectedYears(prev => [...prev, uploadYear].sort());
         }
       };
       reader.readAsText(file);
@@ -390,12 +433,9 @@ const SalesView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const parsed = parseCRCSV(event.target?.result as string);
         setCrData(parsed);
-        if (isSupabaseConfigured()) {
-          try { await crService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
-        }
       };
       reader.readAsText(file);
     }
@@ -405,12 +445,9 @@ const SalesView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = async (event) => {
+      reader.onload = (event) => {
         const parsed = parseRFQCSV(event.target?.result as string);
         setRfqData(parsed);
-        if (isSupabaseConfigured()) {
-          try { await rfqService.saveAll(parsed); } catch (err) { console.error('Supabase sync error:', err); }
-        }
       };
       reader.readAsText(file);
     }
