@@ -6,6 +6,7 @@ import { parseRevenueCSV } from '../utils/revenueDataParser';
 import { parsePartsCSV, parseMaterialCSV } from '../utils/purchaseDataParser';
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
+import { downloadCSV } from '../utils/csvExport';
 
 const Overview: React.FC = () => {
   const [year, setYear] = useState<number>(2026);
@@ -101,6 +102,18 @@ const Overview: React.FC = () => {
 
   }, [year]);
 
+  const handleDownload = () => {
+    const headers = ['월(Month)', '매출액(Sales)', '매입액(Purchase)', '매입비율(%)', '이익금(Profit)'];
+    const rows = chartData.map(item => [
+      item.month,
+      item.sales,
+      item.purchase,
+      `${item.ratio}%`,
+      item.profit
+    ]);
+    downloadCSV(`${year}년_영업구매_종합현황`, headers, rows);
+  };
+
   const formatCurrency = (val: number) => {
     if (val >= 100000000) return `₩${(val / 100000000).toFixed(1)}억`;
     return `₩${(val / 1000000).toFixed(0)}백만`;
@@ -117,17 +130,26 @@ const Overview: React.FC = () => {
             <span className="text-xs text-blue-500 font-bold">* 데이터 출처: 영업현황 및 구매현황 업로드 자료</span>
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl">
-            <span className="text-xs font-bold text-slate-500 pl-2">분석 년도:</span>
-            {[2023, 2024, 2025, 2026].map(y => (
-                <button
-                    key={y}
-                    onClick={() => setYear(y)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${year === y ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
-                >
-                    {y}
-                </button>
-            ))}
+        <div className="flex flex-col items-end gap-3">
+            <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl">
+                <span className="text-xs font-bold text-slate-500 pl-2">분석 년도:</span>
+                {[2023, 2024, 2025, 2026].map(y => (
+                    <button
+                        key={y}
+                        onClick={() => setYear(y)}
+                        className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${year === y ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-200'}`}
+                    >
+                        {y}
+                    </button>
+                ))}
+            </div>
+            <button 
+                onClick={handleDownload}
+                className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                데이터 엑셀 다운로드
+            </button>
         </div>
       </div>
 

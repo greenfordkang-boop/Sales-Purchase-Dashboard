@@ -4,6 +4,7 @@ import MetricCard from './MetricCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
+import { downloadCSV } from '../utils/csvExport';
 
 const PurchaseView: React.FC = () => {
   // --- Initialization Helpers ---
@@ -45,6 +46,11 @@ const PurchaseView: React.FC = () => {
     amount: ''
   });
 
+  // Sort Configs
+  const [inboundSortConfig, setInboundSortConfig] = useState<{ key: keyof PurchaseItem; direction: 'asc' | 'desc' } | null>(null);
+  const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [supplierSortConfig, setSupplierSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
   // --- Persistence & Derived Year State ---
   useEffect(() => {
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
@@ -59,6 +65,30 @@ const PurchaseView: React.FC = () => {
       }
     }
   }, [purchaseData]);
+
+  // Generic Sorting Helper
+  const sortData = <T,>(data: T[], config: { key: keyof T | string; direction: 'asc' | 'desc' } | null) => {
+    if (!config) return data;
+    return [...data].sort((a, b) => {
+      // @ts-ignore
+      const aVal = a[config.key];
+      // @ts-ignore
+      const bVal = b[config.key];
+
+      if (aVal === bVal) return 0;
+      
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return config.direction === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+      
+      if (aStr < bStr) return config.direction === 'asc' ? -1 : 1;
+      if (aStr > bStr) return config.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
 
   // --- Derived Data for INBOUND Charts & List ---
   const activeYearData = useMemo(() => {
@@ -99,7 +129,7 @@ const PurchaseView: React.FC = () => {
   }, [activeYearData]);
 
   const filteredItems = useMemo(() => {
-    return activeYearData.filter(item => {
+    let result = activeYearData.filter(item => {
       const matchDate = filter.date === '' || item.date.includes(filter.date);
       const matchType = filter.type === '' || item.type.includes(filter.type);
       const matchSupplier = filter.supplier === '' || item.supplier.includes(filter.supplier);
@@ -108,8 +138,15 @@ const PurchaseView: React.FC = () => {
       const matchAmount = filter.amount === '' || item.amount.toString().includes(filter.amount.replace(/,/g, ''));
 
       return matchDate && matchType && matchSupplier && matchItem && matchQty && matchAmount;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [activeYearData, filter]);
+    });
+
+    if (inboundSortConfig) {
+        result = sortData(result, inboundSortConfig);
+    } else {
+        result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+    return result;
+  }, [activeYearData, filter, inboundSortConfig]);
 
   const filteredTotal = useMemo(() => {
     return filteredItems.reduce((acc, item) => ({
@@ -122,18 +159,30 @@ const PurchaseView: React.FC = () => {
 
   // --- Derived Data for SUPPLIER Tab ---
   const supplierStats = useMemo(() => {
-    const stats = new Map<string, { name: string, totalAmount: number, count: number, items: Set<string> }>();
+    const stats = new Map<string, { name: string, totalAmount: number, count: number, items: Set<string>, share: number }>();
     purchaseData.forEach(item => {
       if (!stats.has(item.supplier)) {
-        stats.set(item.supplier, { name: item.supplier, totalAmount: 0, count: 0, items: new Set() });
+        stats.set(item.supplier, { name: item.supplier, totalAmount: 0, count: 0, items: new Set(), share: 0 });
       }
       const s = stats.get(item.supplier)!;
       s.totalAmount += item.amount;
       s.count += 1;
       s.items.add(item.itemName);
     });
-    return Array.from(stats.values()).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [purchaseData]);
+    
+    // Calculate share
+    const total = Array.from(stats.values()).reduce((sum, s) => sum + s.totalAmount, 0);
+    const result = Array.from(stats.values()).map(s => ({
+        ...s,
+        itemCount: s.items.size,
+        share: total > 0 ? (s.totalAmount / total) * 100 : 0
+    }));
+
+    if (supplierSortConfig) {
+        return sortData(result, supplierSortConfig);
+    }
+    return result.sort((a, b) => b.totalAmount - a.totalAmount);
+  }, [purchaseData, supplierSortConfig]);
 
   // --- Derived Data for PRICE Tab ---
   const priceStats = useMemo(() => {
@@ -162,8 +211,12 @@ const PurchaseView: React.FC = () => {
             }
         }
     });
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [purchaseData]);
+    const result = Array.from(map.values());
+    if (priceSortConfig) {
+        return sortData(result, priceSortConfig);
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  }, [purchaseData, priceSortConfig]);
 
 
   // --- Handlers ---
@@ -212,6 +265,59 @@ const PurchaseView: React.FC = () => {
     });
   };
 
+  // Sorting Handlers
+  const handleInboundSort = (key: keyof PurchaseItem) => {
+    setInboundSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+  };
+  const handlePriceSort = (key: string) => {
+    setPriceSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+  };
+  const handleSupplierSort = (key: string) => {
+    setSupplierSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+  };
+
+  // Download Handlers
+  const handleDownloadInbound = () => {
+    const headers = ['입고일자', '구분', '유형', '발주처', '품명', '입고수량', '입고금액'];
+    const rows = filteredItems.map(item => [
+      item.date,
+      item.category === 'Parts' ? '부품' : '원재료',
+      item.type,
+      item.supplier,
+      item.itemName,
+      item.qty,
+      item.amount
+    ]);
+    downloadCSV(`구매입고_현황`, headers, rows);
+  };
+
+  const handleDownloadPrice = () => {
+    const headers = ['품명', '발주처', '단위', '최신단가', '최고단가', '최저단가', '최근입고일'];
+    const rows = priceStats.map(item => [
+      item.name,
+      item.supplier,
+      item.unit,
+      item.latestPrice,
+      item.maxPrice,
+      item.minPrice,
+      item.date
+    ]);
+    downloadCSV(`품목별_단가현황`, headers, rows);
+  };
+
+  const handleDownloadSupplier = () => {
+    const headers = ['협력사명', '총매입액', '점유율(%)', '입고건수', '취급품목수'];
+    const rows = supplierStats.map(item => [
+      item.name,
+      item.totalAmount,
+      totalPurchaseAmount > 0 ? ((item.totalAmount / totalPurchaseAmount) * 100).toFixed(1) : '0',
+      item.count,
+      item.itemCount
+    ]);
+    downloadCSV(`협력사_현황`, headers, rows);
+  };
+
+
   const formatBillionLabel = (value: number) => {
     if (value === 0) return '';
     return `${(value / 100000000).toFixed(1)}억`;
@@ -219,14 +325,30 @@ const PurchaseView: React.FC = () => {
 
   const PIE_COLORS = ['#6366f1', '#f43f5e']; 
 
-  // --- Sub-menu Definition ---
   const SUB_TABS = [
     { id: 'inbound', label: '구매현황(입고)' },
-    // Inventory removed from here
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
     { id: 'supplier', label: '협력사 현황' },
   ];
+
+  // Helper component for table headers
+  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: any) => void }) => (
+    <th 
+        className={`px-4 py-3 min-w-[100px] ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group`}
+        onClick={() => onSort(sortKey)}
+    >
+        <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
+            {label}
+            <span className={`text-[10px] ${currentSort?.key === sortKey ? 'text-blue-600 font-bold' : 'text-slate-300 group-hover:text-slate-400'}`}>
+                {currentSort?.key === sortKey 
+                    ? (currentSort.direction === 'asc' ? '▲' : '▼') 
+                    : '⇅'
+                }
+            </span>
+        </div>
+    </th>
+  );
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
@@ -387,7 +509,7 @@ const PurchaseView: React.FC = () => {
 
         {/* List Table */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="mb-4">
+          <div className="flex items-center justify-between mb-4">
              <button 
               onClick={() => setPurchaseListOpen(!purchaseListOpen)}
               className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors"
@@ -397,6 +519,13 @@ const PurchaseView: React.FC = () => {
               </svg>
               상세 입고 리스트 (Purchase List)
             </button>
+            <button 
+                onClick={handleDownloadInbound}
+                className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                엑셀 다운로드
+            </button>
           </div>
             
             {purchaseListOpen && (
@@ -404,13 +533,13 @@ const PurchaseView: React.FC = () => {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3 min-w-[90px]">입고일자</th>
-                      <th className="px-4 py-3 min-w-[80px]">구분</th>
-                      <th className="px-4 py-3 min-w-[80px]">유형</th>
-                      <th className="px-4 py-3 min-w-[120px]">발주처</th>
-                      <th className="px-4 py-3 min-w-[150px]">품명 (Item Name)</th>
-                      <th className="px-4 py-3 text-right min-w-[80px]">입고수량</th>
-                      <th className="px-4 py-3 text-right min-w-[100px]">입고금액</th>
+                      <SortableHeader label="입고일자" sortKey="date" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="구분" sortKey="category" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="유형" sortKey="type" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="발주처" sortKey="supplier" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="품명 (Item Name)" sortKey="itemName" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="입고수량" sortKey="qty" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="입고금액" sortKey="amount" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} />
                     </tr>
                     <tr className="bg-slate-50">
                       <th className="px-2 py-2"><input type="text" placeholder="날짜 검색" className="w-full p-1 border rounded text-xs font-normal" value={filter.date} onChange={(e) => handleFilterChange('date', e.target.value)} /></th>
@@ -466,20 +595,31 @@ const PurchaseView: React.FC = () => {
       {activeSubTab === 'price' && (
           <div className="space-y-6">
              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                <h2 className="text-xl font-black text-slate-800 mb-4">품목별 단가 현황 (Unit Price)</h2>
-                <p className="text-sm text-slate-500 mb-6">입고 내역을 기반으로 산출된 품목별 최신 단가 및 단가 변동 정보입니다.</p>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 className="text-xl font-black text-slate-800">품목별 단가 현황 (Unit Price)</h2>
+                        <p className="text-sm text-slate-500">입고 내역을 기반으로 산출된 품목별 최신 단가 및 단가 변동 정보입니다.</p>
+                    </div>
+                    <button 
+                        onClick={handleDownloadPrice}
+                        className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        엑셀 다운로드
+                    </button>
+                </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                     <table className="w-full text-xs text-left">
                         <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                             <tr>
-                                <th className="px-4 py-3">품명 (Item Name)</th>
-                                <th className="px-4 py-3">발주처</th>
-                                <th className="px-4 py-3 text-center">단위</th>
-                                <th className="px-4 py-3 text-right">최신단가</th>
-                                <th className="px-4 py-3 text-right">최고단가</th>
-                                <th className="px-4 py-3 text-right">최저단가</th>
-                                <th className="px-4 py-3 text-right">최근 입고일</th>
+                                <SortableHeader label="품명 (Item Name)" sortKey="name" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="발주처" sortKey="supplier" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="단위" sortKey="unit" align="center" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="최신단가" sortKey="latestPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="최고단가" sortKey="maxPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="최저단가" sortKey="minPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="최근 입고일" sortKey="date" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -528,8 +668,19 @@ const PurchaseView: React.FC = () => {
       {activeSubTab === 'supplier' && (
           <div className="space-y-6">
              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-                <h2 className="text-xl font-black text-slate-800 mb-4">협력사 현황 (Supplier Status)</h2>
-                <p className="text-sm text-slate-500 mb-6">전체 입고 데이터를 기준으로 집계된 협력사별 거래 현황입니다.</p>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 className="text-xl font-black text-slate-800">협력사 현황 (Supplier Status)</h2>
+                        <p className="text-sm text-slate-500">전체 입고 데이터를 기준으로 집계된 협력사별 거래 현황입니다.</p>
+                    </div>
+                    <button 
+                        onClick={handleDownloadSupplier}
+                        className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        엑셀 다운로드
+                    </button>
+                </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <MetricCard label="등록된 협력사 수" value={`${supplierStats.length}개사`} color="blue" />
@@ -540,11 +691,11 @@ const PurchaseView: React.FC = () => {
                     <table className="w-full text-xs text-left">
                         <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                             <tr>
-                                <th className="px-4 py-3">협력사명</th>
-                                <th className="px-4 py-3 text-right">총 매입액</th>
-                                <th className="px-4 py-3 text-right">점유율</th>
-                                <th className="px-4 py-3 text-right">입고 건수</th>
-                                <th className="px-4 py-3 text-right">취급 품목 수</th>
+                                <SortableHeader label="협력사명" sortKey="name" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
+                                <SortableHeader label="총 매입액" sortKey="totalAmount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
+                                <SortableHeader label="점유율" sortKey="share" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
+                                <SortableHeader label="입고 건수" sortKey="count" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
+                                <SortableHeader label="취급 품목 수" sortKey="itemCount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -553,10 +704,10 @@ const PurchaseView: React.FC = () => {
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
                                     <td className="px-4 py-3 text-right font-bold text-slate-700">₩{item.totalAmount.toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-slate-500">
-                                        {totalPurchaseAmount > 0 ? ((item.totalAmount / totalPurchaseAmount) * 100).toFixed(1) : 0}%
+                                        {item.share.toFixed(1)}%
                                     </td>
                                     <td className="px-4 py-3 text-right font-mono text-slate-600">{item.count.toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-right font-mono text-slate-600">{item.items.size}</td>
+                                    <td className="px-4 py-3 text-right font-mono text-slate-600">{item.itemCount}</td>
                                 </tr>
                             ))}
                         </tbody>
