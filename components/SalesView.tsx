@@ -123,20 +123,63 @@ const SalesView: React.FC = () => {
       if (!isSupabaseConfigured()) return;
 
       try {
-        // Revenue 데이터 로드
-        const supabaseRevenue = await revenueService.getAll();
-        if (supabaseRevenue && supabaseRevenue.length > 0) {
-          // Supabase에 데이터가 있으면 사용
-          setRevenueData(supabaseRevenue);
-          localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
-          console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
-        } else {
-          // Supabase가 비어있으면 localStorage 유지 (덮어쓰지 않음!)
-          console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
+        // 1. Sales 데이터 로드
+        try {
+          const supabaseSales = await salesService.getAll();
+          if (supabaseSales && supabaseSales.length > 0) {
+            setSalesData(supabaseSales);
+            localStorage.setItem('dashboard_salesData', JSON.stringify(supabaseSales));
+            console.log(`✅ Supabase에서 영업 데이터 로드: ${supabaseSales.length}개 고객`);
+          } else {
+            console.log('ℹ️ Supabase 영업 데이터 없음 - localStorage 유지');
+          }
+        } catch (err) {
+          console.error('Supabase 영업 데이터 로드 실패:', err);
+        }
+
+        // 2. Revenue 데이터 로드
+        try {
+          const supabaseRevenue = await revenueService.getAll();
+          if (supabaseRevenue && supabaseRevenue.length > 0) {
+            setRevenueData(supabaseRevenue);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
+            console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
+          } else {
+            console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
+          }
+        } catch (err) {
+          console.error('Supabase 매출 데이터 로드 실패:', err);
+        }
+
+        // 3. CR 데이터 로드
+        try {
+          const supabaseCR = await crService.getAll();
+          if (supabaseCR && supabaseCR.length > 0) {
+            setCrData(supabaseCR);
+            localStorage.setItem('dashboard_crData', JSON.stringify(supabaseCR));
+            console.log(`✅ Supabase에서 CR 데이터 로드: ${supabaseCR.length}개`);
+          } else {
+            console.log('ℹ️ Supabase CR 데이터 없음 - localStorage 유지');
+          }
+        } catch (err) {
+          console.error('Supabase CR 데이터 로드 실패:', err);
+        }
+
+        // 4. RFQ 데이터 로드
+        try {
+          const supabaseRFQ = await rfqService.getAll();
+          if (supabaseRFQ && supabaseRFQ.length > 0) {
+            setRfqData(supabaseRFQ);
+            localStorage.setItem('dashboard_rfqData', JSON.stringify(supabaseRFQ));
+            console.log(`✅ Supabase에서 RFQ 데이터 로드: ${supabaseRFQ.length}개`);
+          } else {
+            console.log('ℹ️ Supabase RFQ 데이터 없음 - localStorage 유지');
+          }
+        } catch (err) {
+          console.error('Supabase RFQ 데이터 로드 실패:', err);
         }
       } catch (err) {
-        console.error('Supabase 로드 실패 - localStorage 유지:', err);
-        // 에러 시 localStorage 유지 (덮어쓰지 않음)
+        console.error('Supabase 전체 로드 실패 - localStorage 유지:', err);
       }
     };
 
@@ -368,6 +411,13 @@ const SalesView: React.FC = () => {
       reader.onload = (event) => {
         const parsed = parseSalesCSV(event.target?.result as string);
         setSalesData(parsed);
+        // localStorage는 useEffect에서 자동 저장됨
+        // Supabase 백그라운드 저장
+        if (isSupabaseConfigured()) {
+          salesService.saveAll(parsed)
+            .then(() => console.log('✅ 영업 데이터 Supabase 동기화 완료'))
+            .catch(err => console.error('Supabase 동기화 실패:', err));
+        }
       };
       reader.readAsText(file);
     }
@@ -421,6 +471,13 @@ const SalesView: React.FC = () => {
       reader.onload = (event) => {
         const parsed = parseCRCSV(event.target?.result as string);
         setCrData(parsed);
+        // localStorage는 useEffect에서 자동 저장됨
+        // Supabase 백그라운드 저장
+        if (isSupabaseConfigured()) {
+          crService.saveAll(parsed)
+            .then(() => console.log('✅ CR 데이터 Supabase 동기화 완료'))
+            .catch(err => console.error('Supabase 동기화 실패:', err));
+        }
       };
       reader.readAsText(file);
     }
@@ -433,6 +490,13 @@ const SalesView: React.FC = () => {
       reader.onload = (event) => {
         const parsed = parseRFQCSV(event.target?.result as string);
         setRfqData(parsed);
+        // localStorage는 useEffect에서 자동 저장됨
+        // Supabase 백그라운드 저장
+        if (isSupabaseConfigured()) {
+          rfqService.saveAll(parsed)
+            .then(() => console.log('✅ RFQ 데이터 Supabase 동기화 완료'))
+            .catch(err => console.error('Supabase 동기화 실패:', err));
+        }
       };
       reader.readAsText(file);
     }
