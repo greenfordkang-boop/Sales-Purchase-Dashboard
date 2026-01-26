@@ -16,6 +16,17 @@ const handleError = (error: any, operation: string) => {
   throw error;
 };
 
+const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
+  if (rows.length === 0) return;
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await supabase!.from(table).insert(batch);
+    if (error) handleError(error, `${table} insert batch`);
+  }
+};
+
+const REVENUE_BATCH_SIZE = 200;
+
 // ============================================
 // Sales Data Service
 // ============================================
@@ -94,10 +105,7 @@ export const salesService = {
       }))
     );
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('sales_data').insert(rows);
-      if (error) handleError(error, 'sales insert');
-    }
+    await insertInBatches('sales_data', rows);
 
     // Also save to localStorage as backup
     localStorage.setItem('dashboard_salesData', JSON.stringify(data));
@@ -156,10 +164,7 @@ export const revenueService = {
       amount: item.amount
     }));
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('revenue_data').insert(rows);
-      if (error) handleError(error, 'revenue insert');
-    }
+    await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
 
     localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
   },
@@ -188,25 +193,16 @@ export const revenueService = {
       }
 
       // Insert new data for the year
-      if (data.length > 0) {
-        const rows = data.map(item => ({
-          year: item.year,
-          month: item.month,
-          customer: item.customer,
-          model: item.model || '',
-          qty: item.qty || 0,
-          amount: item.amount || 0
-        }));
+      const rows = data.map(item => ({
+        year: item.year,
+        month: item.month,
+        customer: item.customer,
+        model: item.model || '',
+        qty: item.qty || 0,
+        amount: item.amount || 0
+      }));
 
-        const { error: insertError } = await supabase!
-          .from('revenue_data')
-          .insert(rows);
-
-        if (insertError) {
-          console.error('Error inserting revenue data for year', year, insertError);
-          handleError(insertError, 'revenue insert by year');
-        }
-      }
+      await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
 
       // Reload all data from Supabase to update localStorage
       const allData = await this.getAll();
@@ -284,10 +280,7 @@ export const purchaseService = {
       amount: item.amount
     }));
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('purchase_data').insert(rows);
-      if (error) handleError(error, 'purchase insert');
-    }
+    await insertInBatches('purchase_data', rows);
 
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
   }
@@ -380,10 +373,7 @@ export const inventoryService = {
       amount: item.amount
     }));
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('inventory_data').insert(rows);
-      if (error) handleError(error, 'inventory insert');
-    }
+    await insertInBatches('inventory_data', rows);
 
     localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
   }
@@ -443,10 +433,7 @@ export const crService = {
       mtx_defense: item.mtxDefense
     }));
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('cr_data').insert(rows);
-      if (error) handleError(error, 'cr insert');
-    }
+    await insertInBatches('cr_data', rows);
 
     localStorage.setItem('dashboard_crData', JSON.stringify(data));
   }
@@ -519,10 +506,7 @@ export const rfqService = {
       remark: item.remark
     }));
 
-    if (rows.length > 0) {
-      const { error } = await supabase!.from('rfq_data').insert(rows);
-      if (error) handleError(error, 'rfq insert');
-    }
+    await insertInBatches('rfq_data', rows);
 
     localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
   },
