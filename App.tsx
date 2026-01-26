@@ -5,6 +5,7 @@ import Overview from './components/Overview';
 import SalesView from './components/SalesView';
 import PurchaseView from './components/PurchaseView';
 import InventoryView from './components/InventoryView';
+import SyncStatus from './components/SyncStatus';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -104,9 +105,10 @@ const App: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <SyncStatus />
           <span className="text-xs text-slate-400 font-medium">ADMIN (Manager)</span>
-          <button 
-            onClick={handleLogout} 
+          <button
+            onClick={handleLogout}
             className="text-slate-400 hover:text-rose-500 transition-colors p-2"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,7 +134,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
-        통합 시스템 연동 버전: v1.0.4 | 최종 업데이트: {new Date().toLocaleDateString()}
+        통합 시스템 연동 버전: v1.1.0 (Supabase) | 최종 업데이트: {new Date().toLocaleDateString()}
       </footer>
     </div>
   );
