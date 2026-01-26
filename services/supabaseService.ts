@@ -16,12 +16,72 @@ const handleError = (error: any, operation: string) => {
   throw error;
 };
 
+const BATCH_DELAY_MS = 50;
+const MAX_BATCH_RETRIES = 3;
+
+const shouldRetryBatch = (error: any) => {
+  const status = typeof error?.status === 'number' ? error.status : undefined;
+  if (status) {
+    return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+  }
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('rate limit') || message.includes('timeout') || message.includes('gateway');
+};
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
   if (rows.length === 0) return;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
-    const { error } = await supabase!.from(table).insert(batch);
-    if (error) handleError(error, `${table} insert batch`);
+    let lastError: any = null;
+    for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
+      const { error } = await supabase!
+        .from(table)
+        .insert(batch, { returning: 'minimal' });
+      if (!error) {
+        lastError = null;
+        break;
+      }
+      lastError = error;
+      if (!shouldRetryBatch(error) || attempt === MAX_BATCH_RETRIES) {
+        break;
+      }
+      await sleep(BATCH_DELAY_MS * attempt);
+    }
+    if (lastError) {
+      let failedRows = 0;
+      let lastRowError: any = null;
+      for (const row of batch) {
+        let rowError: any = null;
+        for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
+          const { error } = await supabase!
+            .from(table)
+            .insert(row, { returning: 'minimal' });
+          if (!error) {
+            rowError = null;
+            break;
+          }
+          rowError = error;
+          if (!shouldRetryBatch(error) || attempt === MAX_BATCH_RETRIES) {
+            break;
+          }
+          await sleep(BATCH_DELAY_MS * attempt);
+        }
+        if (rowError) {
+          failedRows += 1;
+          lastRowError = rowError;
+        }
+      }
+      if (failedRows === batch.length) {
+        handleError(lastRowError || lastError, `${table} insert batch`);
+      } else if (failedRows > 0) {
+        console.warn(`Supabase ${table} insert batch partially failed: ${failedRows}/${batch.length} rows skipped.`);
+      }
+    }
+    if (i + batchSize < rows.length) {
+      await sleep(BATCH_DELAY_MS);
+    }
   }
 };
 
@@ -358,6 +418,7 @@ export const inventoryService = {
       ...data.product
     ];
 
+    let invalidRows = 0;
     const rows = allItems.map(item => ({
       type: item.type,
       code: item.code,
@@ -371,7 +432,19 @@ export const inventoryService = {
       status: item.status,
       unit_price: item.unitPrice,
       amount: item.amount
-    }));
+    })).filter(row => {
+      const hasCode = typeof row.code === 'string' && row.code.trim().length > 0;
+      const hasName = typeof row.name === 'string' && row.name.trim().length > 0;
+      if (!hasCode || !hasName) {
+        invalidRows += 1;
+        return false;
+      }
+      return true;
+    });
+
+    if (invalidRows > 0) {
+      console.warn(`Inventory upload skipped ${invalidRows} rows without code or name.`);
+    }
 
     await insertInBatches('inventory_data', rows);
 
