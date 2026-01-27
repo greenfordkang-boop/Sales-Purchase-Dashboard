@@ -539,6 +539,30 @@ const SalesView: React.FC = () => {
     downloadCSV(`매출현황_${selectedRevenueYear}_${selectedRevenueCustomer}`, headers, rows);
   };
 
+  // Revenue Copy Handler (클립보드 복사)
+  const handleCopyRevenue = async () => {
+    const headers = ['월', '고객사', 'Model', '매출수량', '매출금액'];
+    const rows = filteredRevenueData.map(item =>
+      [item.month, item.customer, item.model, item.qty.toLocaleString(), item.amount.toLocaleString()].join('\t')
+    );
+    const text = [headers.join('\t'), ...rows].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`${filteredRevenueData.length}건의 데이터가 클립보드에 복사되었습니다.`);
+    } catch (err) {
+      console.error('클립보드 복사 실패:', err);
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert(`${filteredRevenueData.length}건의 데이터가 클립보드에 복사되었습니다.`);
+    }
+  };
+
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
     const numValue = parseFloat(value); const finalVal = isNaN(numValue) ? 0 : numValue;
     setCrData(prev => prev.map(item => item.month === month ? { ...item, [field]: finalVal } : item));
