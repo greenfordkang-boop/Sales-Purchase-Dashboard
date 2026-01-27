@@ -55,7 +55,7 @@ const SalesView: React.FC = () => {
   };
 
   // --- State Management ---
-  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'rfq' | 'cr'>('sales');
+  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'unitprice' | 'cr' | 'partner'>('sales');
 
   // Quantity States
   const [salesData, setSalesData] = useState<CustomerSalesData[]>(getInitialSalesData);
@@ -420,7 +420,7 @@ const SalesView: React.FC = () => {
   const handleDownloadRfq = () => { const headers = ['순번', '고객사', '제품군', '프로젝트명', '공정단계', '현상태', '시작일', '견적일', '최초주문일', 'Model', '월평균수량', '예상단가', '예상매출', '비고']; const rows = filteredRfqItems.map(item => [item.index, item.customer, item.projectType, item.projectName, item.process, item.status, item.dateSelection, item.dateQuotation, item.datePO, item.model, item.qty, item.unitPrice, item.amount, item.remark]); downloadCSV(`RFQ_현황`, headers, rows); };
 
   // Helper
-  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'rfq', label: 'RFQ 현황' }, { id: 'cr', label: 'CR 현황' }];
+  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }, { id: 'partner', label: '협력사 현황' }];
 
   // Helper component for table headers
   const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T, align?: string, currentSort: { key: keyof T, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T) => void }) => (
@@ -454,13 +454,39 @@ const SalesView: React.FC = () => {
       {activeSubTab === 'sales' && (
       <section className="space-y-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black text-slate-800">매출현황 (Sales Status)</h2><p className="text-xs text-slate-500 mt-1">계획 수량 대비 실적 수량 상세 분석</p></div>
-          <div className="flex gap-4 items-center"><label className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors">📂 수량 CSV 업로드<input type="file" accept=".csv" onChange={handleQtyFileUpload} className="hidden" /></label><select value={selectedQtyCustomer} onChange={(e) => setSelectedQtyCustomer(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[200px]">{qtyCustomers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div><h2 className="text-xl font-black text-slate-800">1.판매계획 대비 실적</h2></div>
+          <div className="flex gap-4 items-center"><label className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2"><span>📂</span> 수량 CSV 업로드<input type="file" accept=".csv" onChange={handleQtyFileUpload} className="hidden" /></label><select value={selectedQtyCustomer} onChange={(e) => setSelectedQtyCustomer(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[150px]">{qtyCustomers.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4"><MetricCard label="총 실적 수량 (Total Actual)" value={`${activeQtyData.totalActual.toLocaleString()} EA`} subValue={`계획: ${activeQtyData.totalPlan.toLocaleString()} EA`} trend={qtyAchievementRate >= 100 ? 'up' : 'neutral'} percentage={parseFloat((qtyAchievementRate - 100).toFixed(1))} color="emerald" /><MetricCard label="검색된 품목 수" value={`${filteredQtyItems.length}개`} subValue={`총 ${activeQtyData.items.length}개 중`} color="slate" /><MetricCard label="분석 대상" value={selectedQtyCustomer === 'All' ? '전체 고객사' : selectedQtyCustomer} subValue="2024년 데이터" color="slate" /></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 실적 수량 (TOTAL ACTUAL)</p>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-3xl font-black text-emerald-500">{activeQtyData.totalActual.toLocaleString()} EA</p>
+                <p className="text-xs text-slate-400 mt-1">계획: {activeQtyData.totalPlan.toLocaleString()} EA</p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-bold text-slate-600">{qtyAchievementRate.toFixed(1)}%</p>
+                <div className="w-24 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                  <div className="h-full bg-rose-500 rounded-full" style={{ width: `${Math.min(qtyAchievementRate, 100)}%` }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">검색된 품목 수</p>
+            <p className="text-3xl font-black text-slate-800">{filteredQtyItems.length}개</p>
+            <p className="text-xs text-slate-400 mt-1">총 {activeQtyData.items.length}개 중</p>
+          </div>
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">분석 대상</p>
+            <p className="text-3xl font-black text-slate-800">{selectedQtyCustomer === 'All' ? '전체 고객사' : selectedQtyCustomer}</p>
+            <p className="text-xs text-slate-400 mt-1">2024년 데이터</p>
+          </div>
+        </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-emerald-600 rounded-full"></span>1. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
-          <div className="h-[400px] w-full"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={qtyChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize: 12}} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} /><Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} /><Bar name="계획수량 (Plan)" dataKey="plan" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={30} /><Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={30} /><Line type="monotone" name="실적추세" dataKey="actual" stroke="#059669" strokeWidth={3} dot={{r: 4, fill: '#059669', strokeWidth: 2, stroke: '#fff'}} /></ComposedChart></ResponsiveContainer></div>
+          <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
+          <div className="h-[400px] w-full"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={qtyChartData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} /><Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} /><Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25} /><Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25} /><Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls /></ComposedChart></ResponsiveContainer></div>
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
             {qtyListOpen && (
@@ -933,6 +959,38 @@ const SalesView: React.FC = () => {
                         </tr>
                      </tbody>
                   </table>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* =================================================================================
+          단가현황 TAB (Unit Price Status)
+         ================================================================================= */}
+      {activeSubTab === 'unitprice' && (
+         <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+               <div className="flex flex-col items-center justify-center py-16">
+                  <div className="text-6xl mb-4">💰</div>
+                  <h2 className="text-xl font-black text-slate-800 mb-2">단가현황</h2>
+                  <p className="text-sm text-slate-500">단가 정보 및 가격 분석 현황이 이곳에 표시됩니다.</p>
+                  <p className="text-xs text-slate-400 mt-2">Unit Price Status - Coming Soon</p>
+               </div>
+            </div>
+         </div>
+      )}
+
+      {/* =================================================================================
+          협력사 현황 TAB (Partner Status)
+         ================================================================================= */}
+      {activeSubTab === 'partner' && (
+         <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+               <div className="flex flex-col items-center justify-center py-16">
+                  <div className="text-6xl mb-4">🤝</div>
+                  <h2 className="text-xl font-black text-slate-800 mb-2">협력사 현황</h2>
+                  <p className="text-sm text-slate-500">협력사 정보 및 파트너십 현황이 이곳에 표시됩니다.</p>
+                  <p className="text-xs text-slate-400 mt-2">Partner Status - Coming Soon</p>
                </div>
             </div>
          </div>
