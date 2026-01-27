@@ -364,20 +364,36 @@ export const inventoryService = {
       return stored ? JSON.parse(stored) : { warehouse: [], material: [], parts: [], product: [] };
     }
 
-    // 기본 Supabase PostgREST limit는 1,000행이라,
-    // 별도 지정하지 않으면 나머지 행이 잘립니다.
-    // 모든 재고 행을 가져오기 위해 충분히 큰 limit를 명시합니다.
-    const { data, error } = await supabase!
-      .from('inventory_data')
-      .select('*')
-      .order('code')
-      .limit(10000); // 최대 10,000행까지 로드 (현재 2,807행 수준)
+    // Supabase의 기본 max_rows 제한(보통 1,000행)을 우회하기 위해
+    // 1,000행 단위로 모든 재고 행을 페이징 로드합니다.
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
 
-    if (error) handleError(error, 'inventory getAll');
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { data, error } = await supabase!
+        .from('inventory_data')
+        .select('*')
+        .order('code')
+        .range(from, from + pageSize - 1);
+
+      if (error) {
+        handleError(error, 'inventory getAll');
+        break;
+      }
+
+      if (!data || data.length === 0) break;
+
+      allRows = allRows.concat(data);
+
+      if (data.length < pageSize) break; // 마지막 페이지
+      from += pageSize;
+    }
 
     const result: InventoryData = { warehouse: [], material: [], parts: [], product: [] };
 
-    data?.forEach((row: any) => {
+    allRows.forEach((row: any) => {
       const item: InventoryItem = {
         id: row.id,
         type: row.type,
