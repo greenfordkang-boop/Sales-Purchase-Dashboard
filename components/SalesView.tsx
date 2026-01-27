@@ -427,30 +427,40 @@ const SalesView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         try {
           const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
 
           // 1. localStorage에 먼저 저장 (데이터 손실 방지)
-          setRevenueData(prev => {
-            const filtered = prev.filter(d => d.year !== uploadYear);
-            const updatedData = [...filtered, ...newData];
-            // 즉시 localStorage에 저장 - 가장 중요!
-            localStorage.setItem('dashboard_revenueData', JSON.stringify(updatedData));
-            console.log(`✅ ${uploadYear}년 데이터 저장 완료: ${newData.length}개 항목, 전체 ${updatedData.length}개`);
-            return updatedData;
-          });
+          const filtered = revenueData.filter(d => d.year !== uploadYear);
+          const updatedData = [...filtered, ...newData];
+          localStorage.setItem('dashboard_revenueData', JSON.stringify(updatedData));
+          setRevenueData(updatedData);
+          console.log(`✅ ${uploadYear}년 데이터 저장 완료: ${newData.length}개 항목, 전체 ${updatedData.length}개`);
 
           if (!selectedYears.includes(uploadYear)) {
             setSelectedYears(prev => [...prev, uploadYear].sort());
           }
 
-          // 2. Supabase 저장 (백그라운드, 실패해도 로컬 데이터 유지)
-          // 주의: Supabase에서 다시 로드하지 않음 - 데이터 손실 방지
+          // 2. Supabase 저장 (완료 후 최신 데이터 재로드)
           if (isSupabaseConfigured()) {
-            revenueService.saveByYear(newData, uploadYear)
-              .then(() => console.log(`✅ Supabase 동기화 완료: ${uploadYear}년`))
-              .catch(err => console.error('Supabase 동기화 실패 (로컬 데이터는 유지됨):', err));
+            try {
+              await revenueService.saveByYear(newData, uploadYear);
+              console.log(`✅ Supabase 동기화 완료: ${uploadYear}년`);
+              
+              // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
+              const latestData = await revenueService.getAll();
+              setRevenueData(latestData);
+              localStorage.setItem('dashboard_revenueData', JSON.stringify(latestData));
+              console.log(`✅ Supabase에서 최신 매출 데이터 재로드 완료: ${latestData.length}개`);
+              
+              // 연도 목록 업데이트
+              const years = Array.from(new Set(latestData.map(d => d.year))).sort();
+              setAvailableYears(years.length > 0 ? years : [2023, 2024]);
+            } catch (err) {
+              console.error('Supabase 동기화 실패 (로컬 데이터는 유지됨):', err);
+              // 에러 발생 시에도 로컬 데이터는 유지됨
+            }
           }
 
           // 다른 컴포넌트에 데이터 업데이트 알림
