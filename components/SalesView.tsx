@@ -5,12 +5,13 @@ import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, 
 import { parseSalesCSV, CustomerSalesData, SalesItem } from '../utils/salesDataParser';
 import { parseCRCSV, CRItem } from '../utils/crDataParser';
 import { parseRFQCSV, RFQItem } from '../utils/rfqDataParser';
+import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
 import { INITIAL_CSV_DATA } from '../data/initialSalesData';
 import { INITIAL_CR_CSV } from '../data/initialCRData';
 import { INITIAL_RFQ_CSV } from '../data/initialRfqData';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { salesService, crService, rfqService } from '../services/supabaseService';
+import { salesService, crService, rfqService, revenueService } from '../services/supabaseService';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -54,6 +55,18 @@ const SalesView: React.FC = () => {
     }
   };
 
+  // 5. Revenue Data Initializer
+  const getInitialRevenueData = (): RevenueItem[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('dashboard_revenueData');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error("Failed to load revenue data", e);
+      return [];
+    }
+  };
+
   // --- State Management ---
   const [activeSubTab, setActiveSubTab] = useState<'sales' | 'unitprice' | 'cr' | 'partner'>('sales');
 
@@ -80,6 +93,17 @@ const SalesView: React.FC = () => {
     customer: '', project: '', status: '', model: '', type: ''
   });
   const [rfqSortConfig, setRfqSortConfig] = useState<{ key: keyof RFQItem; direction: 'asc' | 'desc' } | null>(null);
+
+  // Revenue States (고객사별 매출현황)
+  const [revenueData, setRevenueData] = useState<RevenueItem[]>(getInitialRevenueData);
+  const [selectedRevenueYear, setSelectedRevenueYear] = useState<number>(2026);
+  const [selectedRevenueCustomer, setSelectedRevenueCustomer] = useState<string>('All');
+  const [revenueListOpen, setRevenueListOpen] = useState(true);
+  const [revenueFilter, setRevenueFilter] = useState({
+    month: '', customer: '', model: '', qty: '', amount: ''
+  });
+  const [revenueSortConfig, setRevenueSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
+  const [isUploadingRevenue, setIsUploadingRevenue] = useState(false);
 
   // --- Smart Supabase Load: 다중 사용자 동기화 ---
   // Supabase에 데이터가 있으면 사용, 없으면 localStorage 유지 (데이터 손실 방지)
@@ -129,6 +153,20 @@ const SalesView: React.FC = () => {
         } catch (err) {
           console.error('Supabase RFQ 데이터 로드 실패:', err);
         }
+
+        // 4. Revenue 데이터 로드 (고객사별 매출현황)
+        try {
+          const supabaseRevenue = await revenueService.getAll();
+          if (supabaseRevenue && supabaseRevenue.length > 0) {
+            setRevenueData(supabaseRevenue);
+            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
+            console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
+          } else {
+            console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
+          }
+        } catch (err) {
+          console.error('Supabase 매출 데이터 로드 실패:', err);
+        }
       } catch (err) {
         console.error('Supabase 전체 로드 실패 - localStorage 유지:', err);
       }
@@ -150,6 +188,10 @@ const SalesView: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
   }, [rfqData]);
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
+  }, [revenueData]);
 
   // --- Derived Data ---
   
@@ -254,7 +296,7 @@ const SalesView: React.FC = () => {
   }, [rfqData]);
 
   const filteredRfqItems = useMemo(() => {
-    let result = rfqData.filter(item => 
+    let result = rfqData.filter(item =>
       (rfqFilter.customer === '' || item.customer.toLowerCase().includes(rfqFilter.customer.toLowerCase())) &&
       (rfqFilter.project === '' || item.projectName.toLowerCase().includes(rfqFilter.project.toLowerCase())) &&
       (rfqFilter.status === '' || item.status.includes(rfqFilter.status)) &&
@@ -286,7 +328,7 @@ const SalesView: React.FC = () => {
             // String comparison
             const aStr = String(aValue).toLowerCase();
             const bStr = String(bValue).toLowerCase();
-            
+
             if (aStr < bStr) return rfqSortConfig.direction === 'asc' ? -1 : 1;
             if (aStr > bStr) return rfqSortConfig.direction === 'asc' ? 1 : -1;
             return 0;
@@ -294,6 +336,88 @@ const SalesView: React.FC = () => {
     }
     return result;
   }, [rfqData, rfqFilter, rfqSortConfig]);
+
+  // Revenue Derived (고객사별 매출현황)
+  const revenueYears = useMemo(() => {
+    const years = Array.from(new Set(revenueData.map(d => d.year))).sort((a, b) => b - a);
+    return years.length > 0 ? years : [2026];
+  }, [revenueData]);
+
+  const revenueCustomers = useMemo(() => {
+    const yearData = revenueData.filter(d => d.year === selectedRevenueYear);
+    return ['All', ...Array.from(new Set(yearData.map(d => d.customer))).sort()];
+  }, [revenueData, selectedRevenueYear]);
+
+  const filteredRevenueData = useMemo(() => {
+    let result = revenueData.filter(d => d.year === selectedRevenueYear);
+
+    if (selectedRevenueCustomer !== 'All') {
+      result = result.filter(d => d.customer === selectedRevenueCustomer);
+    }
+
+    // Apply filters
+    result = result.filter(item =>
+      (revenueFilter.month === '' || item.month.includes(revenueFilter.month)) &&
+      (revenueFilter.customer === '' || item.customer.toLowerCase().includes(revenueFilter.customer.toLowerCase())) &&
+      (revenueFilter.model === '' || item.model.toLowerCase().includes(revenueFilter.model.toLowerCase())) &&
+      (revenueFilter.qty === '' || item.qty.toString().includes(revenueFilter.qty)) &&
+      (revenueFilter.amount === '' || item.amount.toString().includes(revenueFilter.amount))
+    );
+
+    // Apply sorting
+    if (revenueSortConfig) {
+      result.sort((a, b) => {
+        const aValue = a[revenueSortConfig.key];
+        const bValue = b[revenueSortConfig.key];
+        if (aValue === bValue) return 0;
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return revenueSortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        if (aStr < bStr) return revenueSortConfig.direction === 'asc' ? -1 : 1;
+        if (aStr > bStr) return revenueSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [revenueData, selectedRevenueYear, selectedRevenueCustomer, revenueFilter, revenueSortConfig]);
+
+  const revenueMetrics = useMemo(() => {
+    const yearData = revenueData.filter(d => d.year === selectedRevenueYear);
+    const filtered = selectedRevenueCustomer === 'All' ? yearData : yearData.filter(d => d.customer === selectedRevenueCustomer);
+
+    const totalAmount = filtered.reduce((sum, d) => sum + d.amount, 0);
+    const totalQty = filtered.reduce((sum, d) => sum + d.qty, 0);
+    const uniqueCustomers = new Set(filtered.map(d => d.customer)).size;
+    const uniqueModels = new Set(filtered.map(d => d.model)).size;
+
+    // Monthly chart data
+    const monthlyMap = new Map<string, { month: string; amount: number; qty: number }>();
+    filtered.forEach(d => {
+      const existing = monthlyMap.get(d.month) || { month: d.month, amount: 0, qty: 0 };
+      existing.amount += d.amount;
+      existing.qty += d.qty;
+      monthlyMap.set(d.month, existing);
+    });
+    const chartData = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+    // Customer breakdown
+    const customerMap = new Map<string, number>();
+    filtered.forEach(d => customerMap.set(d.customer, (customerMap.get(d.customer) || 0) + d.amount));
+    const customerBreakdown = Array.from(customerMap.entries())
+      .map(([customer, amount]) => ({ customer, amount, share: totalAmount > 0 ? (amount / totalAmount) * 100 : 0 }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return { totalAmount, totalQty, uniqueCustomers, uniqueModels, chartData, customerBreakdown };
+  }, [revenueData, selectedRevenueYear, selectedRevenueCustomer]);
+
+  const revenueTotal = useMemo(() => {
+    const totalAmount = filteredRevenueData.reduce((sum, d) => sum + d.amount, 0);
+    const totalQty = filteredRevenueData.reduce((sum, d) => sum + d.qty, 0);
+    return { totalAmount, totalQty };
+  }, [filteredRevenueData]);
 
   // --- Handlers (Supabase sync handled by Persistence Effects) ---
   const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -352,6 +476,67 @@ const SalesView: React.FC = () => {
       reader.readAsText(file);
     }
     e.target.value = '';
+  };
+
+  // Revenue CSV Upload Handler (고객사별 매출현황)
+  const handleRevenueFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIsUploadingRevenue(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const parsed = parseRevenueCSV(event.target?.result as string, selectedRevenueYear);
+
+          // Merge with existing data (replace same year data)
+          setRevenueData(prev => {
+            const otherYears = prev.filter(d => d.year !== selectedRevenueYear);
+            return [...otherYears, ...parsed];
+          });
+
+          // Supabase 백그라운드 저장
+          if (isSupabaseConfigured()) {
+            await revenueService.saveByYear(parsed, selectedRevenueYear);
+            console.log(`✅ ${selectedRevenueYear}년 매출 데이터 Supabase 동기화 완료 (${parsed.length}건)`);
+          }
+
+          alert(`${selectedRevenueYear}년 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
+        } catch (err) {
+          console.error('매출 데이터 업로드 실패:', err);
+          alert('매출 데이터 업로드에 실패했습니다. CSV 형식을 확인해주세요.');
+        } finally {
+          setIsUploadingRevenue(false);
+        }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+
+  // Revenue Filter/Sort Handlers
+  const handleRevenueFilterChange = (field: keyof typeof revenueFilter, value: string) => {
+    setRevenueFilter(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleRevenueSort = (key: keyof RevenueItem) => {
+    setRevenueSortConfig(prev =>
+      prev?.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    );
+  };
+
+  // Revenue Download Handler
+  const handleDownloadRevenue = () => {
+    const headers = ['월', '고객사', 'Model', '매출수량', '매출금액'];
+    const rows = filteredRevenueData.map(item => [
+      item.month,
+      item.customer,
+      item.model,
+      item.qty,
+      item.amount
+    ]);
+    downloadCSV(`매출현황_${selectedRevenueYear}_${selectedRevenueCustomer}`, headers, rows);
   };
 
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
@@ -509,6 +694,205 @@ const SalesView: React.FC = () => {
                      {filteredQtyItems.length === 0 && (<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
                   </tbody>
                   <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td></tr></tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* =================================================================================
+            2. 고객사별 매출현황 (Customer Revenue Status) - CSV Uploader Section
+           ================================================================================= */}
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-xl font-black text-slate-800">2.고객사별 매출현황</h2>
+              <p className="text-xs text-slate-500 mt-1">고객사별 월별 매출금액 및 수량 현황</p>
+            </div>
+            <div className="flex gap-3 items-center flex-wrap">
+              <label className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2 ${isUploadingRevenue ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-amber-100 hover:bg-amber-200 text-amber-700'}`}>
+                <span>📂</span> {isUploadingRevenue ? '업로드 중...' : '수량 CSV 업로드'}
+                <input type="file" accept=".csv" onChange={handleRevenueFileUpload} className="hidden" disabled={isUploadingRevenue} />
+              </label>
+              <select
+                value={selectedRevenueYear}
+                onChange={(e) => setSelectedRevenueYear(parseInt(e.target.value))}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[100px]"
+              >
+                {revenueYears.map(y => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select
+                value={selectedRevenueCustomer}
+                onChange={(e) => setSelectedRevenueCustomer(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[150px]"
+              >
+                {revenueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Revenue Metrics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm">
+              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">총 매출금액</p>
+              <p className="text-3xl font-black text-blue-600">
+                {revenueMetrics.totalAmount >= 100000000
+                  ? `${(revenueMetrics.totalAmount / 100000000).toFixed(1)}억`
+                  : `${(revenueMetrics.totalAmount / 10000).toFixed(0)}만`}원
+              </p>
+              <p className="text-xs text-slate-400 mt-1">{selectedRevenueYear}년 {selectedRevenueCustomer === 'All' ? '전체' : selectedRevenueCustomer}</p>
+            </div>
+            <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
+              <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">총 매출수량</p>
+              <p className="text-3xl font-black text-emerald-600">{revenueMetrics.totalQty.toLocaleString()} EA</p>
+              <p className="text-xs text-slate-400 mt-1">{revenueMetrics.uniqueModels}개 모델</p>
+            </div>
+            <div className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-2xl border border-violet-100 shadow-sm">
+              <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">고객사 / 데이터 수</p>
+              <p className="text-3xl font-black text-violet-600">{revenueMetrics.uniqueCustomers}개사</p>
+              <p className="text-xs text-slate-400 mt-1">{filteredRevenueData.length}건 데이터</p>
+            </div>
+          </div>
+
+          {/* Revenue Monthly Chart */}
+          {revenueMetrics.chartData.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
+                월별 매출 추이
+              </h3>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={revenueMetrics.chartData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: '#64748b' }} />
+                    <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(value) => `${(value / 100000000).toFixed(1)}억`} />
+                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(value) => value.toLocaleString()} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                      formatter={(value: number, name: string) => [
+                        name === '매출금액' ? `₩${value.toLocaleString()}` : `${value.toLocaleString()} EA`,
+                        name
+                      ]}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: 600 }} />
+                    <Bar yAxisId="left" name="매출금액" dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
+                    <Line yAxisId="right" type="monotone" name="수량" dataKey="qty" stroke="#10b981" strokeWidth={2} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Customer Breakdown (Top 5) */}
+          {revenueMetrics.customerBreakdown.length > 0 && selectedRevenueCustomer === 'All' && (
+            <div className="mb-6">
+              <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span className="w-1 h-4 bg-violet-500 rounded-full"></span>
+                고객사별 매출 비중 (Top 5)
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {revenueMetrics.customerBreakdown.slice(0, 5).map((item, idx) => (
+                  <div key={item.customer} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
+                      <span className="text-xs font-bold text-blue-600">{item.share.toFixed(1)}%</span>
+                    </div>
+                    <p className="font-bold text-slate-800 text-sm truncate" title={item.customer}>{item.customer}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {item.amount >= 100000000
+                        ? `${(item.amount / 100000000).toFixed(1)}억`
+                        : `${(item.amount / 10000).toFixed(0)}만`}원
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Revenue Data Table */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => setRevenueListOpen(!revenueListOpen)}
+                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"
+              >
+                <svg className={`w-5 h-5 transition-transform ${revenueListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                상세 매출 리스트 ({filteredRevenueData.length}건)
+              </button>
+              <button
+                onClick={handleDownloadRevenue}
+                className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                엑셀 다운로드
+              </button>
+            </div>
+
+            {revenueListOpen && (
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <SortableHeader<RevenueItem> label="월" sortKey="month" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                      <SortableHeader<RevenueItem> label="고객사" sortKey="customer" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                      <SortableHeader<RevenueItem> label="Model" sortKey="model" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                      <SortableHeader<RevenueItem> label="매출수량" sortKey="qty" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                      <SortableHeader<RevenueItem> label="매출금액" sortKey="amount" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="월" className="w-full p-1 border rounded text-xs font-normal" value={revenueFilter.month} onChange={(e) => handleRevenueFilterChange('month', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="고객사" className="w-full p-1 border rounded text-xs font-normal" value={revenueFilter.customer} onChange={(e) => handleRevenueFilterChange('customer', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="Model" className="w-full p-1 border rounded text-xs font-normal" value={revenueFilter.model} onChange={(e) => handleRevenueFilterChange('model', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="수량" className="w-full p-1 border rounded text-xs font-normal text-right" value={revenueFilter.qty} onChange={(e) => handleRevenueFilterChange('qty', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="금액" className="w-full p-1 border rounded text-xs font-normal text-right" value={revenueFilter.amount} onChange={(e) => handleRevenueFilterChange('amount', e.target.value)} />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredRevenueData.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-600">{item.month}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.model}</td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-600">{item.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">₩{item.amount.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {filteredRevenueData.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-12 text-center text-slate-400">
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="text-4xl">📊</span>
+                            <p className="font-medium">데이터가 없습니다.</p>
+                            <p className="text-xs">CSV 파일을 업로드하여 매출 데이터를 추가하세요.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {filteredRevenueData.length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                      <tr>
+                        <td colSpan={3} className="px-4 py-3 text-center">합계 (Total)</td>
+                        <td className="px-4 py-3 text-right font-mono">{revenueTotal.totalQty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-blue-600">₩{revenueTotal.totalAmount.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             )}
