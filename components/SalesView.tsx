@@ -68,7 +68,7 @@ const SalesView: React.FC = () => {
   };
 
   // --- State Management ---
-  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'unitprice' | 'cr' | 'partner'>('sales');
+  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'unitprice' | 'cr'>('sales');
 
   // Quantity States
   const [salesData, setSalesData] = useState<CustomerSalesData[]>(getInitialSalesData);
@@ -780,7 +780,7 @@ const SalesView: React.FC = () => {
   const handleDownloadRfq = () => { const headers = ['순번', '고객사', '제품군', '프로젝트명', '공정단계', '현상태', '시작일', '견적일', '최초주문일', 'Model', '월평균수량', '예상단가', '예상매출', '비고']; const rows = filteredRfqItems.map(item => [item.index, item.customer, item.projectType, item.projectName, item.process, item.status, item.dateSelection, item.dateQuotation, item.datePO, item.model, item.qty, item.unitPrice, item.amount, item.remark]); downloadCSV(`RFQ_현황`, headers, rows); };
 
   // Helper
-  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }, { id: 'partner', label: '협력사 현황' }];
+  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }];
 
   // Helper component for table headers
   const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T, align?: string, currentSort: { key: keyof T, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T) => void }) => (
@@ -1731,21 +1731,6 @@ const SalesView: React.FC = () => {
          </div>
       )}
 
-      {/* =================================================================================
-          협력사 현황 TAB (Partner Status)
-         ================================================================================= */}
-      {activeSubTab === 'partner' && (
-         <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-               <div className="flex flex-col items-center justify-center py-16">
-                  <div className="text-6xl mb-4">🤝</div>
-                  <h2 className="text-xl font-black text-slate-800 mb-2">협력사 현황</h2>
-                  <p className="text-sm text-slate-500">협력사 정보 및 파트너십 현황이 이곳에 표시됩니다.</p>
-                  <p className="text-xs text-slate-400 mt-2">Partner Status - Coming Soon</p>
-               </div>
-            </div>
-         </div>
-      )}
     </div>
   );
 };

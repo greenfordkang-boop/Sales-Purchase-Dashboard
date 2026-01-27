@@ -39,7 +39,7 @@ const MetricCard: React.FC<MetricCardProps> = ({
             <span className={`text-sm font-bold flex items-center ${trend === 'up' ? 'text-emerald-500' : trend === 'down' ? 'text-rose-500' : 'text-slate-400'}`}>
               {trend === 'up' && '▲'}
               {trend === 'down' && '▼'}
-              {Math.abs(percentage)}%
+              {Math.abs(percentage).toFixed(1)}%
             </span>
             <div className="w-20 h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden">
               <div 
