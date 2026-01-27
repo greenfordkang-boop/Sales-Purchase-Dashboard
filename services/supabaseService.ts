@@ -364,10 +364,14 @@ export const inventoryService = {
       return stored ? JSON.parse(stored) : { warehouse: [], material: [], parts: [], product: [] };
     }
 
+    // 기본 Supabase PostgREST limit는 1,000행이라,
+    // 별도 지정하지 않으면 나머지 행이 잘립니다.
+    // 모든 재고 행을 가져오기 위해 충분히 큰 limit를 명시합니다.
     const { data, error } = await supabase!
       .from('inventory_data')
       .select('*')
-      .order('code');
+      .order('code')
+      .limit(10000); // 최대 10,000행까지 로드 (현재 2,807행 수준)
 
     if (error) handleError(error, 'inventory getAll');
 
