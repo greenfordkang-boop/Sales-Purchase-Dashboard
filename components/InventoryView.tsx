@@ -291,36 +291,53 @@ const InventoryView: React.FC = () => {
 
 
   // --- Handlers ---
+  /**
+   * 재고 업로드 핸들러
+   *
+   * 동작 흐름 (구매관리 패턴과 통일):
+   * 1) CSV 파싱 → updatedData 생성
+   * 2) 화면 + localStorage를 updatedData로 즉시 반영
+   * 3) Supabase에 updatedData 전체를 저장 (await)
+   * 4) Supabase에서 getAll()로 전체 재고 데이터를 다시 로드
+   * 5) 화면 + localStorage를 Supabase 기준 최신 데이터로 통일
+   *
+   * 이렇게 하면:
+   * - 업로드 직후 화면은 사용자가 올린 CSV 기준으로 보이고
+   * - 저장이 끝난 후에는 DB(Supabase)에 실제로 저장된 최종 값과 화면이 100% 일치합니다.
+   */
   const handleInventoryUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'warehouse' | 'material' | 'parts' | 'product') => {
     const file = e.target.files?.[0];
     if (file) {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-            const data = parseInventoryCSV(event.target?.result as string, type);
-            const updatedData = { ...inventoryData, [type]: data };
-            
-            // localStorage 즉시 저장
-            localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
-            setInventoryData(updatedData);
-            
-            // Supabase 저장 (백그라운드, 업로드한 데이터는 그대로 유지)
-            if (isSupabaseConfigured()) {
-              // Supabase 저장은 백그라운드에서 수행하고, 업로드한 데이터는 그대로 유지
-              inventoryService.saveAll(updatedData)
-                .then(() => {
-                  console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
-                })
-                .catch((err) => {
-                  console.error('Supabase 동기화 실패:', err);
-                  // 에러 발생 시에도 로컬 데이터는 유지됨
-                });
-              // 업로드한 데이터를 그대로 유지 (Supabase 재로드 없음)
-              // 다른 사용자 동기화는 페이지 로드 시에만 수행됨
-            }
-            
-            if (viewMode === 'list') setActiveInventoryType(type);
-        };
-        reader.readAsText(file);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const data = parseInventoryCSV(event.target?.result as string, type);
+        const updatedData = { ...inventoryData, [type]: data };
+
+        // 1) 화면 + localStorage를 업로드한 데이터로 즉시 반영
+        localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
+        setInventoryData(updatedData);
+
+        // 2) Supabase 저장 (완료 후 최신 데이터 재로드) - 구매관리 패턴과 동일
+        if (isSupabaseConfigured()) {
+          try {
+            await inventoryService.saveAll(updatedData);
+            console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
+
+            // 3) Supabase에서 최신 데이터 재로드하여
+            //    화면/로컬스토리지와 DB 상태를 완전히 일치시킴
+            const latestData = await inventoryService.getAll();
+            setInventoryData(latestData);
+            localStorage.setItem('dashboard_inventoryData', JSON.stringify(latestData));
+            console.log('✅ Supabase에서 최신 재고 데이터 재로드 완료');
+          } catch (err) {
+            console.error('Supabase 동기화 실패:', err);
+            // 에러 발생 시에도 로컬 데이터는 updatedData 기준으로 유지됨
+          }
+        }
+
+        if (viewMode === 'list') setActiveInventoryType(type);
+      };
+      reader.readAsText(file);
     }
     e.target.value = '';
   };
