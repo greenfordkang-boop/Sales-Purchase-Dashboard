@@ -1,331 +1,172 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import MetricCard from './MetricCard';
-import { parseInventoryCSV, InventoryItem } from '../utils/inventoryDataParser';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { inventoryService } from '../services/supabaseService';
 
-// Type definition for column configuration
-interface ColumnDef {
-  key: keyof InventoryItem;
-  label: string;
-  align?: 'left' | 'center' | 'right';
-  format?: (value: any) => string;
-  isFilterable?: boolean;
+// Material Item Type (Resin/Paint)
+interface MaterialItem {
+  id: string;
+  code: string;      // 재질코드
+  name: string;      // 재질명
+  unit: string;      // 단위
+  location: string;  // 창고명
+  qty: number;       // 현재고
 }
 
-// Pivot Configuration Types
-interface PivotConfig {
-  rowFields: string[];
-  colField: string;
-  valueField: 'qty';
+// Parts/Warehouse Item Type
+interface InventoryItem {
+  id: string;
+  code: string;
+  customerPN?: string;
+  name: string;
+  spec?: string;
+  model?: string;
+  unit: string;
+  status?: string;
+  location: string;
+  qty: number;
+  unitPrice?: number;
+  amount?: number;
 }
 
-const AVAILABLE_PIVOT_FIELDS = [
-  { key: 'model', label: '차종명' },
-  { key: 'customerPN', label: '고객사 P/N' },
-  { key: 'code', label: '품목코드' },
-  { key: 'name', label: '품목명' },
-  { key: 'spec', label: '규격' },
-  { key: 'unit', label: '단위' },
-  { key: 'status', label: '상태' },
-  { key: 'location', label: '창고명' },
-];
+// Parse Material CSV (Resin/Paint)
+const parseMaterialCSV = (csvText: string): MaterialItem[] => {
+  const lines = csvText.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  const result: MaterialItem[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    if (values.length >= 5 && values[0]) {
+      result.push({
+        id: `mat-${i}`,
+        code: values[0] || '',
+        name: values[1] || '',
+        unit: values[2] || 'Kg',
+        location: values[3] || '',
+        qty: parseFloat(values[4]) || 0
+      });
+    }
+  }
+  return result;
+};
+
+// Parse Parts CSV (existing warehouse format)
+const parsePartsCSV = (csvText: string): InventoryItem[] => {
+  const lines = csvText.split('\n').filter(line => line.trim());
+  if (lines.length < 2) return [];
+
+  const result: InventoryItem[] = [];
+  for (let i = 1; i < lines.length; i++) {
+    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    if (values.length >= 5 && values[0]) {
+      result.push({
+        id: `parts-${i}`,
+        code: values[0] || '',
+        customerPN: values[1] || '',
+        name: values[2] || '',
+        spec: values[3] || '',
+        model: values[4] || '',
+        unit: values[5] || 'EA',
+        status: values[6] || '',
+        location: values[7] || '',
+        qty: parseFloat(values[8]) || 0,
+        unitPrice: parseFloat(values[9]) || 0,
+        amount: parseFloat(values[10]) || 0
+      });
+    }
+  }
+  return result;
+};
 
 const InventoryView: React.FC = () => {
+  // --- Sub Tab State ---
+  const [activeSubTab, setActiveSubTab] = useState<'resin' | 'paint' | 'parts'>('resin');
+
   // --- Initialization Helpers ---
-  const getInitialInventoryData = () => {
+  const getInitialData = () => {
     if (typeof window === 'undefined') {
-        return { warehouse: [], material: [], parts: [], product: [] };
+      return { resin: [], paint: [], parts: [] };
     }
     try {
-      const stored = localStorage.getItem('dashboard_inventoryData');
+      const stored = localStorage.getItem('dashboard_inventory_v2');
       if (stored) {
         return JSON.parse(stored);
       }
-      return { warehouse: [], material: [], parts: [], product: [] };
+      return { resin: [], paint: [], parts: [] };
     } catch (e) {
       console.error("Failed to load inventory data", e);
-      return { warehouse: [], material: [], parts: [], product: [] };
+      return { resin: [], paint: [], parts: [] };
     }
   };
 
   // --- State ---
   const [inventoryData, setInventoryData] = useState<{
-    warehouse: InventoryItem[];
-    material: InventoryItem[];
+    resin: MaterialItem[];
+    paint: MaterialItem[];
     parts: InventoryItem[];
-    product: InventoryItem[];
-  }>(getInitialInventoryData);
+  }>(getInitialData);
 
-  // View Mode: 'list' (Existing) or 'pivot' (New)
-  const [viewMode, setViewMode] = useState<'list' | 'pivot'>('list');
-
-  // List View State (창고별 재고만 사용)
+  // Filter & Sort States
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
-  const [listSortConfig, setListSortConfig] = useState<{ key: keyof InventoryItem; direction: 'asc' | 'desc' } | null>(null);
-
-  // Pivot View State
-  const [pivotRows, setPivotRows] = useState<string[]>(['model', 'name']);
-  const [pivotCol, setPivotCol] = useState<string>('location');
-  
-  // Pivot Sorting State
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- Smart Supabase Load: 다중 사용자 동기화 (Supabase 기준 로드) ---
+  // --- Persistence ---
   useEffect(() => {
-    const loadFromSupabase = async () => {
-      if (!isSupabaseConfigured()) return;
-
-      try {
-        const supabaseData = await inventoryService.getAll();
-        const hasData = supabaseData.warehouse.length > 0 ||
-                       supabaseData.material.length > 0 ||
-                       supabaseData.parts.length > 0 ||
-                       supabaseData.product.length > 0;
-
-        if (hasData) {
-          setInventoryData(supabaseData);
-          localStorage.setItem('dashboard_inventoryData', JSON.stringify(supabaseData));
-          console.log('✅ Supabase에서 재고 데이터 로드');
-        } else {
-          console.log('ℹ️ Supabase 재고 데이터 없음 - localStorage 유지');
-        }
-      } catch (err) {
-        console.error('Supabase 재고 로드 실패 - localStorage 유지:', err);
-      }
-    };
-
-    loadFromSupabase();
-  }, []);
-
-  // --- Persistence: 화면 상태를 localStorage에 함께 저장 ---
-  useEffect(() => {
-    const hasData = inventoryData.warehouse.length > 0 ||
-                   inventoryData.material.length > 0 ||
-                   inventoryData.parts.length > 0 ||
-                   inventoryData.product.length > 0;
+    const hasData = inventoryData.resin.length > 0 ||
+                   inventoryData.paint.length > 0 ||
+                   inventoryData.parts.length > 0;
     if (hasData) {
-      localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
+      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(inventoryData));
     }
   }, [inventoryData]);
 
-  // Generic Sorting Helper
-  const sortData = <T,>(data: T[], config: { key: keyof T; direction: 'asc' | 'desc' } | null) => {
-    if (!config) return data;
-    return [...data].sort((a, b) => {
-      const aVal = a[config.key];
-      const bVal = b[config.key];
-
-      if (aVal === bVal) return 0;
-      
-      if (typeof aVal === 'number' && typeof bVal === 'number') {
-        return config.direction === 'asc' ? aVal - bVal : bVal - aVal;
+  // --- Smart Supabase Load ---
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+      try {
+        // Load from inventory_v2 table if exists
+        const supabaseData = await inventoryService.getInventoryV2?.();
+        if (supabaseData && (supabaseData.resin?.length > 0 || supabaseData.paint?.length > 0 || supabaseData.parts?.length > 0)) {
+          setInventoryData(supabaseData);
+          localStorage.setItem('dashboard_inventory_v2', JSON.stringify(supabaseData));
+          console.log('✅ Supabase에서 재고 데이터 로드');
+        }
+      } catch (err) {
+        console.log('ℹ️ Supabase 재고 데이터 없음 - localStorage 유지');
       }
-      
-      const aStr = String(aVal).toLowerCase();
-      const bStr = String(bVal).toLowerCase();
-      
-      if (aStr < bStr) return config.direction === 'asc' ? -1 : 1;
-      if (aStr > bStr) return config.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-  };
-
-  // --- Configuration (List View) ---
-  const COLUMN_CONFIG: Record<string, ColumnDef[]> = {
-    warehouse: [
-      { key: 'code', label: '품목코드', isFilterable: true },
-      { key: 'customerPN', label: '고객사 P/N', isFilterable: true },
-      { key: 'name', label: '품목명', isFilterable: true },
-      { key: 'spec', label: '규격', isFilterable: true },
-      { key: 'model', label: '차종명', align: 'center', isFilterable: true },
-      { key: 'unit', label: '단위', align: 'center' },
-      { key: 'status', label: '상태', align: 'center', isFilterable: true },
-      { key: 'location', label: '창고명', align: 'center', isFilterable: true },
-      { 
-        key: 'qty', 
-        label: '재고', 
-        align: 'right', 
-        format: (v) => typeof v === 'number' ? v.toLocaleString() : '0', 
-        isFilterable: true 
-      },
-    ],
-    material: [
-      { key: 'code', label: '재질코드', isFilterable: true },
-      { key: 'name', label: '재질명', isFilterable: true },
-      { key: 'unit', label: '단위', align: 'center' },
-      { key: 'location', label: '창고명', align: 'center', isFilterable: true },
-      { 
-        key: 'qty', 
-        label: '현재고', 
-        align: 'right', 
-        format: (v) => typeof v === 'number' ? v.toLocaleString() : '0', 
-        isFilterable: true 
-      },
-    ],
-    parts: [
-      { key: 'code', label: '부품코드', isFilterable: true },
-      { key: 'name', label: '부품명', isFilterable: true },
-      { key: 'spec', label: '규격', isFilterable: true },
-      { key: 'unit', label: '단위', align: 'center' },
-      { key: 'location', label: '보관위치', align: 'center', isFilterable: true },
-      { key: 'qty', label: '재고수량', align: 'right', format: (v) => v.toLocaleString(), isFilterable: true },
-      { key: 'unitPrice', label: '단가', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-' },
-      { key: 'amount', label: '금액', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-', isFilterable: true },
-    ],
-    product: [
-      { key: 'code', label: '제품코드', isFilterable: true },
-      { key: 'name', label: '제품명', isFilterable: true },
-      { key: 'spec', label: '규격', isFilterable: true },
-      { key: 'model', label: '모델', align: 'center', isFilterable: true },
-      { key: 'unit', label: '단위', align: 'center' },
-      { key: 'location', label: '출하창고', align: 'center', isFilterable: true },
-      { key: 'qty', label: '제품재고', align: 'right', format: (v) => v.toLocaleString(), isFilterable: true },
-      { key: 'amount', label: '재고금액', align: 'right', format: (v) => v ? `₩${v.toLocaleString()}` : '-', isFilterable: true },
-    ]
-  };
-
-  // --- Derived Data for LIST VIEW (창고별 재고 고정) ---
-  const currentColumns = COLUMN_CONFIG.warehouse;
-  const currentInventoryList = inventoryData.warehouse;
-  
-  const validInventoryItems = useMemo(() => {
-    return currentInventoryList.filter(item => item.code && item.code.trim() !== '');
-  }, [currentInventoryList]);
-
-  const filteredInventoryList = useMemo(() => {
-    const result = validInventoryItems.filter(item => {
-      return currentColumns.every(col => {
-        if (!col.isFilterable) return true;
-        const filterVal = filterValues[col.key];
-        if (!filterVal) return true;
-        
-        const itemVal = item[col.key];
-        if (itemVal === undefined || itemVal === null) return false;
-        
-        return String(itemVal).toLowerCase().includes(filterVal.toLowerCase());
-      });
-    });
-    return sortData(result, listSortConfig);
-  }, [validInventoryItems, filterValues, currentColumns, listSortConfig]);
-
-  const totalInventoryQty = filteredInventoryList.reduce((sum, item) => sum + (item.qty || 0), 0);
-  const totalInventoryAmount = filteredInventoryList.reduce((sum, item) => sum + (item.amount || 0), 0);
-  const showAmountMetric = validInventoryItems.some(item => item.amount && item.amount > 0);
-
-
-  // --- Derived Data for PIVOT VIEW ---
-  const pivotData = useMemo(() => {
-    const rawData = inventoryData.warehouse.filter(item => item.code && item.code.trim() !== ''); // Use Warehouse Data
-    
-    // 1. Get Unique Column Values (if colField is selected)
-    let colValues: string[] = [];
-    if (pivotCol) {
-      const distinct = new Set<string>(rawData.map(item => String(item[pivotCol as keyof InventoryItem] || 'N/A')));
-      colValues = Array.from(distinct).sort();
-    }
-
-    // 2. Group Data
-    const groups = new Map<string, any>();
-
-    rawData.forEach(item => {
-      // Create Key based on row fields
-      const rowKey = pivotRows.map(field => String(item[field as keyof InventoryItem] || '-')).join('||');
-      
-      if (!groups.has(rowKey)) {
-        const initialGroup: any = { _key: rowKey, _count: 0, _totalQty: 0 };
-        pivotRows.forEach(field => {
-          initialGroup[field] = item[field as keyof InventoryItem] || '-';
-        });
-        // Initialize column value accumulators
-        colValues.forEach(cv => initialGroup[`_col_${cv}`] = 0);
-        groups.set(rowKey, initialGroup);
-      }
-
-      const group = groups.get(rowKey);
-      group._count += 1;
-      group._totalQty += (item.qty || 0);
-
-      if (pivotCol) {
-        const colVal = String(item[pivotCol as keyof InventoryItem] || 'N/A');
-        group[`_col_${colVal}`] = (group[`_col_${colVal}`] || 0) + (item.qty || 0);
-      }
-    });
-
-    // 3. Sorting
-    let rows = Array.from(groups.values());
-    if (sortConfig) {
-        rows.sort((a, b) => {
-            const valA = a[sortConfig.key];
-            const valB = b[sortConfig.key];
-            
-            // Numeric Sort for Total
-            if (sortConfig.key === '_totalQty') {
-                 return sortConfig.direction === 'asc' ? valA - valB : valB - valA;
-            }
-            
-            // String Sort for other fields
-            const strA = String(valA || '');
-            const strB = String(valB || '');
-            return sortConfig.direction === 'asc' 
-                ? strA.localeCompare(strB, 'ko') 
-                : strB.localeCompare(strA, 'ko');
-        });
-    }
-
-    return {
-      colValues,
-      rows,
-      grandTotalQty: rawData.reduce((sum, item) => sum + (item.qty || 0), 0)
     };
-  }, [inventoryData.warehouse, pivotRows, pivotCol, sortConfig]);
-
+    loadFromSupabase();
+  }, []);
 
   // --- Handlers ---
-  /**
-   * 재고 업로드 핸들러
-   *
-   * 동작 흐름 (Supabase 기준, 단말 간 완전 동기화):
-   * 1) CSV 파싱 → updatedData 생성
-   * 2) 화면 + localStorage를 updatedData로 즉시 반영
-   * 3) Supabase에 updatedData 전체를 저장 (await)
-   * 4) Supabase에서 getAll()로 전체 재고 데이터를 다시 로드
-   * 5) 화면 + localStorage를 Supabase 기준 최신 데이터로 통일
-   *
-   * 이렇게 하면:
-   * - 업로드 직후 화면은 사용자가 올린 CSV 기준으로 보이고
-   * - 저장이 끝난 후에는 DB(Supabase)에 실제로 저장된 최종 값과
-   *   모든 단말의 화면이 100% 동일해집니다.
-   */
-  const handleInventoryUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'warehouse' | 'material' | 'parts' | 'product') => {
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'resin' | 'paint' | 'parts') => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = async (event) => {
-        const data = parseInventoryCSV(event.target?.result as string, type);
+        const csvText = event.target?.result as string;
+        let data: any[];
+
+        if (type === 'parts') {
+          data = parsePartsCSV(csvText);
+        } else {
+          data = parseMaterialCSV(csvText);
+        }
+
         const updatedData = { ...inventoryData, [type]: data };
-
-        // 1) 화면 + localStorage를 업로드한 데이터로 즉시 반영
-        localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
         setInventoryData(updatedData);
+        localStorage.setItem('dashboard_inventory_v2', JSON.stringify(updatedData));
 
-        // 2) Supabase 저장 (완료 후 최신 데이터 재로드) - Supabase 기준 동기화
+        // Supabase sync
         if (isSupabaseConfigured()) {
           try {
-            await inventoryService.saveAll(updatedData);
+            await inventoryService.saveInventoryV2?.(updatedData);
             console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
-
-            // 3) Supabase에서 최신 데이터 재로드하여
-            //    화면/로컬스토리지와 DB 상태를 완전히 일치시킴
-            const latestData = await inventoryService.getAll();
-            setInventoryData(latestData);
-            localStorage.setItem('dashboard_inventoryData', JSON.stringify(latestData));
-            console.log('✅ Supabase에서 최신 재고 데이터 재로드 완료');
           } catch (err) {
             console.error('Supabase 동기화 실패:', err);
-            // 에러 발생 시에도 로컬 데이터는 updatedData 기준으로 유지됨
           }
         }
       };
@@ -338,408 +179,446 @@ const InventoryView: React.FC = () => {
     setFilterValues(prev => ({ ...prev, [key]: value }));
   };
 
-  const togglePivotRow = (fieldKey: string) => {
-    setPivotRows(prev => {
-      if (prev.includes(fieldKey)) {
-        return prev.filter(k => k !== fieldKey);
-      } else {
-        return [...prev, fieldKey];
-      }
-    });
-  };
-
   const handleSort = (key: string) => {
-    setSortConfig(prev => {
-        if (prev && prev.key === key) {
-            return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-        }
-        return { key, direction: 'asc' };
-    });
-  };
-
-  const handleListSort = (key: keyof InventoryItem) => {
-    setListSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
-  };
-
-  // Download Handlers
-  const handleDownloadList = () => {
-    const headers = currentColumns.map(col => col.label);
-    const rows = filteredInventoryList.map(item =>
-      currentColumns.map(col => item[col.key])
+    setSortConfig(prev =>
+      prev?.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
     );
-    downloadCSV('재고현황_창고별', headers, rows);
   };
 
-  const handleDownloadPivot = () => {
-    // Headers: Row Fields + Col Values + Total
-    const rowHeaders = pivotRows.map(key => AVAILABLE_PIVOT_FIELDS.find(f => f.key === key)?.label || key);
-    const headers = [...rowHeaders, ...pivotData.colValues, '합계(Total)'];
-    
-    // Rows
-    const rows = pivotData.rows.map(row => {
-      const rowData = pivotRows.map(key => row[key]);
-      const colData = pivotData.colValues.map(colVal => row[`_col_${colVal}`] || 0);
-      return [...rowData, ...colData, row._totalQty];
-    });
+  // Reset filters when tab changes
+  useEffect(() => {
+    setFilterValues({});
+    setSortConfig(null);
+  }, [activeSubTab]);
 
-    downloadCSV('재고현황_피봇분석', headers, rows);
+  // --- Derived Data ---
+  const filteredResinData = useMemo(() => {
+    let result = inventoryData.resin.filter(item => item.code && item.code.trim() !== '');
+
+    // Apply filters
+    if (filterValues.code) result = result.filter(item => item.code.toLowerCase().includes(filterValues.code.toLowerCase()));
+    if (filterValues.name) result = result.filter(item => item.name.toLowerCase().includes(filterValues.name.toLowerCase()));
+    if (filterValues.location) result = result.filter(item => item.location.toLowerCase().includes(filterValues.location.toLowerCase()));
+    if (filterValues.qty) result = result.filter(item => String(item.qty).includes(filterValues.qty));
+
+    // Apply sorting
+    if (sortConfig) {
+      result.sort((a, b) => {
+        const aVal = a[sortConfig.key as keyof MaterialItem];
+        const bVal = b[sortConfig.key as keyof MaterialItem];
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        return sortConfig.direction === 'asc'
+          ? String(aVal).localeCompare(String(bVal), 'ko')
+          : String(bVal).localeCompare(String(aVal), 'ko');
+      });
+    }
+
+    return result;
+  }, [inventoryData.resin, filterValues, sortConfig]);
+
+  const filteredPaintData = useMemo(() => {
+    let result = inventoryData.paint.filter(item => item.code && item.code.trim() !== '');
+
+    if (filterValues.code) result = result.filter(item => item.code.toLowerCase().includes(filterValues.code.toLowerCase()));
+    if (filterValues.name) result = result.filter(item => item.name.toLowerCase().includes(filterValues.name.toLowerCase()));
+    if (filterValues.location) result = result.filter(item => item.location.toLowerCase().includes(filterValues.location.toLowerCase()));
+    if (filterValues.qty) result = result.filter(item => String(item.qty).includes(filterValues.qty));
+
+    if (sortConfig) {
+      result.sort((a, b) => {
+        const aVal = a[sortConfig.key as keyof MaterialItem];
+        const bVal = b[sortConfig.key as keyof MaterialItem];
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        return sortConfig.direction === 'asc'
+          ? String(aVal).localeCompare(String(bVal), 'ko')
+          : String(bVal).localeCompare(String(aVal), 'ko');
+      });
+    }
+
+    return result;
+  }, [inventoryData.paint, filterValues, sortConfig]);
+
+  const filteredPartsData = useMemo(() => {
+    let result = inventoryData.parts.filter(item => item.code && item.code.trim() !== '');
+
+    if (filterValues.code) result = result.filter(item => item.code.toLowerCase().includes(filterValues.code.toLowerCase()));
+    if (filterValues.customerPN) result = result.filter(item => (item.customerPN || '').toLowerCase().includes(filterValues.customerPN.toLowerCase()));
+    if (filterValues.name) result = result.filter(item => item.name.toLowerCase().includes(filterValues.name.toLowerCase()));
+    if (filterValues.spec) result = result.filter(item => (item.spec || '').toLowerCase().includes(filterValues.spec.toLowerCase()));
+    if (filterValues.model) result = result.filter(item => (item.model || '').toLowerCase().includes(filterValues.model.toLowerCase()));
+    if (filterValues.status) result = result.filter(item => (item.status || '').toLowerCase().includes(filterValues.status.toLowerCase()));
+    if (filterValues.location) result = result.filter(item => item.location.toLowerCase().includes(filterValues.location.toLowerCase()));
+    if (filterValues.qty) result = result.filter(item => String(item.qty).includes(filterValues.qty));
+
+    if (sortConfig) {
+      result.sort((a, b) => {
+        const aVal = a[sortConfig.key as keyof InventoryItem];
+        const bVal = b[sortConfig.key as keyof InventoryItem];
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        return sortConfig.direction === 'asc'
+          ? String(aVal || '').localeCompare(String(bVal || ''), 'ko')
+          : String(bVal || '').localeCompare(String(aVal || ''), 'ko');
+      });
+    }
+
+    return result;
+  }, [inventoryData.parts, filterValues, sortConfig]);
+
+  // --- Download Handlers ---
+  const handleDownloadResin = () => {
+    const headers = ['재질코드', '재질명', '단위', '창고명', '현재고'];
+    const rows = filteredResinData.map(item => [item.code, item.name, item.unit, item.location, item.qty]);
+    downloadCSV('Resin_재고현황', headers, rows);
   };
+
+  const handleDownloadPaint = () => {
+    const headers = ['재질코드', '재질명', '단위', '창고명', '현재고'];
+    const rows = filteredPaintData.map(item => [item.code, item.name, item.unit, item.location, item.qty]);
+    downloadCSV('도료_재고현황', headers, rows);
+  };
+
+  const handleDownloadParts = () => {
+    const headers = ['품목코드', '고객사 P/N', '품목명', '규격', '차종명', '단위', '상태', '창고명', '재고'];
+    const rows = filteredPartsData.map(item => [
+      item.code, item.customerPN, item.name, item.spec, item.model,
+      item.unit, item.status, item.location, item.qty
+    ]);
+    downloadCSV('부품_창고별재고', headers, rows);
+  };
+
+  // --- Totals ---
+  const resinTotal = filteredResinData.reduce((sum, item) => sum + item.qty, 0);
+  const paintTotal = filteredPaintData.reduce((sum, item) => sum + item.qty, 0);
+  const partsTotal = filteredPartsData.reduce((sum, item) => sum + item.qty, 0);
+
+  // --- Sub Tabs Config ---
+  const SUB_TABS = [
+    { id: 'resin', label: 'Resin 재고', color: 'blue' },
+    { id: 'paint', label: '도료 재고', color: 'emerald' },
+    { id: 'parts', label: '부품재고(창고별재고)', color: 'violet' }
+  ];
+
+  // Sortable Header Component
+  const SortableHeader = ({ label, sortKey, align = 'left' }: { label: string; sortKey: string; align?: string }) => (
+    <th
+      className={`px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors select-none group ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}
+      onClick={() => handleSort(sortKey)}
+    >
+      <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
+        {label}
+        <span className={`text-[10px] ${sortConfig?.key === sortKey ? 'text-blue-600 font-bold' : 'text-slate-300 group-hover:text-slate-400'}`}>
+          {sortConfig?.key === sortKey ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </div>
+    </th>
+  );
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
-      
-      {/* Top Header & Navigation */}
+
+      {/* Header */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <div className="flex flex-col xl:flex-row items-center justify-between gap-6 mb-2">
-              <div>
-                  <h2 className="text-xl font-black text-slate-800">재고 현황 대시보드 (Inventory)</h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    {viewMode === 'list' 
-                      ? '유형별 재고 리스트 및 상세 검색' 
-                      : '창고별 재고 데이터 기반 사용자 정의 피봇 분석'}
-                  </p>
-              </div>
-
-              {/* View Switcher */}
-              <div className="bg-slate-100 p-1 rounded-xl flex gap-1">
-                 <button
-                    onClick={() => setViewMode('list')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                        viewMode === 'list' 
-                        ? 'bg-white text-blue-600 shadow-sm' 
-                        : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                 >
-                    📋 재고 현황 리스트
-                 </button>
-                 <button
-                    onClick={() => setViewMode('pivot')}
-                    className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${
-                        viewMode === 'pivot' 
-                        ? 'bg-white text-indigo-600 shadow-sm' 
-                        : 'text-slate-400 hover:text-slate-600'
-                    }`}
-                 >
-                    📊 현재고 (사용자 피봇)
-                 </button>
-              </div>
-
-              {/* Uploader: 창고별 재고만 사용 */}
-              <div className="flex flex-wrap gap-2 justify-end">
-                <label className="bg-blue-600 hover:opacity-90 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1 shadow-sm opacity-80 hover:opacity-100">
-                  <span>📤 창고별 재고 업로드</span>
-                  <input 
-                    type="file" 
-                    accept=".csv" 
-                    onChange={(e) => handleInventoryUpload(e, 'warehouse')} 
-                    className="hidden" 
-                  />
-                </label>
-              </div>
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-slate-800">재고 현황 (Inventory)</h2>
+            <p className="text-sm text-slate-500 mt-1">Resin, 도료, 부품 재고 현황 관리</p>
           </div>
+
+          {/* Sub Tabs */}
+          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+            {SUB_TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveSubTab(tab.id as any)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  activeSubTab === tab.id
+                    ? `bg-white text-${tab.color}-600 shadow-sm`
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
-      
-      {/* ======================= LIST VIEW CONTENT ======================= */}
-      {viewMode === 'list' && (
-        <div className="space-y-6">
-          {/* Inventory Metrics (창고별 재고 기준) */}
-          <div className={`grid grid-cols-1 ${showAmountMetric ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
-              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                    <span className="text-xs font-bold text-slate-400">선택된 유형</span>
-                    <h3 className="text-lg font-black text-slate-800 mt-1">창고별 재고</h3>
-              </div>
-              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                    <span className="text-xs font-bold text-slate-400">검색된 품목 수</span>
-                    <h3 className="text-lg font-black text-slate-800 mt-1">{filteredInventoryList.length.toLocaleString()} Items</h3>
-              </div>
-              <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                    <span className="text-xs font-bold text-slate-400">검색 재고 수량</span>
-                    <h3 className="text-lg font-black text-blue-600 mt-1">{totalInventoryQty.toLocaleString()}</h3>
-              </div>
-              {showAmountMetric && (
-                <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
-                      <span className="text-xs font-bold text-slate-400">검색 재고 평가액</span>
-                      <h3 className="text-lg font-black text-emerald-600 mt-1">₩{totalInventoryAmount.toLocaleString()}</h3>
-                </div>
-              )}
+
+      {/* =========================== RESIN TAB =========================== */}
+      {activeSubTab === 'resin' && (
+        <div className="space-y-4">
+          {/* Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">등록 품목</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.resin.length.toLocaleString()} Items</h3>
+            </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">검색 결과</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredResinData.length.toLocaleString()} Items</h3>
+            </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">총 재고량</span>
+              <h3 className="text-lg font-black text-blue-600 mt-1">{resinTotal.toLocaleString()} Kg</h3>
+            </div>
           </div>
 
+          {/* Table */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-100 pb-2 mb-4">
-                  {/* Internal Tabs 제거: 창고별 재고 단일 뷰 */}
-                  <div className="text-xs font-bold text-slate-500">
-                    창고별 재고 리스트 (총 {inventoryData.warehouse.length.toLocaleString()} 품목)
-                  </div>
-                  
-                  <button 
-                    onClick={handleDownloadList}
-                    className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    엑셀 다운로드
-                  </button>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
+                Resin 재고 리스트
+              </h3>
+              <div className="flex items-center gap-2">
+                <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                  <span>📤 CSV 업로드</span>
+                  <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'resin')} className="hidden" />
+                </label>
+                <button onClick={handleDownloadResin} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  엑셀 다운로드
+                </button>
               </div>
+            </div>
 
-              {/* Dynamic Table */}
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                  <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                          <tr>
-                              {currentColumns.map((col) => (
-                                  <th 
-                                    key={col.key} 
-                                    className={`px-4 py-3 min-w-[100px] ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group`}
-                                    onClick={() => handleListSort(col.key)}
-                                  >
-                                      <div className={`flex items-center gap-1 ${col.align === 'center' ? 'justify-center' : col.align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                                        {col.label}
-                                        <span className={`text-[10px] ${listSortConfig?.key === col.key ? 'text-blue-600 font-bold' : 'text-slate-300 group-hover:text-slate-400'}`}>
-                                            {listSortConfig?.key === col.key 
-                                                ? (listSortConfig.direction === 'asc' ? '▲' : '▼') 
-                                                : '⇅'
-                                            }
-                                        </span>
-                                      </div>
-                                  </th>
-                              ))}
-                          </tr>
-                          <tr className="bg-slate-50">
-                              {currentColumns.map((col) => (
-                                  <th key={`filter-${col.key}`} className="px-2 py-2">
-                                      {col.isFilterable ? (
-                                          <input 
-                                            type="text" 
-                                            placeholder={col.label} 
-                                            className={`w-full p-1 border rounded text-xs font-normal ${col.align === 'right' ? 'text-right' : ''}`}
-                                            value={filterValues[col.key as string] || ''} 
-                                            onChange={(e) => handleFilterChange(col.key as string, e.target.value)} 
-                                          />
-                                      ) : null}
-                                  </th>
-                              ))}
-                          </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                          {filteredInventoryList.map((item) => (
-                              <tr key={item.id} className="hover:bg-slate-50">
-                                  {currentColumns.map((col) => {
-                                      const val = item[col.key];
-                                      const displayVal = col.format ? col.format(val) : val;
-                                      return (
-                                        <td key={`${item.id}-${col.key}`} className={`px-4 py-3 ${col.key === 'code' ? 'font-mono text-slate-500' : 'text-slate-700'} ${col.align === 'right' ? 'text-right' : col.align === 'center' ? 'text-center' : 'text-left'}`}>
-                                            {displayVal !== undefined && displayVal !== null ? displayVal : '-'}
-                                        </td>
-                                      );
-                                  })}
-                              </tr>
-                          ))}
-                          {filteredInventoryList.length === 0 && (
-                              <tr>
-                                  <td colSpan={currentColumns.length} className="px-4 py-12 text-center text-slate-400">
-                                      데이터가 없습니다.
-                                  </td>
-                              </tr>
-                          )}
-                      </tbody>
-                      <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
-                        <tr>
-                          {currentColumns.map((col, index) => {
-                            if (index === 0) return <td key="footer-total" className="px-4 py-3 text-center">합계 (Total)</td>;
-                            if (col.key === 'qty') {
-                               return <td key="footer-qty" className="px-4 py-3 text-right font-mono text-blue-600">{totalInventoryQty.toLocaleString()}</td>;
-                            }
-                            if (col.key === 'amount') {
-                               return <td key="footer-amount" className="px-4 py-3 text-right font-mono text-emerald-600">{showAmountMetric ? `₩${totalInventoryAmount.toLocaleString()}` : '-'}</td>;
-                            }
-                            return <td key={`footer-${index}`} className="px-4 py-3"></td>;
-                          })}
-                        </tr>
-                      </tfoot>
-                  </table>
-              </div>
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 w-12 text-center">#</th>
+                    <SortableHeader label="재질코드" sortKey="code" />
+                    <SortableHeader label="재질명" sortKey="name" />
+                    <SortableHeader label="단위" sortKey="unit" align="center" />
+                    <SortableHeader label="창고명" sortKey="location" align="center" />
+                    <SortableHeader label="현재고" sortKey="qty" align="right" />
+                  </tr>
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="재질코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="재질명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="현재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredResinData.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
+                      <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
+                      <td className="px-4 py-3 text-slate-800">{item.name}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">{item.qty.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {filteredResinData.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
+                  )}
+                </tbody>
+                {filteredResinData.length > 0 && (
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
+                      <td className="px-4 py-3 text-right font-mono text-blue-600">{resinTotal.toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ======================= PIVOT VIEW CONTENT ======================= */}
-      {viewMode === 'pivot' && (
-         <div className="space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-               {/* 1. Pivot Configuration */}
-               <div className="flex flex-col xl:flex-row gap-6 mb-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                          <span className="bg-indigo-100 text-indigo-700 p-1.5 rounded-lg">
-                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
-                          </span>
-                          <h3 className="font-bold text-slate-700 text-sm">행(Row) 그룹 선택</h3>
-                          <span className="text-xs text-slate-400 font-normal ml-2">* 다중 선택 가능</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                          {AVAILABLE_PIVOT_FIELDS.map(field => (
-                              <button
-                                  key={field.key}
-                                  onClick={() => togglePivotRow(field.key)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                      pivotRows.includes(field.key)
-                                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                                  }`}
-                              >
-                                  {pivotRows.includes(field.key) && <span className="mr-1">✓</span>}
-                                  {field.label}
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-
-                  <div className="w-px bg-slate-200 hidden xl:block"></div>
-
-                  <div className="flex-1 xl:max-w-md">
-                      <div className="flex items-center gap-2 mb-3">
-                          <span className="bg-rose-100 text-rose-700 p-1.5 rounded-lg">
-                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
-                          </span>
-                          <h3 className="font-bold text-slate-700 text-sm">열(Column) 기준 선택</h3>
-                          <span className="text-xs text-slate-400 font-normal ml-2">* 하나만 선택 가능</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                          <button
-                              onClick={() => setPivotCol('')}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                  pivotCol === ''
-                                  ? 'bg-rose-500 border-rose-500 text-white shadow-sm'
-                                  : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                              }`}
-                          >
-                              사용안함
-                          </button>
-                          {AVAILABLE_PIVOT_FIELDS.map(field => (
-                              <button
-                                  key={field.key}
-                                  onClick={() => setPivotCol(field.key)}
-                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                      pivotCol === field.key
-                                      ? 'bg-rose-500 border-rose-500 text-white shadow-sm'
-                                      : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-100'
-                                  }`}
-                              >
-                                  {field.label}
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-               </div>
-
-               {/* 2. Pivot Table Result */}
-               {pivotRows.length === 0 ? (
-                 <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
-                    <p>분석할 행(Row) 그룹을 하나 이상 선택해주세요.</p>
-                 </div>
-               ) : inventoryData.warehouse.length === 0 ? (
-                 <div className="p-12 text-center text-slate-400 bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
-                    <p>분석할 데이터가 없습니다. 상단에서 <strong>'창고별'</strong> 파일을 먼저 업로드해주세요.</p>
-                 </div>
-               ) : (
-                 <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-sm">
-                    {/* Header with Download */}
-                    <div className="flex justify-end p-2 border-b border-slate-100 bg-slate-50/50">
-                        <button 
-                            onClick={handleDownloadPivot}
-                            className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1 rounded-lg hover:bg-green-50 transition-colors"
-                        >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                            피봇 데이터 다운로드
-                        </button>
-                    </div>
-
-                    <table className="w-full text-xs text-left">
-                        <thead className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                           <tr>
-                              {/* Row Group Headers */}
-                              {pivotRows.map(key => (
-                                 <th 
-                                    key={key} 
-                                    onClick={() => handleSort(key)}
-                                    className="px-4 py-3 border-r border-slate-200/50 min-w-[100px] cursor-pointer hover:bg-slate-200 transition-colors select-none group"
-                                 >
-                                    <div className="flex items-center justify-between gap-1">
-                                        {AVAILABLE_PIVOT_FIELDS.find(f => f.key === key)?.label}
-                                        <span className="text-xs text-slate-400">
-                                            {sortConfig?.key === key ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
-                                        </span>
-                                    </div>
-                                 </th>
-                              ))}
-                              
-                              {/* Dynamic Column Headers */}
-                              {pivotCol ? (
-                                 pivotData.colValues.map(colVal => (
-                                    <th key={colVal} className="px-4 py-3 text-right bg-slate-50 border-r border-slate-200/50 min-w-[80px]">
-                                       {colVal}
-                                    </th>
-                                 ))
-                              ) : null}
-
-                              {/* Total Header */}
-                              <th 
-                                 onClick={() => handleSort('_totalQty')}
-                                 className="px-4 py-3 text-right bg-slate-200 min-w-[80px] text-slate-800 cursor-pointer hover:bg-slate-300 transition-colors select-none"
-                              >
-                                  <div className="flex items-center justify-end gap-1">
-                                      합계 (Sum)
-                                      <span className="text-xs text-slate-500">
-                                        {sortConfig?.key === '_totalQty' ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
-                                      </span>
-                                  </div>
-                              </th>
-                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                           {pivotData.rows.map((row, idx) => (
-                              <tr key={idx} className="hover:bg-indigo-50/30">
-                                 {/* Row Group Cells */}
-                                 {pivotRows.map(key => (
-                                    <td key={key} className="px-4 py-3 border-r border-slate-100 font-medium text-slate-700">
-                                       {row[key]}
-                                    </td>
-                                 ))}
-
-                                 {/* Pivot Column Cells */}
-                                 {pivotCol ? (
-                                    pivotData.colValues.map(colVal => (
-                                       <td key={colVal} className="px-4 py-3 text-right border-r border-slate-100 font-mono text-slate-600">
-                                          {row[`_col_${colVal}`] ? row[`_col_${colVal}`].toLocaleString() : '-'}
-                                       </td>
-                                    ))
-                                 ) : null}
-
-                                 {/* Total Cell */}
-                                 <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-slate-50/50">
-                                    {row._totalQty.toLocaleString()}
-                                 </td>
-                              </tr>
-                           ))}
-                        </tbody>
-                        <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
-                           <tr>
-                              <td colSpan={pivotRows.length} className="px-4 py-3 text-center border-r border-slate-200/50">총계 (Grand Total)</td>
-                              {pivotCol ? (
-                                 pivotData.colValues.map(colVal => {
-                                    const colTotal = pivotData.rows.reduce((sum, r) => sum + (r[`_col_${colVal}`] || 0), 0);
-                                    return (
-                                       <td key={colVal} className="px-4 py-3 text-right border-r border-slate-200/50 font-mono">{colTotal.toLocaleString()}</td>
-                                    );
-                                 })
-                              ) : null}
-                              <td className="px-4 py-3 text-right font-mono text-indigo-700">{pivotData.grandTotalQty.toLocaleString()}</td>
-                           </tr>
-                        </tfoot>
-                    </table>
-                 </div>
-               )}
+      {/* =========================== PAINT TAB =========================== */}
+      {activeSubTab === 'paint' && (
+        <div className="space-y-4">
+          {/* Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">등록 품목</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.paint.length.toLocaleString()} Items</h3>
             </div>
-         </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">검색 결과</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredPaintData.length.toLocaleString()} Items</h3>
+            </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">총 재고량</span>
+              <h3 className="text-lg font-black text-emerald-600 mt-1">{paintTotal.toLocaleString()} Kg</h3>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <span className="w-1 h-5 bg-emerald-600 rounded-full"></span>
+                도료 재고 리스트
+              </h3>
+              <div className="flex items-center gap-2">
+                <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                  <span>📤 CSV 업로드</span>
+                  <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'paint')} className="hidden" />
+                </label>
+                <button onClick={handleDownloadPaint} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  엑셀 다운로드
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 w-12 text-center">#</th>
+                    <SortableHeader label="재질코드" sortKey="code" />
+                    <SortableHeader label="재질명" sortKey="name" />
+                    <SortableHeader label="단위" sortKey="unit" align="center" />
+                    <SortableHeader label="창고명" sortKey="location" align="center" />
+                    <SortableHeader label="현재고" sortKey="qty" align="right" />
+                  </tr>
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="재질코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="재질명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="현재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPaintData.map((item, idx) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-center text-slate-400">{idx + 1}</td>
+                      <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
+                      <td className="px-4 py-3 text-slate-800">{item.name}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{item.qty.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {filteredPaintData.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
+                  )}
+                </tbody>
+                {filteredPaintData.length > 0 && (
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                    <tr>
+                      <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-600">{paintTotal.toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================== PARTS TAB =========================== */}
+      {activeSubTab === 'parts' && (
+        <div className="space-y-4">
+          {/* Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">등록 품목</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.parts.length.toLocaleString()} Items</h3>
+            </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">검색 결과</span>
+              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredPartsData.length.toLocaleString()} Items</h3>
+            </div>
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400">총 재고수량</span>
+              <h3 className="text-lg font-black text-violet-600 mt-1">{partsTotal.toLocaleString()} EA</h3>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+                부품재고 (창고별재고) 리스트
+              </h3>
+              <div className="flex items-center gap-2">
+                <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                  <span>📤 CSV 업로드</span>
+                  <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
+                </label>
+                <button onClick={handleDownloadParts} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  엑셀 다운로드
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <tr>
+                    <SortableHeader label="품목코드" sortKey="code" />
+                    <SortableHeader label="고객사 P/N" sortKey="customerPN" />
+                    <SortableHeader label="품목명" sortKey="name" />
+                    <SortableHeader label="규격" sortKey="spec" />
+                    <SortableHeader label="차종명" sortKey="model" align="center" />
+                    <SortableHeader label="단위" sortKey="unit" align="center" />
+                    <SortableHeader label="상태" sortKey="status" align="center" />
+                    <SortableHeader label="창고명" sortKey="location" align="center" />
+                    <SortableHeader label="재고" sortKey="qty" align="right" />
+                  </tr>
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-2"><input type="text" placeholder="품목코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.customerPN || ''} onChange={(e) => handleFilterChange('customerPN', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="품목명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.spec || ''} onChange={(e) => handleFilterChange('spec', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
+                    <th className="px-2 py-2"><input type="text" placeholder="재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredPartsData.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
+                      <td className="px-4 py-3 text-slate-600">{item.customerPN || '-'}</td>
+                      <td className="px-4 py-3 text-slate-800">{item.name}</td>
+                      <td className="px-4 py-3 text-slate-600">{item.spec || '-'}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
+                      <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {filteredPartsData.length === 0 && (
+                    <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
+                  )}
+                </tbody>
+                {filteredPartsData.length > 0 && (
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                    <tr>
+                      <td colSpan={8} className="px-4 py-3 text-center">합계 (Total)</td>
+                      <td className="px-4 py-3 text-right font-mono text-violet-600">{partsTotal.toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
