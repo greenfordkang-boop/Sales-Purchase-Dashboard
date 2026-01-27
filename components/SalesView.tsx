@@ -442,11 +442,12 @@ const SalesView: React.FC = () => {
             setSelectedYears(prev => [...prev, uploadYear].sort());
           }
 
-          // 2. Supabase 저장 (완료 후 최신 데이터 재로드)
+          // 2. Supabase 저장 - saveAll 사용 (전체 데이터 저장, 더 확실함)
           if (isSupabaseConfigured()) {
             try {
-              await revenueService.saveByYear(newData, uploadYear);
-              console.log(`✅ Supabase 동기화 완료: ${uploadYear}년`);
+              // 전체 데이터를 Supabase에 저장
+              await revenueService.saveAll(updatedData);
+              console.log(`✅ Supabase 동기화 완료: ${uploadYear}년 (전체 ${updatedData.length}개 항목)`);
               
               // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
               const latestData = await revenueService.getAll();
@@ -459,6 +460,7 @@ const SalesView: React.FC = () => {
               setAvailableYears(years.length > 0 ? years : [2023, 2024]);
             } catch (err) {
               console.error('Supabase 동기화 실패 (로컬 데이터는 유지됨):', err);
+              alert(`Supabase 저장 실패: ${err instanceof Error ? err.message : 'Unknown error'}\n로컬 데이터는 유지되었습니다.`);
               // 에러 발생 시에도 로컬 데이터는 유지됨
             }
           }
