@@ -105,6 +105,10 @@ const SalesView: React.FC = () => {
   const [revenueSortConfig, setRevenueSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
   const [isUploadingRevenue, setIsUploadingRevenue] = useState(false);
 
+  // Unit Price States (단가현황)
+  const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [priceFilter, setPriceFilter] = useState({ model: '', customer: '' });
+
   // --- Smart Supabase Load: 다중 사용자 동기화 ---
   // Supabase에 데이터가 있으면 사용, 없으면 localStorage 유지 (데이터 손실 방지)
   useEffect(() => {
@@ -419,6 +423,87 @@ const SalesView: React.FC = () => {
     return { totalAmount, totalQty };
   }, [filteredRevenueData]);
 
+  // --- Derived Data for PRICE Tab (단가현황) ---
+  const priceStats = useMemo(() => {
+    const map = new Map<string, {
+      model: string;
+      customer: string;
+      latestPrice: number;
+      maxPrice: number;
+      minPrice: number;
+      avgPrice: number;
+      totalQty: number;
+      count: number;
+      latestMonth: string;
+    }>();
+
+    revenueData.forEach(item => {
+      if (item.qty === 0) return; // Skip zero quantity items
+      const unitPrice = item.amount / item.qty;
+      const key = `${item.model}_${item.customer}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          model: item.model,
+          customer: item.customer,
+          latestPrice: unitPrice,
+          maxPrice: unitPrice,
+          minPrice: unitPrice,
+          avgPrice: unitPrice,
+          totalQty: item.qty,
+          count: 1,
+          latestMonth: item.month
+        });
+      } else {
+        const current = map.get(key)!;
+        current.maxPrice = Math.max(current.maxPrice, unitPrice);
+        current.minPrice = Math.min(current.minPrice, unitPrice);
+        current.totalQty += item.qty;
+        current.count += 1;
+        // Update latest if this month is more recent
+        if (item.month > current.latestMonth) {
+          current.latestPrice = unitPrice;
+          current.latestMonth = item.month;
+        }
+      }
+    });
+
+    // Calculate average price
+    const result = Array.from(map.values()).map(item => ({
+      ...item,
+      avgPrice: item.totalQty > 0 ? (revenueData
+        .filter(d => d.model === item.model && d.customer === item.customer)
+        .reduce((sum, d) => sum + d.amount, 0)) / item.totalQty : 0
+    }));
+
+    // Apply filters
+    let filtered = result.filter(item =>
+      (priceFilter.model === '' || item.model.toLowerCase().includes(priceFilter.model.toLowerCase())) &&
+      (priceFilter.customer === '' || item.customer.toLowerCase().includes(priceFilter.customer.toLowerCase()))
+    );
+
+    // Apply sorting
+    if (priceSortConfig) {
+      filtered.sort((a, b) => {
+        const aVal = a[priceSortConfig.key as keyof typeof a];
+        const bVal = b[priceSortConfig.key as keyof typeof b];
+        if (aVal === bVal) return 0;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return priceSortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        const aStr = String(aVal).toLowerCase();
+        const bStr = String(bVal).toLowerCase();
+        if (aStr < bStr) return priceSortConfig.direction === 'asc' ? -1 : 1;
+        if (aStr > bStr) return priceSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      filtered.sort((a, b) => a.model.localeCompare(b.model));
+    }
+
+    return filtered;
+  }, [revenueData, priceSortConfig, priceFilter]);
+
   // --- Handlers (Supabase sync handled by Persistence Effects) ---
   const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -560,6 +645,67 @@ const SalesView: React.FC = () => {
       document.execCommand('copy');
       document.body.removeChild(textarea);
       alert(`${filteredRevenueData.length}건의 데이터가 클립보드에 복사되었습니다.`);
+    }
+  };
+
+  // Price Tab Handlers (단가현황)
+  const handlePriceSort = (key: string) => {
+    setPriceSortConfig(prev =>
+      prev?.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    );
+  };
+
+  const handlePriceFilterChange = (field: keyof typeof priceFilter, value: string) => {
+    setPriceFilter(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleDownloadPrice = () => {
+    const headers = ['Model', '고객사', '최신단가', '최고단가', '최저단가', '평균단가', '총수량', '거래횟수', '최근월'];
+    const rows = priceStats.map(item => [
+      item.model,
+      item.customer,
+      Math.round(item.latestPrice),
+      Math.round(item.maxPrice),
+      Math.round(item.minPrice),
+      Math.round(item.avgPrice),
+      item.totalQty,
+      item.count,
+      item.latestMonth
+    ]);
+    downloadCSV(`영업_단가현황`, headers, rows);
+  };
+
+  const handleCopyPrice = async () => {
+    const headers = ['Model', '고객사', '최신단가', '최고단가', '최저단가', '평균단가', '총수량', '거래횟수', '최근월'];
+    const rows = priceStats.map(item =>
+      [
+        item.model,
+        item.customer,
+        Math.round(item.latestPrice).toLocaleString(),
+        Math.round(item.maxPrice).toLocaleString(),
+        Math.round(item.minPrice).toLocaleString(),
+        Math.round(item.avgPrice).toLocaleString(),
+        item.totalQty.toLocaleString(),
+        item.count,
+        item.latestMonth
+      ].join('\t')
+    );
+    const text = [headers.join('\t'), ...rows].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`${priceStats.length}건의 단가 데이터가 클립보드에 복사되었습니다.`);
+    } catch (err) {
+      console.error('클립보드 복사 실패:', err);
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      alert(`${priceStats.length}건의 단가 데이터가 클립보드에 복사되었습니다.`);
     }
   };
 
@@ -1397,11 +1543,184 @@ const SalesView: React.FC = () => {
       {activeSubTab === 'unitprice' && (
          <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-               <div className="flex flex-col items-center justify-center py-16">
-                  <div className="text-6xl mb-4">💰</div>
-                  <h2 className="text-xl font-black text-slate-800 mb-2">단가현황</h2>
-                  <p className="text-sm text-slate-500">단가 정보 및 가격 분석 현황이 이곳에 표시됩니다.</p>
-                  <p className="text-xs text-slate-400 mt-2">Unit Price Status - Coming Soon</p>
+               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
+                  <div>
+                     <h3 className="font-black text-slate-800 flex items-center gap-2">
+                        <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
+                        품목별 단가 현황 (Unit Price)
+                     </h3>
+                     <p className="text-sm text-slate-500 mt-1">매출 내역을 기반으로 산출된 품목별 최신 단가 및 단가 변동 정보입니다.</p>
+                  </div>
+                  <div className="flex gap-2">
+                     <button
+                        onClick={handleCopyPrice}
+                        className="text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                     >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        복사
+                     </button>
+                     <button
+                        onClick={handleDownloadPrice}
+                        className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+                     >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        엑셀 다운로드
+                     </button>
+                  </div>
+               </div>
+
+               {/* Metrics */}
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl border border-blue-100">
+                     <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">등록 품목 수</p>
+                     <p className="text-2xl font-black text-blue-600">{priceStats.length}개</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-100">
+                     <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">고객사 수</p>
+                     <p className="text-2xl font-black text-emerald-600">{new Set(priceStats.map(p => p.customer)).size}개사</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-violet-50 to-white p-4 rounded-xl border border-violet-100">
+                     <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-1">총 거래 수량</p>
+                     <p className="text-2xl font-black text-violet-600">{priceStats.reduce((sum, p) => sum + p.totalQty, 0).toLocaleString()} EA</p>
+                  </div>
+               </div>
+
+               {/* Table */}
+               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-xs text-left">
+                     <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                           <th
+                              className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('model')}
+                           >
+                              <div className="flex items-center gap-1">
+                                 Model (품종)
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'model' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'model' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('customer')}
+                           >
+                              <div className="flex items-center gap-1">
+                                 고객사
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'customer' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'customer' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('latestPrice')}
+                           >
+                              <div className="flex items-center justify-end gap-1">
+                                 최신단가
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'latestPrice' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'latestPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('maxPrice')}
+                           >
+                              <div className="flex items-center justify-end gap-1">
+                                 최고단가
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'maxPrice' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'maxPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('minPrice')}
+                           >
+                              <div className="flex items-center justify-end gap-1">
+                                 최저단가
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'minPrice' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'minPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('avgPrice')}
+                           >
+                              <div className="flex items-center justify-end gap-1">
+                                 평균단가
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'avgPrice' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'avgPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th
+                              className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              onClick={() => handlePriceSort('totalQty')}
+                           >
+                              <div className="flex items-center justify-end gap-1">
+                                 총수량
+                                 <span className={`text-[10px] ${priceSortConfig?.key === 'totalQty' ? 'text-blue-600 font-bold' : 'text-slate-300'}`}>
+                                    {priceSortConfig?.key === 'totalQty' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                                 </span>
+                              </div>
+                           </th>
+                           <th className="px-4 py-3 text-right">최근월</th>
+                        </tr>
+                        <tr className="bg-slate-50">
+                           <th className="px-2 py-2">
+                              <input
+                                 type="text"
+                                 placeholder="Model 검색"
+                                 className="w-full p-1 border rounded text-xs font-normal"
+                                 value={priceFilter.model}
+                                 onChange={(e) => handlePriceFilterChange('model', e.target.value)}
+                              />
+                           </th>
+                           <th className="px-2 py-2">
+                              <input
+                                 type="text"
+                                 placeholder="고객사 검색"
+                                 className="w-full p-1 border rounded text-xs font-normal"
+                                 value={priceFilter.customer}
+                                 onChange={(e) => handlePriceFilterChange('customer', e.target.value)}
+                              />
+                           </th>
+                           <th colSpan={6}></th>
+                        </tr>
+                     </thead>
+                     <tbody className="divide-y divide-slate-100">
+                        {priceStats.map((item, idx) => (
+                           <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-4 py-3 font-medium text-slate-800">{item.model}</td>
+                              <td className="px-4 py-3 text-slate-600">{item.customer}</td>
+                              <td className="px-4 py-3 text-right font-bold text-blue-600">₩{Math.round(item.latestPrice).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-rose-500">₩{Math.round(item.maxPrice).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-emerald-500">₩{Math.round(item.minPrice).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right text-slate-600">₩{Math.round(item.avgPrice).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right font-mono text-slate-600">{item.totalQty.toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right font-mono text-slate-400">{item.latestMonth}</td>
+                           </tr>
+                        ))}
+                        {priceStats.length === 0 && (
+                           <tr>
+                              <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
+                                 <div className="flex flex-col items-center gap-2">
+                                    <span className="text-4xl">💰</span>
+                                    <p className="font-medium">단가 데이터가 없습니다.</p>
+                                    <p className="text-xs">매출현황에서 CSV 파일을 업로드하면 단가가 자동 계산됩니다.</p>
+                                 </div>
+                              </td>
+                           </tr>
+                        )}
+                     </tbody>
+                  </table>
                </div>
             </div>
          </div>
