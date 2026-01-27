@@ -95,7 +95,6 @@ const SalesView: React.FC = () => {
   const [selectedRevCustomer, setSelectedRevCustomer] = useState<string>('All');
   const [revChartData, setRevChartData] = useState<any[]>([]);
   const [revListOpen, setRevListOpen] = useState(true);
-  const [uploadYear, setUploadYear] = useState<number>(2025);
   const [revFilter, setRevFilter] = useState({
     year: '', month: '', customer: '', model: '', qty: '', amount: ''
   });
@@ -423,59 +422,6 @@ const SalesView: React.FC = () => {
     }
     e.target.value = '';
   };
-  const handleRevFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const newData = parseRevenueCSV(event.target?.result as string, uploadYear);
-
-          // 1. localStorage에 먼저 저장 (데이터 손실 방지)
-          const filtered = revenueData.filter(d => d.year !== uploadYear);
-          const updatedData = [...filtered, ...newData];
-          localStorage.setItem('dashboard_revenueData', JSON.stringify(updatedData));
-          setRevenueData(updatedData);
-          console.log(`✅ ${uploadYear}년 데이터 저장 완료: ${newData.length}개 항목, 전체 ${updatedData.length}개`);
-
-          if (!selectedYears.includes(uploadYear)) {
-            setSelectedYears(prev => [...prev, uploadYear].sort());
-          }
-
-          // 2. Supabase 저장 - saveAll 사용 (전체 데이터 저장, 더 확실함)
-          if (isSupabaseConfigured()) {
-            try {
-              // 전체 데이터를 Supabase에 저장
-              await revenueService.saveAll(updatedData);
-              console.log(`✅ Supabase 동기화 완료: ${uploadYear}년 (전체 ${updatedData.length}개 항목)`);
-              
-              // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
-              const latestData = await revenueService.getAll();
-              setRevenueData(latestData);
-              localStorage.setItem('dashboard_revenueData', JSON.stringify(latestData));
-              console.log(`✅ Supabase에서 최신 매출 데이터 재로드 완료: ${latestData.length}개`);
-              
-              // 연도 목록 업데이트
-              const years = Array.from(new Set(latestData.map(d => d.year))).sort();
-              setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-            } catch (err) {
-              console.error('Supabase 동기화 실패 (로컬 데이터는 유지됨):', err);
-              alert(`Supabase 저장 실패: ${err instanceof Error ? err.message : 'Unknown error'}\n로컬 데이터는 유지되었습니다.`);
-              // 에러 발생 시에도 로컬 데이터는 유지됨
-            }
-          }
-
-          // 다른 컴포넌트에 데이터 업데이트 알림
-          window.dispatchEvent(new CustomEvent('revenueDataUpdated'));
-        } catch (error) {
-          console.error('Error processing file upload:', error);
-          alert(`파일 처리 중 오류가 발생했습니다: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-      };
-      reader.readAsText(file);
-    }
-    e.target.value = '';
-  };
   const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -628,12 +574,6 @@ const SalesView: React.FC = () => {
             <div className="bg-slate-50 px-4 py-2 rounded-xl flex items-center gap-3 border border-slate-200">
               <span className="text-xs font-bold text-slate-500">조회 년도:</span>
               <div className="flex gap-2">{availableYears.map(year => (<button key={year} onClick={() => toggleYear(year)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedYears.includes(year) ? 'text-white shadow-sm' : 'bg-white text-slate-400 hover:bg-slate-100'}`} style={{ backgroundColor: selectedYears.includes(year) ? getYearColor(year) : undefined }}>{year}</button>))}</div>
-            </div>
-            <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
-               <select value={uploadYear} onChange={(e) => setUploadYear(Number(e.target.value))} className="bg-white border-none text-xs font-bold text-slate-700 rounded-lg py-1.5 px-2 outline-none focus:ring-0 cursor-pointer hover:bg-slate-50">
-                {[2023, 2024, 2025, 2026].map(y => <option key={y} value={y}>{y}년 업로드</option>)}
-              </select>
-              <label className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors whitespace-nowrap">파일선택<input type="file" accept=".csv" onChange={handleRevFileUpload} className="hidden" /></label>
             </div>
             <select value={selectedRevCustomer} onChange={(e) => setSelectedRevCustomer(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[150px]">{revCustomers.map(c => (<option key={c} value={c}>{c}</option>))}</select>
           </div>
