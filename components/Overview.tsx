@@ -148,11 +148,7 @@ const Overview: React.FC = () => {
       {/* Header Summary */}
       <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="text-left">
-          <h2 className="text-3xl font-black text-slate-800 mb-2">영업/구매실 대시보드</h2>
-          <p className="text-slate-500 max-w-2xl leading-relaxed">
-            실시간 데이터 연동을 통해 영업 수주액과 자재 매입액을 통합 분석합니다.<br/>
-            <span className="text-xs text-blue-500 font-bold">* 데이터 출처: 영업현황 및 구매현황 업로드 자료</span>
-          </p>
+          <h2 className="text-3xl font-black text-slate-800">영업/구매실 대시보드</h2>
         </div>
         <div className="flex flex-col items-end gap-3">
             <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl">
