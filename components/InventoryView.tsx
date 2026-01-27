@@ -295,22 +295,31 @@ const InventoryView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
             const data = parseInventoryCSV(event.target?.result as string, type);
-            setInventoryData(prev => {
-              // 해당 type만 새 데이터로 교체 (기존 데이터 제거, 누적 방지)
-              // 다른 타입(warehouse, material, parts, product)은 유지
-              const updatedData = { ...prev, [type]: data };
-              // localStorage 즉시 저장
-              localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
-              // Supabase 백그라운드 저장
-              if (isSupabaseConfigured()) {
-                inventoryService.saveAll(updatedData)
-                  .then(() => console.log(`✅ ${type} 재고 Supabase 동기화 완료`))
-                  .catch(err => console.error('Supabase 동기화 실패:', err));
+            const updatedData = { ...inventoryData, [type]: data };
+            
+            // localStorage 즉시 저장
+            localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
+            setInventoryData(updatedData);
+            
+            // Supabase 저장 (완료 후 최신 데이터 재로드)
+            if (isSupabaseConfigured()) {
+              try {
+                await inventoryService.saveAll(updatedData);
+                console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
+                
+                // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
+                const latestData = await inventoryService.getAll();
+                setInventoryData(latestData);
+                localStorage.setItem('dashboard_inventoryData', JSON.stringify(latestData));
+                console.log('✅ Supabase에서 최신 재고 데이터 재로드 완료');
+              } catch (err) {
+                console.error('Supabase 동기화 실패:', err);
+                // 에러 발생 시에도 로컬 데이터는 유지됨
               }
-              return updatedData;
-            });
+            }
+            
             if (viewMode === 'list') setActiveInventoryType(type);
         };
         reader.readAsText(file);

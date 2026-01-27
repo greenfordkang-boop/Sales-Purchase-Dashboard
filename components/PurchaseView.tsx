@@ -249,22 +249,32 @@ const PurchaseView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const newParts = parsePartsCSV(event.target?.result as string);
-        setPurchaseData(prev => {
-          // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-          const existingMaterials = prev.filter(d => d.category === 'Material');
-          const updatedData = [...existingMaterials, ...newParts];
-          // localStorage 즉시 저장
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
-          // Supabase 백그라운드 저장
-          if (isSupabaseConfigured()) {
-            purchaseService.saveAll(updatedData)
-              .then(() => console.log('✅ 부품 데이터 Supabase 동기화 완료'))
-              .catch(err => console.error('Supabase 동기화 실패:', err));
+        // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
+        const existingMaterials = purchaseData.filter(d => d.category === 'Material');
+        const updatedData = [...existingMaterials, ...newParts];
+        
+        // localStorage 즉시 저장
+        localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+        setPurchaseData(updatedData);
+        
+        // Supabase 저장 (완료 후 최신 데이터 재로드)
+        if (isSupabaseConfigured()) {
+          try {
+            await purchaseService.saveAll(updatedData);
+            console.log('✅ 부품 데이터 Supabase 동기화 완료');
+            
+            // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
+            const latestData = await purchaseService.getAll();
+            setPurchaseData(latestData);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+            console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
+          } catch (err) {
+            console.error('Supabase 동기화 실패:', err);
+            // 에러 발생 시에도 로컬 데이터는 유지됨
           }
-          return updatedData;
-        });
+        }
       };
       reader.readAsText(file);
     }
@@ -275,22 +285,32 @@ const PurchaseView: React.FC = () => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const newMaterials = parseMaterialCSV(event.target?.result as string);
-        setPurchaseData(prev => {
-          // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-          const existingParts = prev.filter(d => d.category === 'Parts');
-          const updatedData = [...existingParts, ...newMaterials];
-          // localStorage 즉시 저장
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
-          // Supabase 백그라운드 저장
-          if (isSupabaseConfigured()) {
-            purchaseService.saveAll(updatedData)
-              .then(() => console.log('✅ 원재료 데이터 Supabase 동기화 완료'))
-              .catch(err => console.error('Supabase 동기화 실패:', err));
+        // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
+        const existingParts = purchaseData.filter(d => d.category === 'Parts');
+        const updatedData = [...existingParts, ...newMaterials];
+        
+        // localStorage 즉시 저장
+        localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+        setPurchaseData(updatedData);
+        
+        // Supabase 저장 (완료 후 최신 데이터 재로드)
+        if (isSupabaseConfigured()) {
+          try {
+            await purchaseService.saveAll(updatedData);
+            console.log('✅ 원재료 데이터 Supabase 동기화 완료');
+            
+            // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
+            const latestData = await purchaseService.getAll();
+            setPurchaseData(latestData);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+            console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
+          } catch (err) {
+            console.error('Supabase 동기화 실패:', err);
+            // 에러 발생 시에도 로컬 데이터는 유지됨
           }
-          return updatedData;
-        });
+        }
       };
       reader.readAsText(file);
     }
