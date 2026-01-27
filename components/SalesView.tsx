@@ -695,7 +695,24 @@ const SalesView: React.FC = () => {
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
-          <div className="h-[400px] w-full"><ResponsiveContainer width="100%" height="100%"><ComposedChart data={qtyChartData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} /><Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} /><Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25} /><Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25} /><Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls /></ComposedChart></ResponsiveContainer></div>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={qtyChartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
+                <Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25}>
+                  <LabelList dataKey="plan" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                </Bar>
+                <Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25}>
+                  <LabelList dataKey="actual" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#10b981' }} />
+                </Bar>
+                <Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
             {qtyListOpen && (
@@ -730,7 +747,7 @@ const SalesView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
             <div>
-              <h2 className="text-xl font-black text-slate-800">2.고객사별 매출현황</h2>
+              <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>2. 고객사별 매출현황</h3>
               <p className="text-xs text-slate-500 mt-1">고객사별 월별 매출금액 및 수량 현황</p>
             </div>
             <div className="flex gap-3 items-center flex-wrap">
@@ -787,7 +804,7 @@ const SalesView: React.FC = () => {
               </h3>
               <div className="h-[300px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={revenueMetrics.chartData} margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
+                  <ComposedChart data={revenueMetrics.chartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: '#64748b' }} />
                     <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(value) => `${(value / 100000000).toFixed(1)}억`} />
@@ -800,7 +817,9 @@ const SalesView: React.FC = () => {
                       ]}
                     />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: 600 }} />
-                    <Bar yAxisId="left" name="매출금액" dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30} />
+                    <Bar yAxisId="left" name="매출금액" dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
+                      <LabelList dataKey="amount" position="top" formatter={(value: number) => `${(value / 100000000).toFixed(1)}억`} style={{ fontSize: 10, fontWeight: 600, fill: '#3b82f6' }} />
+                    </Bar>
                     <Line yAxisId="right" type="monotone" name="수량" dataKey="qty" stroke="#10b981" strokeWidth={2} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
                   </ComposedChart>
                 </ResponsiveContainer>
