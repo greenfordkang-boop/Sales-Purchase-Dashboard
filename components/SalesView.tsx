@@ -424,6 +424,11 @@ const SalesView: React.FC = () => {
   }, [filteredRevenueData]);
 
   // --- Derived Data for PRICE Tab (단가현황) ---
+  // 고객사별 매출현황 데이터(선택된 연도)만 사용
+  const yearFilteredRevenueData = useMemo(() => {
+    return revenueData.filter(d => d.year === selectedRevenueYear);
+  }, [revenueData, selectedRevenueYear]);
+
   const priceStats = useMemo(() => {
     const map = new Map<string, {
       model: string;
@@ -437,7 +442,7 @@ const SalesView: React.FC = () => {
       latestMonth: string;
     }>();
 
-    revenueData.forEach(item => {
+    yearFilteredRevenueData.forEach(item => {
       if (item.qty === 0) return; // Skip zero quantity items
       const unitPrice = item.amount / item.qty;
       const key = `${item.model}_${item.customer}`;
@@ -471,7 +476,7 @@ const SalesView: React.FC = () => {
     // Calculate average price
     const result = Array.from(map.values()).map(item => ({
       ...item,
-      avgPrice: item.totalQty > 0 ? (revenueData
+      avgPrice: item.totalQty > 0 ? (yearFilteredRevenueData
         .filter(d => d.model === item.model && d.customer === item.customer)
         .reduce((sum, d) => sum + d.amount, 0)) / item.totalQty : 0
     }));
@@ -502,7 +507,7 @@ const SalesView: React.FC = () => {
     }
 
     return filtered;
-  }, [revenueData, priceSortConfig, priceFilter]);
+  }, [yearFilteredRevenueData, priceSortConfig, priceFilter]);
 
   // --- Handlers (Supabase sync handled by Persistence Effects) ---
   const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
