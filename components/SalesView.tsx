@@ -3,16 +3,14 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, PieChart, Pie, Cell } from 'recharts';
 import { parseSalesCSV, CustomerSalesData, SalesItem } from '../utils/salesDataParser';
-import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
 import { parseCRCSV, CRItem } from '../utils/crDataParser';
 import { parseRFQCSV, RFQItem } from '../utils/rfqDataParser';
 import { INITIAL_CSV_DATA } from '../data/initialSalesData';
-import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_CR_CSV } from '../data/initialCRData';
 import { INITIAL_RFQ_CSV } from '../data/initialRfqData';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { salesService, revenueService, crService, rfqService } from '../services/supabaseService';
+import { salesService, crService, rfqService } from '../services/supabaseService';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -33,27 +31,6 @@ const SalesView: React.FC = () => {
     }
   };
 
-  // 2. Revenue Data Initializer
-  const getInitialRevenueData = (): RevenueItem[] => {
-    // 초기 데이터 생성은 Supabase와 localStorage 모두에 데이터가 없을 때만 실행
-    // Supabase에 데이터가 있으면 Supabase에서 로드하므로 여기서는 빈 배열 반환
-    if (typeof window === 'undefined') return [];
-    try {
-      const stored = localStorage.getItem('dashboard_revenueData');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // localStorage에 데이터가 있으면 사용 (Supabase에서 로드된 데이터일 수 있음)
-        if (parsed && parsed.length > 0) {
-          return parsed;
-        }
-      }
-      // localStorage에도 없으면 빈 배열 반환 (Supabase에서 로드될 예정)
-      return [];
-    } catch (e) {
-      console.error("Failed to load revenue data", e);
-      return [];
-    }
-  };
 
   // 3. CR Data Initializer
   const getInitialCRData = (): CRItem[] => {
@@ -78,7 +55,7 @@ const SalesView: React.FC = () => {
   };
 
   // --- State Management ---
-  const [activeSubTab, setActiveSubTab] = useState<'yearly' | 'sales' | 'rfq' | 'cr'>('yearly');
+  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'rfq' | 'cr'>('sales');
 
   // Quantity States
   const [salesData, setSalesData] = useState<CustomerSalesData[]>(getInitialSalesData);
@@ -90,17 +67,6 @@ const SalesView: React.FC = () => {
   });
   const [qtySortConfig, setQtySortConfig] = useState<{ key: keyof SalesItem; direction: 'asc' | 'desc' } | null>(null);
 
-  // Revenue States
-  const [revenueData, setRevenueData] = useState<RevenueItem[]>(getInitialRevenueData);
-  const [selectedRevCustomer, setSelectedRevCustomer] = useState<string>('All');
-  const [revChartData, setRevChartData] = useState<any[]>([]);
-  const [revListOpen, setRevListOpen] = useState(true);
-  const [revFilter, setRevFilter] = useState({
-    year: '', month: '', customer: '', model: '', qty: '', amount: ''
-  });
-  const [revSortConfig, setRevSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
-  const [availableYears, setAvailableYears] = useState<number[]>([2023, 2024]);
-  const [selectedYears, setSelectedYears] = useState<number[]>([2024]);
 
   // CR States
   const [crData, setCrData] = useState<CRItem[]>(getInitialCRData);
@@ -136,21 +102,7 @@ const SalesView: React.FC = () => {
           console.error('Supabase 영업 데이터 로드 실패:', err);
         }
 
-        // 2. Revenue 데이터 로드
-        try {
-          const supabaseRevenue = await revenueService.getAll();
-          if (supabaseRevenue && supabaseRevenue.length > 0) {
-            setRevenueData(supabaseRevenue);
-            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
-            console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
-          } else {
-            console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
-          }
-        } catch (err) {
-          console.error('Supabase 매출 데이터 로드 실패:', err);
-        }
-
-        // 3. CR 데이터 로드
+        // 2. CR 데이터 로드
         try {
           const supabaseCR = await crService.getAll();
           if (supabaseCR && supabaseCR.length > 0) {
@@ -164,7 +116,7 @@ const SalesView: React.FC = () => {
           console.error('Supabase CR 데이터 로드 실패:', err);
         }
 
-        // 4. RFQ 데이터 로드
+        // 3. RFQ 데이터 로드
         try {
           const supabaseRFQ = await rfqService.getAll();
           if (supabaseRFQ && supabaseRFQ.length > 0) {
@@ -190,14 +142,6 @@ const SalesView: React.FC = () => {
     localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
   }, [salesData]);
 
-  useEffect(() => {
-    // revenueData가 비어있지 않을 때만 저장 (초기 빈 상태에서 덮어쓰기 방지)
-    if (revenueData.length > 0) {
-      localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
-    }
-    const years = Array.from(new Set(revenueData.map(d => d.year))).sort();
-    setAvailableYears(years.length > 0 ? years : [2023, 2024]);
-  }, [revenueData]);
 
   useEffect(() => {
     localStorage.setItem('dashboard_crData', JSON.stringify(crData));
@@ -269,57 +213,6 @@ const SalesView: React.FC = () => {
     return { ...sums, rate: sums.plan > 0 ? (sums.actual / sums.plan) * 100 : 0 };
   }, [filteredQtyItems]);
 
-  // Revenue Derived
-  const revCustomers = useMemo(() => ['All', ...Array.from(new Set(revenueData.map(d => d.customer)))], [revenueData]);
-  const activeRevData = useMemo(() => {
-    const filtered = revenueData.filter(d => (selectedRevCustomer === 'All' || d.customer === selectedRevCustomer) && selectedYears.includes(d.year));
-    const monthMap = new Map<string, any>();
-    const yearTotals = new Map<number, number>(); 
-    Array.from({ length: 12 }, (_, i) => `${(i + 1).toString().padStart(2, '0')}월`).forEach(m => {
-      monthMap.set(m, { month: m });
-      selectedYears.forEach(y => { monthMap.get(m)[y] = 0; });
-    });
-    filtered.forEach(item => {
-      const monthData = monthMap.get(item.month);
-      if (monthData) monthData[item.year] = (monthData[item.year] || 0) + item.amount;
-      yearTotals.set(item.year, (yearTotals.get(item.year) || 0) + item.amount);
-    });
-    return { chartData: Array.from(monthMap.values()), totalAmount: Array.from(yearTotals.values()).reduce((a, b) => a + b, 0), items: filtered, yearTotals };
-  }, [selectedRevCustomer, revenueData, selectedYears]);
-  useEffect(() => { setRevChartData(activeRevData.chartData); }, [activeRevData]);
-  const customerShareData = useMemo(() => {
-    const shareMap = new Map<string, number>();
-    activeRevData.items.forEach(item => shareMap.set(item.customer, (shareMap.get(item.customer) || 0) + item.amount));
-    let data = Array.from(shareMap.entries()).map(([name, value]) => ({ name, value }));
-    data.sort((a, b) => b.value - a.value);
-    if (data.length > 6) {
-      const top5 = data.slice(0, 5);
-      const othersValue = data.slice(5).reduce((sum, item) => sum + item.value, 0);
-      return [...top5, { name: '기타 (Others)', value: othersValue }];
-    }
-    return data;
-  }, [activeRevData.items]);
-  
-  const filteredRevItems = useMemo(() => {
-    let result = activeRevData.items.filter(item => 
-      (revFilter.year === '' || item.year.toString().includes(revFilter.year)) &&
-      (revFilter.month === '' || item.month.includes(revFilter.month)) &&
-      (revFilter.customer === '' || item.customer.toLowerCase().includes(revFilter.customer.toLowerCase())) &&
-      (revFilter.model === '' || (item.model && item.model.toLowerCase().includes(revFilter.model.toLowerCase()))) &&
-      (revFilter.qty === '' || item.qty.toString().includes(revFilter.qty)) &&
-      (revFilter.amount === '' || item.amount.toString().includes(revFilter.amount.replace(/,/g, '')))
-    );
-    // Apply sorting
-    if (revSortConfig) {
-      result = sortData(result, revSortConfig);
-    } else {
-      // Default sorting by Year Desc, Month Asc
-      result.sort((a, b) => b.year !== a.year ? b.year - a.year : b.month.localeCompare(a.month));
-    }
-    return result;
-  }, [activeRevData.items, revFilter, revSortConfig]);
-
-  const filteredRevTotal = useMemo(() => filteredRevItems.reduce((acc, item) => ({ qty: acc.qty + item.qty, amount: acc.amount + item.amount }), { qty: 0, amount: 0 }), [filteredRevItems]);
 
   // CR Derived
   const crTableData = useMemo(() => {
@@ -515,28 +408,19 @@ const SalesView: React.FC = () => {
   const handleRfqSort = (key: keyof RFQItem) => {
     setRfqSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
   };
-  const handleRevSort = (key: keyof RevenueItem) => {
-    setRevSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
-  };
   const handleQtySort = (key: keyof SalesItem) => {
     setQtySortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
   };
 
   const handleQtyFilterChange = (field: keyof typeof qtyFilter, value: string) => setQtyFilter(prev => ({ ...prev, [field]: value }));
-  const handleRevFilterChange = (field: keyof typeof revFilter, value: string) => setRevFilter(prev => ({ ...prev, [field]: value }));
   const handleRfqFilterChange = (field: keyof typeof rfqFilter, value: string) => setRfqFilter(prev => ({ ...prev, [field]: value }));
-  const toggleYear = (year: number) => { setSelectedYears(prev => prev.includes(year) ? (prev.length === 1 ? prev : prev.filter(y => y !== year).sort()) : [...prev, year].sort()); };
 
   // Downloads
   const handleDownloadQty = () => { const headers = ['고객사', 'Model', '품번', '품명', '총계획', '총실적', '달성률(%)']; const rows = filteredQtyItems.map(item => [item.customer, item.model, item.partNo, item.partName, item.totalPlan, item.totalActual, item.rate.toFixed(1)]); downloadCSV(`매출수량_현황_${selectedQtyCustomer}`, headers, rows); };
-  const handleDownloadRev = () => { const headers = ['연도', '월', '고객사', 'Model', '매출수량', '매출금액']; const rows = filteredRevItems.map(item => [item.year, item.month, item.customer, item.model, item.qty, item.amount]); downloadCSV(`매출금액_현황`, headers, rows); };
   const handleDownloadRfq = () => { const headers = ['순번', '고객사', '제품군', '프로젝트명', '공정단계', '현상태', '시작일', '견적일', '최초주문일', 'Model', '월평균수량', '예상단가', '예상매출', '비고']; const rows = filteredRfqItems.map(item => [item.index, item.customer, item.projectType, item.projectName, item.process, item.status, item.dateSelection, item.dateQuotation, item.datePO, item.model, item.qty, item.unitPrice, item.amount, item.remark]); downloadCSV(`RFQ_현황`, headers, rows); };
 
   // Helper
-  const getYearColor = (year: number) => { const colors:any = { 2023: '#94a3b8', 2024: '#3b82f6', 2025: '#10b981', 2026: '#f59e0b', 2022: '#64748b' }; return colors[year] || '#6366f1'; };
-  const formatBillionLabel = (value: number) => value === 0 ? '' : `${(value / 100000000).toFixed(1)}억`;
-  const PIE_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#94a3b8'];
-  const SUB_TABS = [{ id: 'yearly', label: '년도별 매출현황' }, { id: 'sales', label: '매출현황' }, { id: 'rfq', label: 'RFQ 현황' }, { id: 'cr', label: 'CR 현황' }];
+  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'rfq', label: 'RFQ 현황' }, { id: 'cr', label: 'CR 현황' }];
 
   // Helper component for table headers
   const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T, align?: string, currentSort: { key: keyof T, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T) => void }) => (
@@ -566,61 +450,6 @@ const SalesView: React.FC = () => {
         ))}
       </div>
 
-      {activeSubTab === 'yearly' && (
-      <section className="space-y-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black text-slate-800">년도별 매출현황 (Yearly Revenue)</h2><p className="text-xs text-slate-500 mt-1">고객사별 매출 금액 현황 및 년도별 추이 분석</p></div>
-          <div className="flex flex-col md:flex-row gap-4 w-full xl:w-auto">
-            <div className="bg-slate-50 px-4 py-2 rounded-xl flex items-center gap-3 border border-slate-200">
-              <span className="text-xs font-bold text-slate-500">조회 년도:</span>
-              <div className="flex gap-2">{availableYears.map(year => (<button key={year} onClick={() => toggleYear(year)} className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${selectedYears.includes(year) ? 'text-white shadow-sm' : 'bg-white text-slate-400 hover:bg-slate-100'}`} style={{ backgroundColor: selectedYears.includes(year) ? getYearColor(year) : undefined }}>{year}</button>))}</div>
-            </div>
-            <select value={selectedRevCustomer} onChange={(e) => setSelectedRevCustomer(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[150px]">{revCustomers.map(c => (<option key={c} value={c}>{c}</option>))}</select>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <MetricCard label="총 매출 실적 (Amount)" value={`₩${activeRevData.totalAmount.toLocaleString()}`} subValue={selectedYears.length > 1 ? `${selectedYears.join(', ')}년 합계` : `${selectedYears[0]}년 전체`} trend="up" percentage={0} color="blue" />
-          <MetricCard label="검색된 품목 수" value={`${filteredRevItems.length}개`} subValue={`총 ${activeRevData.items.length}개 중`} color="slate" />
-          <MetricCard label="데이터 기간" value={selectedYears.sort().join(' & ')} subValue="선택된 연도 분석" color="slate" />
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>월별 매출 금액 추이 ({selectedYears.join(', ')})</h3>
-          <div className="h-[300px] w-full"><ResponsiveContainer width="100%" height="100%"><BarChart data={revChartData} margin={{ top: 30, right: 20, bottom: 20, left: 20 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" /><XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500}} /><YAxis axisLine={false} tickLine={false} tick={{fontSize: 12}} /><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => `₩${value.toLocaleString()}`} /><Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />{selectedYears.map(year => (<Bar key={year} name={`${year}년 매출`} dataKey={year} fill={getYearColor(year)} radius={[4, 4, 0, 0]} barSize={selectedYears.length > 1 ? 20 : 40}><LabelList dataKey={year} position="top" formatter={formatBillionLabel} style={{ fill: getYearColor(year), fontSize: '11px', fontWeight: 'bold' }} /></Bar>))}</BarChart></ResponsiveContainer></div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-amber-500 rounded-full"></span>업체별 매출 점유율 (Top Clients)</h3><span className="text-xs text-slate-400 font-bold bg-slate-50 px-3 py-1 rounded-lg">{selectedYears.join(', ')}년 합계 기준</span></div>
-          <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-            <div className="h-[300px] w-full md:w-1/2 min-w-[300px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={customerShareData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} fill="#8884d8" paddingAngle={2} dataKey="value" label={({ name, percent }) => `${(percent * 100).toFixed(1)}%`} labelLine={false}>{customerShareData.map((entry, index) => (<Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} stroke="none" />))}</Pie><Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} formatter={(value: number) => `₩${value.toLocaleString()}`} /></PieChart></ResponsiveContainer></div>
-            <div className="w-full md:w-1/2 flex flex-col gap-3">{customerShareData.map((entry, index) => (<div key={index} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors"><div className="flex items-center gap-3"><div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} /><span className="text-xs font-bold text-slate-700">{entry.name}</span></div><div className="text-right"><span className="block text-xs font-black text-slate-800">₩{entry.value.toLocaleString()}</span><span className="block text-[10px] text-slate-400">{((entry.value / activeRevData.totalAmount) * 100).toFixed(1)}%</span></div></div>))}</div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between mb-4"><button onClick={() => setRevListOpen(!revListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${revListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Revenue List)</button><button onClick={handleDownloadRev} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
-            {revListOpen && (
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                    <tr>
-                        <SortableHeader label="연도" sortKey="year" currentSort={revSortConfig} onSort={handleRevSort} />
-                        <SortableHeader label="월" sortKey="month" currentSort={revSortConfig} onSort={handleRevSort} />
-                        <SortableHeader label="고객사" sortKey="customer" currentSort={revSortConfig} onSort={handleRevSort} />
-                        <SortableHeader label="Model" sortKey="model" currentSort={revSortConfig} onSort={handleRevSort} />
-                        <SortableHeader label="매출수량" sortKey="qty" align="right" currentSort={revSortConfig} onSort={handleRevSort} />
-                        <SortableHeader label="매출금액" sortKey="amount" align="right" currentSort={revSortConfig} onSort={handleRevSort} />
-                    </tr>
-                    <tr className="bg-slate-50"><th className="px-2 py-2"><input type="text" placeholder="연도" className="w-full p-1 border rounded text-xs font-normal" value={revFilter.year} onChange={(e) => handleRevFilterChange('year', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="월" className="w-full p-1 border rounded text-xs font-normal" value={revFilter.month} onChange={(e) => handleRevFilterChange('month', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="고객사" className="w-full p-1 border rounded text-xs font-normal" value={revFilter.customer} onChange={(e) => handleRevFilterChange('customer', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="Model" className="w-full p-1 border rounded text-xs font-normal" value={revFilter.model} onChange={(e) => handleRevFilterChange('model', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="수량" className="w-full p-1 border rounded text-xs font-normal text-right" value={revFilter.qty} onChange={(e) => handleRevFilterChange('qty', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="금액" className="w-full p-1 border rounded text-xs font-normal text-right" value={revFilter.amount} onChange={(e) => handleRevFilterChange('amount', e.target.value)} /></th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredRevItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 text-slate-600 font-mono">{item.year}</td><td className="px-4 py-3 text-slate-600">{item.month}</td><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 text-right font-mono">{item.qty.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-blue-600">₩{item.amount.toLocaleString()}</td></tr>))}
-                    {filteredRevItems.length === 0 && (<tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
-                  </tbody>
-                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredRevTotal.qty.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono text-blue-700">₩{filteredRevTotal.amount.toLocaleString()}</td></tr></tfoot>
-                </table>
-              </div>
-            )}
-        </div>
-      </section>
-      )}
 
       {activeSubTab === 'sales' && (
       <section className="space-y-6">
