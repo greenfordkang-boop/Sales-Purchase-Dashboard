@@ -309,11 +309,16 @@ const InventoryView: React.FC = () => {
                 await inventoryService.saveAll(updatedData);
                 console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
                 
-                // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
+                // Supabase에서 최신 데이터 재로드 - 업로드한 타입만 업데이트하고 나머지는 기존 데이터 유지
                 const latestData = await inventoryService.getAll();
-                setInventoryData(latestData);
-                localStorage.setItem('dashboard_inventoryData', JSON.stringify(latestData));
-                console.log('✅ Supabase에서 최신 재고 데이터 재로드 완료');
+                // 업로드한 타입만 Supabase 데이터로 업데이트하고, 나머지 타입은 기존 데이터 유지
+                const mergedData = {
+                  ...inventoryData,
+                  [type]: latestData[type] // 업로드한 타입만 Supabase에서 가져온 데이터로 업데이트
+                };
+                setInventoryData(mergedData);
+                localStorage.setItem('dashboard_inventoryData', JSON.stringify(mergedData));
+                console.log(`✅ Supabase에서 ${type} 재고 데이터 재로드 완료 (다른 타입 데이터는 유지)`);
               } catch (err) {
                 console.error('Supabase 동기화 실패:', err);
                 // 에러 발생 시에도 로컬 데이터는 유지됨
