@@ -303,27 +303,19 @@ const InventoryView: React.FC = () => {
             localStorage.setItem('dashboard_inventoryData', JSON.stringify(updatedData));
             setInventoryData(updatedData);
             
-            // Supabase 저장 (완료 후 최신 데이터 재로드)
+            // Supabase 저장 (백그라운드, 업로드한 데이터는 그대로 유지)
             if (isSupabaseConfigured()) {
-              try {
-                await inventoryService.saveAll(updatedData);
-                console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
-                
-                // Supabase에서 최신 데이터 재로드 - 업로드한 타입만 업데이트하고 나머지는 기존 데이터 유지
-                const latestData = await inventoryService.getAll();
-                // 업로드한 타입만 Supabase 데이터로 업데이트하고, 나머지 타입은 updatedData 유지
-                // updatedData를 사용하는 이유: React 상태 업데이트는 비동기이므로 inventoryData는 아직 이전 값일 수 있음
-                const mergedData = {
-                  ...updatedData, // 업로드한 데이터를 기반으로 (다른 타입은 기존 값 유지)
-                  [type]: latestData[type] // 업로드한 타입만 Supabase에서 가져온 최신 데이터로 업데이트
-                };
-                setInventoryData(mergedData);
-                localStorage.setItem('dashboard_inventoryData', JSON.stringify(mergedData));
-                console.log(`✅ Supabase에서 ${type} 재고 데이터 재로드 완료 (다른 타입 데이터는 유지)`);
-              } catch (err) {
-                console.error('Supabase 동기화 실패:', err);
-                // 에러 발생 시에도 로컬 데이터는 유지됨
-              }
+              // Supabase 저장은 백그라운드에서 수행하고, 업로드한 데이터는 그대로 유지
+              inventoryService.saveAll(updatedData)
+                .then(() => {
+                  console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
+                })
+                .catch((err) => {
+                  console.error('Supabase 동기화 실패:', err);
+                  // 에러 발생 시에도 로컬 데이터는 유지됨
+                });
+              // 업로드한 데이터를 그대로 유지 (Supabase 재로드 없음)
+              // 다른 사용자 동기화는 페이지 로드 시에만 수행됨
             }
             
             if (viewMode === 'list') setActiveInventoryType(type);
