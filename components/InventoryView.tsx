@@ -62,8 +62,7 @@ const InventoryView: React.FC = () => {
   // View Mode: 'list' (Existing) or 'pivot' (New)
   const [viewMode, setViewMode] = useState<'list' | 'pivot'>('list');
 
-  // List View State
-  const [activeInventoryType, setActiveInventoryType] = useState<'warehouse' | 'material' | 'parts' | 'product'>('warehouse');
+  // List View State (창고별 재고만 사용)
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [listSortConfig, setListSortConfig] = useState<{ key: keyof InventoryItem; direction: 'asc' | 'desc' } | null>(null);
 
@@ -112,12 +111,6 @@ const InventoryView: React.FC = () => {
     }
   }, [inventoryData]);
 
-  // Reset Filters when type changes
-  useEffect(() => {
-    setFilterValues({});
-    setListSortConfig(null);
-  }, [activeInventoryType]);
-
   // Generic Sorting Helper
   const sortData = <T,>(data: T[], config: { key: keyof T; direction: 'asc' | 'desc' } | null) => {
     if (!config) return data;
@@ -140,7 +133,7 @@ const InventoryView: React.FC = () => {
     });
   };
 
-  // --- Configuration per Type (List View) ---
+  // --- Configuration (List View) ---
   const COLUMN_CONFIG: Record<string, ColumnDef[]> = {
     warehouse: [
       { key: 'code', label: '품목코드', isFilterable: true },
@@ -194,9 +187,9 @@ const InventoryView: React.FC = () => {
     ]
   };
 
-  // --- Derived Data for LIST VIEW ---
-  const currentColumns = COLUMN_CONFIG[activeInventoryType];
-  const currentInventoryList = inventoryData[activeInventoryType];
+  // --- Derived Data for LIST VIEW (창고별 재고 고정) ---
+  const currentColumns = COLUMN_CONFIG.warehouse;
+  const currentInventoryList = inventoryData.warehouse;
   
   const validInventoryItems = useMemo(() => {
     return currentInventoryList.filter(item => item.code && item.code.trim() !== '');
@@ -372,10 +365,10 @@ const InventoryView: React.FC = () => {
   // Download Handlers
   const handleDownloadList = () => {
     const headers = currentColumns.map(col => col.label);
-    const rows = filteredInventoryList.map(item => 
+    const rows = filteredInventoryList.map(item =>
       currentColumns.map(col => item[col.key])
     );
-    downloadCSV(`재고현황_${activeInventoryType}`, headers, rows);
+    downloadCSV('재고현황_창고별', headers, rows);
   };
 
   const handleDownloadPivot = () => {
@@ -432,24 +425,17 @@ const InventoryView: React.FC = () => {
                  </button>
               </div>
 
-              {/* Uploaders (Always Visible for Access) */}
+              {/* Uploader: 창고별 재고만 사용 */}
               <div className="flex flex-wrap gap-2 justify-end">
-                    {[
-                      { type: 'warehouse', label: '창고별', color: 'bg-blue-600' },
-                      { type: 'material', label: '원재료', color: 'bg-emerald-600' },
-                      { type: 'parts', label: '부품', color: 'bg-amber-600' },
-                      { type: 'product', label: '제품', color: 'bg-rose-600' }
-                    ].map((item) => (
-                        <label key={item.type} className={`${item.color} hover:opacity-90 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1 shadow-sm opacity-80 hover:opacity-100`}>
-                          <span>📤 {item.label}</span>
-                          <input 
-                              type="file" 
-                              accept=".csv" 
-                              onChange={(e) => handleInventoryUpload(e, item.type as any)} 
-                              className="hidden" 
-                          />
-                        </label>
-                    ))}
+                <label className="bg-blue-600 hover:opacity-90 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1 shadow-sm opacity-80 hover:opacity-100">
+                  <span>📤 창고별 재고 업로드</span>
+                  <input 
+                    type="file" 
+                    accept=".csv" 
+                    onChange={(e) => handleInventoryUpload(e, 'warehouse')} 
+                    className="hidden" 
+                  />
+                </label>
               </div>
           </div>
       </div>
@@ -457,16 +443,11 @@ const InventoryView: React.FC = () => {
       {/* ======================= LIST VIEW CONTENT ======================= */}
       {viewMode === 'list' && (
         <div className="space-y-6">
-          {/* Inventory Metrics */}
+          {/* Inventory Metrics (창고별 재고 기준) */}
           <div className={`grid grid-cols-1 ${showAmountMetric ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
               <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
                     <span className="text-xs font-bold text-slate-400">선택된 유형</span>
-                    <h3 className="text-lg font-black text-slate-800 mt-1">
-                      {activeInventoryType === 'warehouse' && '창고별 재고'}
-                      {activeInventoryType === 'material' && '원재료 재고'}
-                      {activeInventoryType === 'parts' && '부품 재고'}
-                      {activeInventoryType === 'product' && '제품 재고'}
-                    </h3>
+                    <h3 className="text-lg font-black text-slate-800 mt-1">창고별 재고</h3>
               </div>
               <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
                     <span className="text-xs font-bold text-slate-400">검색된 품목 수</span>
@@ -486,25 +467,9 @@ const InventoryView: React.FC = () => {
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-slate-100 pb-2 mb-4">
-                  {/* Internal Tabs */}
-                  <div className="flex gap-2">
-                        {['warehouse', 'material', 'parts', 'product'].map((type) => (
-                            <button
-                            key={type}
-                            onClick={() => setActiveInventoryType(type as any)}
-                            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors ${
-                                activeInventoryType === type 
-                                ? 'bg-slate-800 text-white' 
-                                : 'bg-white text-slate-500 hover:bg-slate-100'
-                            }`}
-                            >
-                            {type === 'warehouse' && '창고별'}
-                            {type === 'material' && '원재료'}
-                            {type === 'parts' && '부품'}
-                            {type === 'product' && '제품'}
-                            <span className="ml-1 opacity-70">({inventoryData[type as keyof typeof inventoryData].length})</span>
-                            </button>
-                        ))}
+                  {/* Internal Tabs 제거: 창고별 재고 단일 뷰 */}
+                  <div className="text-xs font-bold text-slate-500">
+                    창고별 재고 리스트 (총 {inventoryData.warehouse.length.toLocaleString()} 품목)
                   </div>
                   
                   <button 
