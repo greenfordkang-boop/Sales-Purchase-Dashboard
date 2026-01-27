@@ -311,10 +311,11 @@ const InventoryView: React.FC = () => {
                 
                 // Supabase에서 최신 데이터 재로드 - 업로드한 타입만 업데이트하고 나머지는 기존 데이터 유지
                 const latestData = await inventoryService.getAll();
-                // 업로드한 타입만 Supabase 데이터로 업데이트하고, 나머지 타입은 기존 데이터 유지
+                // 업로드한 타입만 Supabase 데이터로 업데이트하고, 나머지 타입은 updatedData 유지
+                // updatedData를 사용하는 이유: React 상태 업데이트는 비동기이므로 inventoryData는 아직 이전 값일 수 있음
                 const mergedData = {
-                  ...inventoryData,
-                  [type]: latestData[type] // 업로드한 타입만 Supabase에서 가져온 데이터로 업데이트
+                  ...updatedData, // 업로드한 데이터를 기반으로 (다른 타입은 기존 값 유지)
+                  [type]: latestData[type] // 업로드한 타입만 Supabase에서 가져온 최신 데이터로 업데이트
                 };
                 setInventoryData(mergedData);
                 localStorage.setItem('dashboard_inventoryData', JSON.stringify(mergedData));
