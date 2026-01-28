@@ -417,6 +417,56 @@ const SalesView: React.FC = () => {
     return { totalAmount, totalQty, uniqueCustomers, uniqueModels, chartData, customerBreakdown };
   }, [revenueData, selectedRevenueYear, selectedRevenueCustomer]);
 
+  // 품목별 매출현황 (Model/품번/품명 기준 집계)
+  const itemRevenueStats = useMemo(() => {
+    const yearData = revenueData.filter(d => d.year === selectedRevenueYear);
+    const filtered =
+      selectedRevenueCustomer === 'All'
+        ? yearData
+        : yearData.filter(d => d.customer === selectedRevenueCustomer);
+
+    const map = new Map<
+      string,
+      {
+        model: string;
+        partNo: string;
+        customerPN: string;
+        partName: string;
+        qty: number;
+        amount: number;
+      }
+    >();
+
+    filtered.forEach(d => {
+      const key = `${d.model}|${d.partNo || ''}|${d.partName || ''}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          model: d.model,
+          partNo: d.partNo || '',
+          customerPN: d.customerPN || '',
+          partName: d.partName || '',
+          qty: 0,
+          amount: 0,
+        });
+      }
+      const item = map.get(key)!;
+      item.qty += d.qty;
+      item.amount += d.amount;
+    });
+
+    const items = Array.from(map.values());
+    const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
+    const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
+    const withShare = items.map(i => ({
+      ...i,
+      share: totalAmount > 0 ? (i.amount / totalAmount) * 100 : 0,
+    }));
+
+    withShare.sort((a, b) => b.amount - a.amount);
+
+    return { items: withShare, totalAmount, totalQty };
+  }, [revenueData, selectedRevenueYear, selectedRevenueCustomer]);
+
   const revenueTotal = useMemo(() => {
     const totalAmount = filteredRevenueData.reduce((sum, d) => sum + d.amount, 0);
     const totalQty = filteredRevenueData.reduce((sum, d) => sum + d.qty, 0);
@@ -1000,6 +1050,64 @@ const SalesView: React.FC = () => {
                     </p>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* 품목별 매출현황 (신규 섹션) */}
+          {itemRevenueStats.items.length > 0 && (
+            <div className="mb-6">
+              <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                <span className="w-1 h-4 bg-emerald-500 rounded-full"></span>
+                품목별 매출현황
+              </h3>
+              <p className="text-xs text-slate-400 mb-2">
+                {selectedRevenueYear}년 {selectedRevenueCustomer === 'All' ? '전체 고객사 기준' : `${selectedRevenueCustomer} 기준`} 품목별 매출 집계
+              </p>
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <th className="px-4 py-3">Model</th>
+                      <th className="px-4 py-3">품번</th>
+                      <th className="px-4 py-3">고객사 P/N</th>
+                      <th className="px-4 py-3">품명</th>
+                      <th className="px-4 py-3 text-right">매출수량</th>
+                      <th className="px-4 py-3 text-right">매출금액</th>
+                      <th className="px-4 py-3 text-right">비중(%)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itemRevenueStats.items.slice(0, 50).map((item, idx) => (
+                      <tr key={`${item.model}-${item.partNo}-${idx}`} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-700">{item.model}</td>
+                        <td className="px-4 py-3 font-mono text-slate-700">{item.partNo || '-'}</td>
+                        <td className="px-4 py-3 font-mono text-slate-500">{item.customerPN || '-'}</td>
+                        <td className="px-4 py-3 text-slate-700 truncate max-w-[240px]" title={item.partName}>{item.partName || '-'}</td>
+                        <td className="px-4 py-3 text-right font-mono text-emerald-700">{item.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-slate-500">{item.share.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                    {itemRevenueStats.items.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 text-right">합계</td>
+                      <td className="px-4 py-3 text-right font-mono text-emerald-700">
+                        {itemRevenueStats.totalQty.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">
+                        ₩{itemRevenueStats.totalAmount.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500">100.0%</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           )}

@@ -245,75 +245,104 @@ const PurchaseView: React.FC = () => {
 
 
   // --- Handlers ---
+
+  // 공통: CSV 인코딩 자동 감지 (UTF-8 우선, 깨지면 EUC-KR 재시도)
+  const readCsvWithEncoding = (
+    file: File,
+    onLoaded: (text: string) => void
+  ) => {
+    const readAsEncoding = (encoding: string, cb: (text: string) => void) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        cb((event.target?.result as string) || '');
+      };
+      reader.readAsText(file, encoding);
+    };
+
+    // 1차: UTF-8
+    readAsEncoding('utf-8', (utf8Text) => {
+      const brokenPattern = /�|Ã.|Â./g;
+      const brokenMatches = utf8Text.match(brokenPattern);
+      const brokenRatio = brokenMatches ? brokenMatches.length / utf8Text.length : 0;
+
+      if (brokenRatio > 0.01) {
+        // 깨짐 비율이 높으면 EUC-KR로 다시 읽기
+        readAsEncoding('euc-kr', (eucKrText) => onLoaded(eucKrText));
+      } else {
+        onLoaded(utf8Text);
+      }
+    });
+  };
+
   const handlePartsFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const newParts = parsePartsCSV(event.target?.result as string);
-        // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-        const existingMaterials = purchaseData.filter(d => d.category === 'Material');
-        const updatedData = [...existingMaterials, ...newParts];
-        
-        // localStorage 즉시 저장
-        localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
-        setPurchaseData(updatedData);
-        
-        // Supabase 저장 (완료 후 최신 데이터 재로드)
-        if (isSupabaseConfigured()) {
-          try {
-            await purchaseService.saveAll(updatedData);
-            console.log('✅ 부품 데이터 Supabase 동기화 완료');
-            
-            // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
-            const latestData = await purchaseService.getAll();
-            setPurchaseData(latestData);
-            localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
-            console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
-          } catch (err) {
-            console.error('Supabase 동기화 실패:', err);
-            // 에러 발생 시에도 로컬 데이터는 유지됨
-          }
-        }
-      };
-      reader.readAsText(file);
+    if (!file) {
+      e.target.value = '';
+      return;
     }
+
+    readCsvWithEncoding(file, async (csvText) => {
+      const newParts = parsePartsCSV(csvText);
+      // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
+      const existingMaterials = purchaseData.filter(d => d.category === 'Material');
+      const updatedData = [...existingMaterials, ...newParts];
+      
+      // localStorage 즉시 저장
+      localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+      setPurchaseData(updatedData);
+      
+      // Supabase 저장 (완료 후 최신 데이터 재로드)
+      if (isSupabaseConfigured()) {
+        try {
+          await purchaseService.saveAll(updatedData);
+          console.log('✅ 부품 데이터 Supabase 동기화 완료');
+          
+          const latestData = await purchaseService.getAll();
+          setPurchaseData(latestData);
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+          console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
+        } catch (err) {
+          console.error('Supabase 동기화 실패:', err);
+        }
+      }
+    });
+
     e.target.value = '';
   };
 
   const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const newMaterials = parseMaterialCSV(event.target?.result as string);
-        // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-        const existingParts = purchaseData.filter(d => d.category === 'Parts');
-        const updatedData = [...existingParts, ...newMaterials];
-        
-        // localStorage 즉시 저장
-        localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
-        setPurchaseData(updatedData);
-        
-        // Supabase 저장 (완료 후 최신 데이터 재로드)
-        if (isSupabaseConfigured()) {
-          try {
-            await purchaseService.saveAll(updatedData);
-            console.log('✅ 원재료 데이터 Supabase 동기화 완료');
-            
-            // Supabase에서 최신 데이터 재로드하여 모든 사용자가 동일한 데이터를 보도록 보장
-            const latestData = await purchaseService.getAll();
-            setPurchaseData(latestData);
-            localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
-            console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
-          } catch (err) {
-            console.error('Supabase 동기화 실패:', err);
-            // 에러 발생 시에도 로컬 데이터는 유지됨
-          }
-        }
-      };
-      reader.readAsText(file);
+    if (!file) {
+      e.target.value = '';
+      return;
     }
+
+    readCsvWithEncoding(file, async (csvText) => {
+      const newMaterials = parseMaterialCSV(csvText);
+      // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
+      const existingParts = purchaseData.filter(d => d.category === 'Parts');
+      const updatedData = [...existingParts, ...newMaterials];
+      
+      // localStorage 즉시 저장
+      localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+      setPurchaseData(updatedData);
+      
+      // Supabase 저장 (완료 후 최신 데이터 재로드)
+      if (isSupabaseConfigured()) {
+        try {
+          await purchaseService.saveAll(updatedData);
+          console.log('✅ 원재료 데이터 Supabase 동기화 완료');
+          
+          const latestData = await purchaseService.getAll();
+          setPurchaseData(latestData);
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+          console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
+        } catch (err) {
+          console.error('Supabase 동기화 실패:', err);
+        }
+      }
+    });
+
     e.target.value = '';
   };
 
