@@ -30,7 +30,7 @@ interface InventoryItem {
   amount?: number;
 }
 
-// Helper: Parse CSV line properly handling quoted fields
+// Helper: Parse CSV line properly handling quoted fields and numeric commas
 const parseCSVLine = (line: string): string[] => {
   const result: string[] = [];
   let current = '';
@@ -41,8 +41,18 @@ const parseCSVLine = (line: string): string[] => {
     if (char === '"') {
       inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
-      result.push(current.trim().replace(/^"|"$/g, ''));
-      current = '';
+      // Check if this comma is a thousands separator (e.g., "24,858")
+      // Pattern: digits before comma, exactly 3 digits after (or 3 digits then decimal)
+      const before = current.trim();
+      const after = line.substring(i + 1);
+      const isThousandsSep = /^\d+$/.test(before) && /^\d{3}(?:[.,]\d+)?(?:,|$|\s)/.test(after);
+
+      if (isThousandsSep) {
+        current += char;
+      } else {
+        result.push(current.trim().replace(/^"|"$/g, ''));
+        current = '';
+      }
     } else {
       current += char;
     }
