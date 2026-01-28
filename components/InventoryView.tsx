@@ -127,9 +127,11 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
     const qty = parseNumericValue(qtyRaw);
 
     // 컬럼 매핑 (끝에서부터 역순으로)
+    // 실제 업로더 데이터: 재질코드, 단위, 재질명, 창고명, 현재고 순서이므로
+    // code(0), unit(1), name(2), location(3), qty(4)가 되도록 인덱스 조정
     const locationIndex = qtyIndex - 1;
-    const unitIndex = qtyIndex - 2;
-    const nameIndex = qtyIndex - 3;
+    const nameIndex = qtyIndex - 2;
+    const unitIndex = qtyIndex - 3;
     const codeIndex = qtyIndex - 4;
 
     const code = values[codeIndex] || '';
