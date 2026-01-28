@@ -187,40 +187,64 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
   const hasStorageLocation = findCol(headerValues, ['재고위치']) >= 0;
   const isNewFormat = hasItemType || hasStorageLocation || headerValues.length >= 10;
 
-  // 헤더 이름으로 컬럼 인덱스 계산 (앞에 번호 등 추가 컬럼이 있어도 올바른 컬럼 사용)
-  const colItemType = findCol(headerValues, ['품목유형', '유형']);
+  // 첫 행이 숫자만 있으면 헤더가 아닌 데이터로 간주 → 위치 기반 11/12컬럼 사용
+  const firstCell = (headerValues[0] ?? '').trim();
+  const looksLikeDataRow = /^\d+([.,]\d*)?$/.test(firstCell) || (firstCell === '' && headerValues.length > 1);
   const colCode = findCol(headerValues, ['품목코드', '코드']);
-  const colCustomerPN = findCol(headerValues, ['고객사P/N', '고객사 P/N', '고객사p/n']);
   const colName = findCol(headerValues, ['품목명']);
-  const colSpec = findCol(headerValues, ['규격']);
-  const colUnit = findCol(headerValues, ['단위']);
-  const colModel = findCol(headerValues, ['차종명']);
-  const colStatus = findCol(headerValues, ['품목상태', '상태']);
-  const colLocation = findCol(headerValues, ['창고명']);
-  const colStorageLocation = findCol(headerValues, ['재고위치']);
-  // '재고'만 매칭 (재고위치 제외): 정확히 '재고'인 헤더 또는 마지막 컬럼
-  const colQty = headerValues.findIndex((h: string) => h.trim() === '재고') >= 0
-    ? headerValues.findIndex((h: string) => h.trim() === '재고')
-    : headerValues.length - 1;
+  const usePositional = looksLikeDataRow || (colCode < 0 && colName < 0);
+  const offset = usePositional && headerValues.length >= 12 ? 1 : 0; // 12컬럼이면 맨 앞 No 스킵
 
-  const col = {
-    itemType: isNewFormat ? colItemType : -1,
-    code: colCode >= 0 ? colCode : 0,
-    customerPN: colCustomerPN >= 0 ? colCustomerPN : 1,
-    name: colName >= 0 ? colName : 2,
-    spec: colSpec >= 0 ? colSpec : 3,
-    unit: colUnit >= 0 ? colUnit : 5,
-    model: colModel >= 0 ? colModel : 6,
-    status: colStatus >= 0 ? colStatus : 7,
-    location: colLocation >= 0 ? colLocation : 8,
-    storageLocation: colStorageLocation >= 0 ? colStorageLocation : -1,
-    qty: colQty,
-  };
+  let col: Record<string, number>;
+
+  if (usePositional) {
+    // 고정 11컬럼 순서: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고명(8), 재고위치(9), 재고(10)
+    col = {
+      itemType: isNewFormat ? 0 + offset : -1,
+      code: 1 + offset,
+      customerPN: 2 + offset,
+      name: 3 + offset,
+      spec: 4 + offset,
+      unit: 5 + offset,
+      model: 6 + offset,
+      status: 7 + offset,
+      location: 8 + offset,
+      storageLocation: 9 + offset,
+      qty: 10 + offset,
+    };
+    console.log('📦 Using positional mapping, offset:', offset);
+  } else {
+    const colItemType = findCol(headerValues, ['품목유형', '유형']);
+    const colCustomerPN = findCol(headerValues, ['고객사P/N', '고객사 P/N', '고객사p/n']);
+    const colSpec = findCol(headerValues, ['규격']);
+    const colUnit = findCol(headerValues, ['단위']);
+    const colModel = findCol(headerValues, ['차종명']);
+    const colStatus = findCol(headerValues, ['품목상태', '상태']);
+    const colLocation = findCol(headerValues, ['창고명']);
+    const colStorageLocation = findCol(headerValues, ['재고위치']);
+    const colQty = headerValues.findIndex((h: string) => h.trim() === '재고') >= 0
+      ? headerValues.findIndex((h: string) => h.trim() === '재고')
+      : headerValues.length - 1;
+    col = {
+      itemType: isNewFormat ? colItemType : -1,
+      code: colCode >= 0 ? colCode : 1 + offset,
+      customerPN: colCustomerPN >= 0 ? colCustomerPN : 2 + offset,
+      name: colName >= 0 ? colName : 3 + offset,
+      spec: colSpec >= 0 ? colSpec : 4 + offset,
+      unit: colUnit >= 0 ? colUnit : 5 + offset,
+      model: colModel >= 0 ? colModel : 6 + offset,
+      status: colStatus >= 0 ? colStatus : 7 + offset,
+      location: colLocation >= 0 ? colLocation : 8 + offset,
+      storageLocation: colStorageLocation >= 0 ? colStorageLocation : -1,
+      qty: colQty,
+    };
+  }
   console.log('📦 Column map:', col);
 
   const result: InventoryItem[] = [];
+  const startRow = usePositional ? 0 : 1; // 헤더 없으면 첫 행부터 데이터
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = startRow; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
     if (values.length < 3) continue;
 
