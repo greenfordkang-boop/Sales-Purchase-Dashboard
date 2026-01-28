@@ -357,6 +357,37 @@ interface InventoryData {
   product: InventoryItem[];
 }
 
+// New Inventory V2 Types (Resin, Paint, Parts)
+interface MaterialItemV2 {
+  id: string;
+  code: string;
+  name: string;
+  unit: string;
+  location: string;
+  qty: number;
+}
+
+interface PartsItemV2 {
+  id: string;
+  code: string;
+  customerPN?: string;
+  name: string;
+  spec?: string;
+  model?: string;
+  unit: string;
+  status?: string;
+  location: string;
+  qty: number;
+  unitPrice?: number;
+  amount?: number;
+}
+
+interface InventoryDataV2 {
+  resin: MaterialItemV2[];
+  paint: MaterialItemV2[];
+  parts: PartsItemV2[];
+}
+
 export const inventoryService = {
   async getAll(): Promise<InventoryData> {
     if (!isSupabaseConfigured()) {
@@ -469,6 +500,158 @@ export const inventoryService = {
     await insertInBatches('inventory_data', rows);
 
     localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
+  },
+
+  // ============================================
+  // Inventory V2 (Resin, Paint, Parts) Methods
+  // ============================================
+  async getInventoryV2(): Promise<InventoryDataV2> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_inventory_v2');
+      return stored ? JSON.parse(stored) : { resin: [], paint: [], parts: [] };
+    }
+
+    try {
+      // Load from inventory_v2 table
+      const pageSize = 1000;
+      let from = 0;
+      let allRows: any[] = [];
+
+      while (true) {
+        const { data, error } = await supabase!
+          .from('inventory_v2')
+          .select('*')
+          .order('code')
+          .range(from, from + pageSize - 1);
+
+        if (error) {
+          console.error('inventory_v2 getAll error:', error);
+          break;
+        }
+
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      const result: InventoryDataV2 = { resin: [], paint: [], parts: [] };
+
+      allRows.forEach((row: any) => {
+        const type = row.type as 'resin' | 'paint' | 'parts';
+        if (type === 'resin' || type === 'paint') {
+          result[type].push({
+            id: row.id,
+            code: row.code,
+            name: row.name,
+            unit: row.unit || 'Kg',
+            location: row.location || '',
+            qty: row.qty || 0
+          });
+        } else if (type === 'parts') {
+          result.parts.push({
+            id: row.id,
+            code: row.code,
+            customerPN: row.customer_pn,
+            name: row.name,
+            spec: row.spec,
+            model: row.model,
+            unit: row.unit || 'EA',
+            status: row.status,
+            location: row.location || '',
+            qty: row.qty || 0,
+            unitPrice: row.unit_price,
+            amount: row.amount
+          });
+        }
+      });
+
+      return result;
+    } catch (err) {
+      console.error('Failed to load inventory_v2 from Supabase:', err);
+      const stored = localStorage.getItem('dashboard_inventory_v2');
+      return stored ? JSON.parse(stored) : { resin: [], paint: [], parts: [] };
+    }
+  },
+
+  async saveInventoryV2(data: InventoryDataV2): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+      return;
+    }
+
+    try {
+      // Delete existing data
+      const { error: deleteError } = await supabase!
+        .from('inventory_v2')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (deleteError) {
+        console.error('inventory_v2 delete error:', deleteError);
+      }
+
+      // Prepare rows
+      const rows: any[] = [];
+
+      // Resin items
+      data.resin.forEach(item => {
+        if (item.code && item.code.trim()) {
+          rows.push({
+            type: 'resin',
+            code: item.code,
+            name: item.name,
+            unit: item.unit || 'Kg',
+            location: item.location,
+            qty: Math.round(item.qty || 0)
+          });
+        }
+      });
+
+      // Paint items
+      data.paint.forEach(item => {
+        if (item.code && item.code.trim()) {
+          rows.push({
+            type: 'paint',
+            code: item.code,
+            name: item.name,
+            unit: item.unit || 'Kg',
+            location: item.location,
+            qty: Math.round(item.qty || 0)
+          });
+        }
+      });
+
+      // Parts items
+      data.parts.forEach(item => {
+        if (item.code && item.code.trim()) {
+          rows.push({
+            type: 'parts',
+            code: item.code,
+            customer_pn: item.customerPN,
+            name: item.name,
+            spec: item.spec,
+            model: item.model,
+            unit: item.unit || 'EA',
+            status: item.status,
+            location: item.location,
+            qty: Math.round(item.qty || 0),
+            unit_price: item.unitPrice,
+            amount: item.amount
+          });
+        }
+      });
+
+      await insertInBatches('inventory_v2', rows);
+
+      // Also save to localStorage
+      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+      console.log(`✅ inventory_v2 saved: ${rows.length} rows`);
+    } catch (err) {
+      console.error('Failed to save inventory_v2 to Supabase:', err);
+      // Still save to localStorage
+      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+    }
   }
 };
 
