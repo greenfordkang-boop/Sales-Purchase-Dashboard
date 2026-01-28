@@ -156,7 +156,7 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
 
 // Parse Parts CSV
 // CSV 형식: 품목유형, 품목코드, 고객사P/N, 품목명, 규격, 단위, 차종명, 품목상태, 창고위치, 재고위치, 재고 (11컬럼)
-// 또는 이전 형식도 지원 (역방향 인덱싱 사용)
+// 천 단위 쉼표가 있으면 병합 후 10컬럼이 됨
 const parsePartsCSV = (csvText: string): InventoryItem[] => {
   const lines = csvText.split('\n').filter(line => line.trim());
   if (lines.length < 2) {
@@ -164,10 +164,17 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     return [];
   }
 
-  // 헤더 분석
+  // 헤더 분석으로 형식 감지
   const headerValues = parseCSVLine(lines[0]);
   console.log('📦 Parts CSV Header:', headerValues);
   console.log('📦 Total lines:', lines.length - 1);
+
+  // 헤더에서 형식 감지: 첫 컬럼이 '품목유형'이면 11컬럼 형식
+  const isNewFormat = headerValues[0]?.includes('품목유형') ||
+                      headerValues[0]?.includes('유형') ||
+                      headerValues.length >= 10;
+
+  console.log('📦 Format detected:', isNewFormat ? '11컬럼 (새 형식)' : '9컬럼 (기존 형식)');
 
   const result: InventoryItem[] = [];
 
@@ -179,19 +186,17 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       continue;
     }
 
-    // 역방향 인덱싱: 마지막 컬럼이 재고(qty)
+    // 마지막 컬럼이 재고(qty)
     const qtyIndex = values.length - 1;
     const qty = parseNumericValue(values[qtyIndex]);
-
-    // 컬럼 수에 따라 매핑 결정
-    // 11컬럼 형식: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고위치(8), 재고위치(9), 재고(10)
-    // 9컬럼 형식: 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
 
     let code: string, customerPN: string, name: string, spec: string;
     let model: string, unit: string, status: string, location: string;
 
-    if (values.length >= 11) {
-      // 11컬럼 형식 (새 형식)
+    if (isNewFormat) {
+      // 11컬럼 형식 (품목유형 컬럼이 있음 - 건너뜀)
+      // 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고위치(8), 재고위치(9), 재고(10)
+      // 병합 후: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고위치(8), 재고위치+재고(9)
       code = values[1] || '';
       customerPN = values[2] || '';
       name = values[3] || '';
@@ -199,17 +204,19 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       unit = values[5] || 'EA';
       model = values[6] || '';
       status = values[7] || '';
-      location = values[9] || values[8] || ''; // 재고위치 우선, 없으면 창고위치
-    } else {
-      // 기존 형식 (역방향 인덱싱)
+      // 재고위치는 마지막에서 2번째 (병합 전 9, 병합 후 8)
       location = values[qtyIndex - 1] || '';
-      status = values[qtyIndex - 2] || '';
-      unit = values[qtyIndex - 3] || 'EA';
-      model = values[qtyIndex - 4] || '';
-      spec = values[qtyIndex - 5] || '';
-      name = values[qtyIndex - 6] || '';
-      customerPN = values[qtyIndex - 7] || '';
-      code = values[qtyIndex - 8] || values[0] || '';
+    } else {
+      // 9컬럼 형식 (역방향 인덱싱)
+      // 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
+      code = values[0] || '';
+      customerPN = values[1] || '';
+      name = values[2] || '';
+      spec = values[3] || '';
+      model = values[4] || '';
+      unit = values[5] || 'EA';
+      status = values[6] || '';
+      location = values[7] || '';
     }
 
     if (!code) continue;
@@ -229,7 +236,11 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
 
     // 첫 3줄 디버그 출력
     if (i <= 3) {
-      console.log(`📦 Parts Line ${i}:`, { raw: values, parsed: item });
+      console.log(`📦 Parts Line ${i}:`, {
+        valuesCount: values.length,
+        raw: values.slice(0, 5).join(' | ') + '...',
+        parsed: { code: item.code, name: item.name, location: item.location, qty: item.qty }
+      });
     }
 
     result.push(item);
