@@ -372,53 +372,60 @@ const InventoryView: React.FC = () => {
   // --- Handlers ---
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'resin' | 'paint' | 'parts') => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const result = event.target?.result;
-        let csvText = '';
-
-        // 인코딩 감지: UTF-8 우선, 깨지면 EUC-KR/CP949로 재시도
-        if (typeof result === 'string') {
-          csvText = result;
-        } else if (result instanceof ArrayBuffer) {
-          try {
-            csvText = new TextDecoder('utf-8').decode(result);
-          } catch {
-            try {
-              csvText = new TextDecoder('euc-kr').decode(result);
-            } catch {
-              // 최악의 경우 기본 디코딩
-              csvText = new TextDecoder().decode(result);
-            }
-          }
-        }
-
-        let data: any[];
-
-        if (type === 'parts') {
-          data = parsePartsCSV(csvText);
-        } else {
-          data = parseMaterialCSV(csvText);
-        }
-
-        const updatedData = { ...inventoryData, [type]: data };
-        setInventoryData(updatedData);
-        localStorage.setItem('dashboard_inventory_v2', JSON.stringify(updatedData));
-
-        // Supabase sync
-        if (isSupabaseConfigured()) {
-          try {
-            await inventoryService.saveInventoryV2?.(updatedData);
-            console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
-          } catch (err) {
-            console.error('Supabase 동기화 실패:', err);
-          }
-        }
-      };
-      // 글자깨짐 방지를 위해 바이너리로 읽은 후 직접 디코딩
-      reader.readAsArrayBuffer(file);
+    if (!file) {
+      e.target.value = '';
+      return;
     }
+
+    const processCsv = async (csvText: string) => {
+      let data: any[];
+
+      if (type === 'parts') {
+        data = parsePartsCSV(csvText);
+      } else {
+        data = parseMaterialCSV(csvText);
+      }
+
+      const updatedData = { ...inventoryData, [type]: data };
+      setInventoryData(updatedData);
+      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(updatedData));
+
+      // Supabase sync
+      if (isSupabaseConfigured()) {
+        try {
+          await inventoryService.saveInventoryV2?.(updatedData);
+          console.log(`✅ ${type} 재고 Supabase 동기화 완료`);
+        } catch (err) {
+          console.error('Supabase 동기화 실패:', err);
+        }
+      }
+    };
+
+    // 1차: UTF-8로 읽어보고, 깨짐(�/Ã/Â 등) 패턴이 많으면 EUC-KR로 재시도
+    const readAsEncoding = (encoding: string, onLoaded: (text: string, encodingUsed: string) => void) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = (event.target?.result as string) || '';
+        onLoaded(text, encoding);
+      };
+      reader.readAsText(file, encoding);
+    };
+
+    readAsEncoding('utf-8', (textUtf8) => {
+      const brokenPattern = /�|Ã.|Â./g;
+      const brokenMatches = textUtf8.match(brokenPattern);
+      const brokenRatio = brokenMatches ? brokenMatches.length / textUtf8.length : 0;
+
+      if (brokenRatio > 0.01) {
+        // UTF-8로 읽었을 때 깨진 글자가 많으면 EUC-KR로 다시 읽기
+        readAsEncoding('euc-kr', (textEucKr) => {
+          processCsv(textEucKr);
+        });
+      } else {
+        processCsv(textUtf8);
+      }
+    });
+
     e.target.value = '';
   };
 
