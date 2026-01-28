@@ -183,9 +183,12 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
 
   console.log('📦 Parts CSV Header:', headerValues);
 
-  const hasItemType = findCol(headerValues, ['품목유형', '유형']) >= 0;
+  const colItemTypeFirst = findCol(headerValues, ['품목유형', '품목 유형', '유형', 'Item Type', 'ItemType']);
+  const hasItemType = colItemTypeFirst >= 0;
   const hasStorageLocation = findCol(headerValues, ['재고위치']) >= 0;
   const isNewFormat = hasItemType || hasStorageLocation || headerValues.length >= 10;
+  const hasLeadingNo = /^(no|번호|#|\d+)$/i.test((headerValues[0] ?? '').trim());
+  const itemTypeFallbackIdx = headerValues.length >= 12 && hasLeadingNo ? 1 : (headerValues.length >= 11 ? 0 : -1);
 
   // 첫 행이 숫자만 있으면 헤더가 아닌 데이터로 간주 → 위치 기반 11/12컬럼 사용
   const firstCell = (headerValues[0] ?? '').trim();
@@ -214,7 +217,6 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     };
     console.log('📦 Using positional mapping, offset:', offset);
   } else {
-    const colItemType = findCol(headerValues, ['품목유형', '유형']);
     const colCustomerPN = findCol(headerValues, ['고객사P/N', '고객사 P/N', '고객사p/n']);
     const colSpec = findCol(headerValues, ['규격']);
     const colUnit = findCol(headerValues, ['단위']);
@@ -226,7 +228,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       ? headerValues.findIndex((h: string) => h.trim() === '재고')
       : headerValues.length - 1;
     col = {
-      itemType: isNewFormat ? colItemType : -1,
+      itemType: isNewFormat ? (colItemTypeFirst >= 0 ? colItemTypeFirst : itemTypeFallbackIdx) : -1,
       code: colCode >= 0 ? colCode : 1 + offset,
       customerPN: colCustomerPN >= 0 ? colCustomerPN : 2 + offset,
       name: colName >= 0 ? colName : 3 + offset,
@@ -246,7 +248,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
 
   for (let i = startRow; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    if (values.length < 3) continue;
+    if (values.length < 2) continue;
 
     const read = (idx: number, fallback: string) => (idx >= 0 && idx < values.length ? values[idx] || '' : fallback);
 
@@ -260,9 +262,9 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     const status = read(col.status, '');
     const location = read(col.location, '');
     const storageLocation = col.storageLocation >= 0 ? read(col.storageLocation, '') : '';
-    const qty = parseNumericValue(read(col.qty, '0'));
-
-    if (!code || !code.trim()) continue;
+    // 업로더 형식: 재고는 항상 마지막 컬럼. merge 등으로 행별 컬럼 수가 달라질 수 있으므로 마지막 컬럼 우선 사용
+    const qtyRaw = values.length > 0 ? values[values.length - 1] : '0';
+    const qty = parseNumericValue(qtyRaw);
 
     result.push({
       id: `parts-${i}`,
@@ -469,7 +471,8 @@ const InventoryView: React.FC = () => {
   }, [inventoryData.paint, filterValues, sortConfig]);
 
   const filteredPartsData = useMemo(() => {
-    let result = inventoryData.parts.filter(item => item.code && item.code.trim() !== '');
+    // 품목코드 빈 행도 업로더 수량에 포함되므로 기본 목록에서는 제외하지 않음
+    let result = [...inventoryData.parts];
 
     if (filterValues.itemType) result = result.filter(item => (item.itemType || '').toLowerCase().includes(filterValues.itemType.toLowerCase()));
     if (filterValues.code) result = result.filter(item => item.code.toLowerCase().includes(filterValues.code.toLowerCase()));
@@ -500,7 +503,7 @@ const InventoryView: React.FC = () => {
 
   // --- Pivot Data for Parts ---
   const pivotData = useMemo(() => {
-    const rawData = inventoryData.parts.filter(item => item.code && item.code.trim() !== '');
+    const rawData = inventoryData.parts;
 
     // Get unique column values
     let colValues: string[] = [];
