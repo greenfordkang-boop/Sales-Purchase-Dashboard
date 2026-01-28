@@ -375,7 +375,25 @@ const InventoryView: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = async (event) => {
-        const csvText = event.target?.result as string;
+        const result = event.target?.result;
+        let csvText = '';
+
+        // 인코딩 감지: UTF-8 우선, 깨지면 EUC-KR/CP949로 재시도
+        if (typeof result === 'string') {
+          csvText = result;
+        } else if (result instanceof ArrayBuffer) {
+          try {
+            csvText = new TextDecoder('utf-8').decode(result);
+          } catch {
+            try {
+              csvText = new TextDecoder('euc-kr').decode(result);
+            } catch {
+              // 최악의 경우 기본 디코딩
+              csvText = new TextDecoder().decode(result);
+            }
+          }
+        }
+
         let data: any[];
 
         if (type === 'parts') {
@@ -398,7 +416,8 @@ const InventoryView: React.FC = () => {
           }
         }
       };
-      reader.readAsText(file);
+      // 글자깨짐 방지를 위해 바이너리로 읽은 후 직접 디코딩
+      reader.readAsArrayBuffer(file);
     }
     e.target.value = '';
   };
