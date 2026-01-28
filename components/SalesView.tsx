@@ -5,7 +5,7 @@ import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, 
 import { parseSalesCSV, CustomerSalesData, SalesItem } from '../utils/salesDataParser';
 import { parseCRCSV, CRItem } from '../utils/crDataParser';
 import { parseRFQCSV, RFQItem } from '../utils/rfqDataParser';
-import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
+import { parseRevenueCSV, parseItemRevenueCSV, RevenueItem, ItemRevenueRow } from '../utils/revenueDataParser';
 import { INITIAL_CSV_DATA } from '../data/initialSalesData';
 import { INITIAL_CR_CSV } from '../data/initialCRData';
 import { INITIAL_RFQ_CSV } from '../data/initialRfqData';
@@ -105,6 +105,18 @@ const SalesView: React.FC = () => {
   const [revenueSortConfig, setRevenueSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
   const [isUploadingRevenue, setIsUploadingRevenue] = useState(false);
 
+  // 품목별 매출현황용 데이터 (별도 업로더)
+  const getInitialItemRevenueData = (): ItemRevenueRow[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('dashboard_itemRevenueData');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  };
+  const [itemRevenueData, setItemRevenueData] = useState<ItemRevenueRow[]>(getInitialItemRevenueData);
+
   // Unit Price States (단가현황)
   const [priceSortConfig, setPriceSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [priceFilter, setPriceFilter] = useState({ model: '', customer: '' });
@@ -196,6 +208,10 @@ const SalesView: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
   }, [revenueData]);
+
+  useEffect(() => {
+    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(itemRevenueData));
+  }, [itemRevenueData]);
 
   // --- Derived Data ---
   
@@ -417,34 +433,31 @@ const SalesView: React.FC = () => {
     return { totalAmount, totalQty, uniqueCustomers, uniqueModels, chartData, customerBreakdown };
   }, [revenueData, selectedRevenueYear, selectedRevenueCustomer]);
 
-  // 품목별 매출현황 (Model/품번/품명 기준 집계)
+  // 품목별 매출현황 (별도 업로더 기준, Model/품번/품명 집계)
   const itemRevenueStats = useMemo(() => {
-    const yearData = revenueData.filter(d => d.year === selectedRevenueYear);
-    const filtered =
-      selectedRevenueCustomer === 'All'
-        ? yearData
-        : yearData.filter(d => d.customer === selectedRevenueCustomer);
+    let filtered = [...itemRevenueData];
 
-    const map = new Map<
-      string,
-      {
-        model: string;
-        partNo: string;
-        customerPN: string;
-        partName: string;
-        qty: number;
-        amount: number;
-      }
-    >();
+    if (selectedRevenueCustomer !== 'All') {
+      filtered = filtered.filter(d => d.customer === selectedRevenueCustomer);
+    }
+
+    const map = new Map<string, {
+      model: string;
+      partNo: string;
+      customerPN: string;
+      partName: string;
+      qty: number;
+      amount: number;
+    }>();
 
     filtered.forEach(d => {
-      const key = `${d.model}|${d.partNo || ''}|${d.partName || ''}`;
+      const key = `${d.model}|${d.partNo}|${d.partName}`;
       if (!map.has(key)) {
         map.set(key, {
           model: d.model,
-          partNo: d.partNo || '',
-          customerPN: d.customerPN || '',
-          partName: d.partName || '',
+          partNo: d.partNo,
+          customerPN: d.customerPN,
+          partName: d.partName,
           qty: 0,
           amount: 0,
         });
@@ -463,9 +476,8 @@ const SalesView: React.FC = () => {
     }));
 
     withShare.sort((a, b) => b.amount - a.amount);
-
     return { items: withShare, totalAmount, totalQty };
-  }, [revenueData, selectedRevenueYear, selectedRevenueCustomer]);
+  }, [itemRevenueData, selectedRevenueCustomer]);
 
   const revenueTotal = useMemo(() => {
     const totalAmount = filteredRevenueData.reduce((sum, d) => sum + d.amount, 0);
@@ -647,6 +659,20 @@ const SalesView: React.FC = () => {
         } finally {
           setIsUploadingRevenue(false);
         }
+      };
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+
+  // 품목별 매출 CSV 업로드 핸들러 (별도 파일)
+  const handleItemRevenueFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const parsed = parseItemRevenueCSV(event.target?.result as string);
+        setItemRevenueData(parsed);
       };
       reader.readAsText(file);
     }
@@ -1062,8 +1088,16 @@ const SalesView: React.FC = () => {
                 품목별 매출현황
               </h3>
               <p className="text-xs text-slate-400 mb-2">
-                {selectedRevenueYear}년 {selectedRevenueCustomer === 'All' ? '전체 고객사 기준' : `${selectedRevenueCustomer} 기준`} 품목별 매출 집계
+                업로드한 품목별 매출 CSV 기준 집계 (
+                {selectedRevenueCustomer === 'All' ? '전체 고객사' : selectedRevenueCustomer}
+                )
               </p>
+              <div className="flex items-center justify-end mb-3">
+                <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors flex items-center gap-1">
+                  <span>📂 품목별 매출 CSV 업로드</span>
+                  <input type="file" accept=".csv" onChange={handleItemRevenueFileUpload} className="hidden" />
+                </label>
+              </div>
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
