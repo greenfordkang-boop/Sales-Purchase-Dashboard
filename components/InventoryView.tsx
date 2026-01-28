@@ -30,6 +30,36 @@ interface InventoryItem {
   amount?: number;
 }
 
+// Helper: Parse CSV line properly handling quoted fields
+const parseCSVLine = (line: string): string[] => {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim().replace(/^"|"$/g, ''));
+  return result;
+};
+
+// Helper: Parse numeric value with comma formatting (e.g., "1,097.00" -> 1097)
+const parseNumericValue = (value: string): number => {
+  if (!value) return 0;
+  // Remove commas from number and parse
+  const cleaned = value.replace(/,/g, '').trim();
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
 // Parse Material CSV (Resin/Paint)
 // CSV 형식: (index), 재질코드, 재질명, 단위, 창고명, 현재고
 const parseMaterialCSV = (csvText: string): MaterialItem[] => {
@@ -38,7 +68,7 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
 
   const result: MaterialItem[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const values = parseCSVLine(lines[i]);
     if (values.length >= 5) {
       // Check if first column is numeric (index column) - skip it
       const hasIndexColumn = !isNaN(Number(values[0])) && values.length >= 6;
@@ -53,7 +83,7 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
         name: values[offset + 1] || '',
         unit: values[offset + 2] || 'Kg',
         location: values[offset + 3] || '',
-        qty: parseFloat(values[offset + 4]) || 0
+        qty: parseNumericValue(values[offset + 4])
       });
     }
   }
@@ -67,7 +97,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
 
   const result: InventoryItem[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+    const values = parseCSVLine(lines[i]);
     if (values.length >= 5 && values[0]) {
       result.push({
         id: `parts-${i}`,
@@ -79,9 +109,9 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
         unit: values[5] || 'EA',
         status: values[6] || '',
         location: values[7] || '',
-        qty: parseFloat(values[8]) || 0,
-        unitPrice: parseFloat(values[9]) || 0,
-        amount: parseFloat(values[10]) || 0
+        qty: parseNumericValue(values[8]),
+        unitPrice: parseNumericValue(values[9]),
+        amount: parseNumericValue(values[10])
       });
     }
   }
