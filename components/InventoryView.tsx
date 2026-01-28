@@ -556,10 +556,10 @@ const InventoryView: React.FC = () => {
   };
 
   const handleDownloadParts = () => {
-    const headers = ['품목코드', '고객사 P/N', '품목명', '규격', '차종명', '단위', '상태', '창고명', '재고'];
+    const headers = ['품목코드', '고객사 P/N', '품목명', '규격', '단위', '차종명', '상태', '창고명', '재고'];
     const rows = filteredPartsData.map(item => [
-      item.code, item.customerPN, item.name, item.spec, item.model,
-      item.unit, item.status, item.location, item.qty
+      item.code, item.customerPN, item.name, item.spec, item.unit,
+      item.model, item.status, item.location, item.qty
     ]);
     downloadCSV('부품_창고별재고', headers, rows);
   };
@@ -849,8 +849,8 @@ const InventoryView: React.FC = () => {
                       <SortableHeader label="고객사 P/N" sortKey="customerPN" />
                       <SortableHeader label="품목명" sortKey="name" />
                       <SortableHeader label="규격" sortKey="spec" />
-                      <SortableHeader label="차종명" sortKey="model" align="center" />
                       <SortableHeader label="단위" sortKey="unit" align="center" />
+                      <SortableHeader label="차종명" sortKey="model" align="center" />
                       <SortableHeader label="상태" sortKey="status" align="center" />
                       <SortableHeader label="창고명" sortKey="location" align="center" />
                       <SortableHeader label="재고" sortKey="qty" align="right" />
@@ -860,8 +860,8 @@ const InventoryView: React.FC = () => {
                       <th className="px-2 py-2"><input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.customerPN || ''} onChange={(e) => handleFilterChange('customerPN', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="품목명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.spec || ''} onChange={(e) => handleFilterChange('spec', e.target.value)} /></th>
-                      <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
                       <th className="px-2 py-2"></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
@@ -874,8 +874,8 @@ const InventoryView: React.FC = () => {
                         <td className="px-4 py-3 text-slate-600">{item.customerPN || '-'}</td>
                         <td className="px-4 py-3 text-slate-800">{item.name}</td>
                         <td className="px-4 py-3 text-slate-600">{item.spec || '-'}</td>
-                        <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
