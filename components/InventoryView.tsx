@@ -31,6 +31,7 @@ interface InventoryItem {
 }
 
 // Parse Material CSV (Resin/Paint)
+// CSV 형식: (index), 재질코드, 재질명, 단위, 창고명, 현재고
 const parseMaterialCSV = (csvText: string): MaterialItem[] => {
   const lines = csvText.split('\n').filter(line => line.trim());
   if (lines.length < 2) return [];
@@ -38,14 +39,21 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
   const result: MaterialItem[] = [];
   for (let i = 1; i < lines.length; i++) {
     const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
-    if (values.length >= 5 && values[0]) {
+    if (values.length >= 5) {
+      // Check if first column is numeric (index column) - skip it
+      const hasIndexColumn = !isNaN(Number(values[0])) && values.length >= 6;
+      const offset = hasIndexColumn ? 1 : 0;
+
+      const code = values[offset] || '';
+      if (!code) continue;
+
       result.push({
         id: `mat-${i}`,
-        code: values[0] || '',
-        name: values[1] || '',
-        unit: values[2] || 'Kg',
-        location: values[3] || '',
-        qty: parseFloat(values[4]) || 0
+        code: code,
+        name: values[offset + 1] || '',
+        unit: values[offset + 2] || 'Kg',
+        location: values[offset + 3] || '',
+        qty: parseFloat(values[offset + 4]) || 0
       });
     }
   }
@@ -111,6 +119,24 @@ const InventoryView: React.FC = () => {
   // Filter & Sort States
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Parts Pivot View State
+  const [partsViewMode, setPartsViewMode] = useState<'list' | 'pivot'>('list');
+  const [pivotRows, setPivotRows] = useState<string[]>(['model', 'name']);
+  const [pivotCol, setPivotCol] = useState<string>('location');
+  const [pivotSortConfig, setPivotSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // Pivot Field Options
+  const PIVOT_FIELDS = [
+    { key: 'model', label: '차종명' },
+    { key: 'customerPN', label: '고객사 P/N' },
+    { key: 'code', label: '품목코드' },
+    { key: 'name', label: '품목명' },
+    { key: 'spec', label: '규격' },
+    { key: 'unit', label: '단위' },
+    { key: 'status', label: '상태' },
+    { key: 'location', label: '창고명' },
+  ];
 
   // --- Persistence ---
   useEffect(() => {
@@ -271,6 +297,85 @@ const InventoryView: React.FC = () => {
 
     return result;
   }, [inventoryData.parts, filterValues, sortConfig]);
+
+  // --- Pivot Data for Parts ---
+  const pivotData = useMemo(() => {
+    const rawData = inventoryData.parts.filter(item => item.code && item.code.trim() !== '');
+
+    // Get unique column values
+    let colValues: string[] = [];
+    if (pivotCol) {
+      const distinct = new Set<string>(rawData.map(item => String(item[pivotCol as keyof InventoryItem] || 'N/A')));
+      colValues = Array.from(distinct).sort();
+    }
+
+    // Group data
+    const groups = new Map<string, any>();
+    rawData.forEach(item => {
+      const rowKey = pivotRows.map(field => String(item[field as keyof InventoryItem] || '-')).join('||');
+
+      if (!groups.has(rowKey)) {
+        const initialGroup: any = { _key: rowKey, _count: 0, _totalQty: 0 };
+        pivotRows.forEach(field => {
+          initialGroup[field] = item[field as keyof InventoryItem] || '-';
+        });
+        colValues.forEach(cv => initialGroup[`_col_${cv}`] = 0);
+        groups.set(rowKey, initialGroup);
+      }
+
+      const group = groups.get(rowKey);
+      group._count += 1;
+      group._totalQty += (item.qty || 0);
+
+      if (pivotCol) {
+        const colVal = String(item[pivotCol as keyof InventoryItem] || 'N/A');
+        group[`_col_${colVal}`] = (group[`_col_${colVal}`] || 0) + (item.qty || 0);
+      }
+    });
+
+    // Apply sorting
+    let rows = Array.from(groups.values());
+    if (pivotSortConfig) {
+      rows.sort((a, b) => {
+        const valA = a[pivotSortConfig.key];
+        const valB = b[pivotSortConfig.key];
+        if (pivotSortConfig.key === '_totalQty') {
+          return pivotSortConfig.direction === 'asc' ? valA - valB : valB - valA;
+        }
+        const strA = String(valA || '');
+        const strB = String(valB || '');
+        return pivotSortConfig.direction === 'asc'
+          ? strA.localeCompare(strB, 'ko')
+          : strB.localeCompare(strA, 'ko');
+      });
+    }
+
+    return {
+      colValues,
+      rows,
+      grandTotalQty: rawData.reduce((sum, item) => sum + (item.qty || 0), 0)
+    };
+  }, [inventoryData.parts, pivotRows, pivotCol, pivotSortConfig]);
+
+  // Pivot Handlers
+  const togglePivotRow = (fieldKey: string) => {
+    setPivotRows(prev => prev.includes(fieldKey) ? prev.filter(k => k !== fieldKey) : [...prev, fieldKey]);
+  };
+
+  const handlePivotSort = (key: string) => {
+    setPivotSortConfig(prev => prev?.key === key ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : { key, direction: 'asc' });
+  };
+
+  const handleDownloadPivot = () => {
+    const rowHeaders = pivotRows.map(key => PIVOT_FIELDS.find(f => f.key === key)?.label || key);
+    const headers = [...rowHeaders, ...pivotData.colValues, '합계(Total)'];
+    const rows = pivotData.rows.map(row => {
+      const rowData = pivotRows.map(key => row[key]);
+      const colData = pivotData.colValues.map(colVal => row[`_col_${colVal}`] || 0);
+      return [...rowData, ...colData, row._totalQty];
+    });
+    downloadCSV('부품재고_피봇분석', headers, rows);
+  };
 
   // --- Download Handlers ---
   const handleDownloadResin = () => {
@@ -529,7 +634,7 @@ const InventoryView: React.FC = () => {
       {activeSubTab === 'parts' && (
         <div className="space-y-4">
           {/* Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">등록 품목</span>
               <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.parts.length.toLocaleString()} Items</h3>
@@ -542,82 +647,200 @@ const InventoryView: React.FC = () => {
               <span className="text-xs font-bold text-slate-400">총 재고수량</span>
               <h3 className="text-lg font-black text-violet-600 mt-1">{partsTotal.toLocaleString()} EA</h3>
             </div>
-          </div>
-
-          {/* Table */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
-                부품재고 (창고별재고) 리스트
-              </h3>
-              <div className="flex items-center gap-2">
-                <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
-                  <span>📤 CSV 업로드</span>
-                  <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
-                </label>
-                <button onClick={handleDownloadParts} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  엑셀 다운로드
-                </button>
+            {/* View Mode Toggle */}
+            <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
+              <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
+                <button onClick={() => setPartsViewMode('list')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'list' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400'}`}>리스트</button>
+                <button onClick={() => setPartsViewMode('pivot')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'pivot' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400'}`}>피봇분석</button>
               </div>
             </div>
-
-            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                  <tr>
-                    <SortableHeader label="품목코드" sortKey="code" />
-                    <SortableHeader label="고객사 P/N" sortKey="customerPN" />
-                    <SortableHeader label="품목명" sortKey="name" />
-                    <SortableHeader label="규격" sortKey="spec" />
-                    <SortableHeader label="차종명" sortKey="model" align="center" />
-                    <SortableHeader label="단위" sortKey="unit" align="center" />
-                    <SortableHeader label="상태" sortKey="status" align="center" />
-                    <SortableHeader label="창고명" sortKey="location" align="center" />
-                    <SortableHeader label="재고" sortKey="qty" align="right" />
-                  </tr>
-                  <tr className="bg-slate-50">
-                    <th className="px-2 py-2"><input type="text" placeholder="품목코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.customerPN || ''} onChange={(e) => handleFilterChange('customerPN', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="품목명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.spec || ''} onChange={(e) => handleFilterChange('spec', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
-                    <th className="px-2 py-2"></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
-                    <th className="px-2 py-2"><input type="text" placeholder="재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredPartsData.map((item) => (
-                    <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
-                      <td className="px-4 py-3 text-slate-600">{item.customerPN || '-'}</td>
-                      <td className="px-4 py-3 text-slate-800">{item.name}</td>
-                      <td className="px-4 py-3 text-slate-600">{item.spec || '-'}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
-                      <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {filteredPartsData.length === 0 && (
-                    <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
-                  )}
-                </tbody>
-                {filteredPartsData.length > 0 && (
-                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
-                    <tr>
-                      <td colSpan={8} className="px-4 py-3 text-center">합계 (Total)</td>
-                      <td className="px-4 py-3 text-right font-mono text-violet-600">{partsTotal.toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
           </div>
+
+          {/* List View */}
+          {partsViewMode === 'list' && (
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+                  부품재고 (창고별재고) 리스트
+                </h3>
+                <div className="flex items-center gap-2">
+                  <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                    <span>📤 CSV 업로드</span>
+                    <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
+                  </label>
+                  <button onClick={handleDownloadParts} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    엑셀 다운로드
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <SortableHeader label="품목코드" sortKey="code" />
+                      <SortableHeader label="고객사 P/N" sortKey="customerPN" />
+                      <SortableHeader label="품목명" sortKey="name" />
+                      <SortableHeader label="규격" sortKey="spec" />
+                      <SortableHeader label="차종명" sortKey="model" align="center" />
+                      <SortableHeader label="단위" sortKey="unit" align="center" />
+                      <SortableHeader label="상태" sortKey="status" align="center" />
+                      <SortableHeader label="창고명" sortKey="location" align="center" />
+                      <SortableHeader label="재고" sortKey="qty" align="right" />
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-2"><input type="text" placeholder="품목코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.customerPN || ''} onChange={(e) => handleFilterChange('customerPN', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="품목명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.spec || ''} onChange={(e) => handleFilterChange('spec', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
+                      <th className="px-2 py-2"></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredPartsData.map((item) => (
+                      <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.customerPN || '-'}</td>
+                        <td className="px-4 py-3 text-slate-800">{item.name}</td>
+                        <td className="px-4 py-3 text-slate-600">{item.spec || '-'}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                    {filteredPartsData.length === 0 && (
+                      <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
+                    )}
+                  </tbody>
+                  {filteredPartsData.length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                      <tr>
+                        <td colSpan={8} className="px-4 py-3 text-center">합계 (Total)</td>
+                        <td className="px-4 py-3 text-right font-mono text-violet-600">{partsTotal.toLocaleString()}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Pivot View */}
+          {partsViewMode === 'pivot' && (
+            <div className="space-y-4">
+              {/* Pivot Config */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                  <div className="flex-1">
+                    <span className="text-xs font-bold text-slate-500 block mb-2">행(Rows) - 그룹화 기준</span>
+                    <div className="flex flex-wrap gap-2">
+                      {PIVOT_FIELDS.filter(f => f.key !== pivotCol).map(field => (
+                        <button key={field.key} onClick={() => togglePivotRow(field.key)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${pivotRows.includes(field.key) ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                          {field.label} {pivotRows.includes(field.key) && `(${pivotRows.indexOf(field.key) + 1})`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-500 block mb-2">열(Column) - 피봇 기준</span>
+                    <select value={pivotCol} onChange={(e) => setPivotCol(e.target.value)} className="px-3 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 bg-white">
+                      {PIVOT_FIELDS.filter(f => !pivotRows.includes(f.key)).map(field => (
+                        <option key={field.key} value={field.key}>{field.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pivot Table */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-black text-slate-800 flex items-center gap-2">
+                    <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+                    피봇 분석 테이블
+                    <span className="text-xs font-normal text-slate-400 ml-2">({pivotData.rows.length.toLocaleString()} 그룹)</span>
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                      <span>📤 CSV 업로드</span>
+                      <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
+                    </label>
+                    <button onClick={handleDownloadPivot} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      엑셀 다운로드
+                    </button>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                      <tr>
+                        {pivotRows.map(key => (
+                          <th key={key} className="px-4 py-3 text-left cursor-pointer hover:bg-slate-100" onClick={() => handlePivotSort(key)}>
+                            {PIVOT_FIELDS.find(f => f.key === key)?.label || key}
+                            <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === key ? 'text-violet-600' : 'text-slate-300'}`}>
+                              {pivotSortConfig?.key === key ? (pivotSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                            </span>
+                          </th>
+                        ))}
+                        {pivotData.colValues.map(colVal => (
+                          <th key={colVal} className="px-4 py-3 text-right bg-violet-50 text-violet-700">{colVal}</th>
+                        ))}
+                        <th className="px-4 py-3 text-right bg-slate-100 cursor-pointer hover:bg-slate-200" onClick={() => handlePivotSort('_totalQty')}>
+                          합계
+                          <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === '_totalQty' ? 'text-violet-600' : 'text-slate-300'}`}>
+                            {pivotSortConfig?.key === '_totalQty' ? (pivotSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
+                          </span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {pivotData.rows.map((row, idx) => (
+                        <tr key={row._key || idx} className="hover:bg-slate-50">
+                          {pivotRows.map(key => (
+                            <td key={key} className="px-4 py-2 text-slate-700">{row[key] || '-'}</td>
+                          ))}
+                          {pivotData.colValues.map(colVal => (
+                            <td key={colVal} className="px-4 py-2 text-right font-mono text-violet-600">
+                              {(row[`_col_${colVal}`] || 0).toLocaleString()}
+                            </td>
+                          ))}
+                          <td className="px-4 py-2 text-right font-mono font-bold text-slate-800 bg-slate-50">
+                            {(row._totalQty || 0).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                      {pivotData.rows.length === 0 && (
+                        <tr><td colSpan={pivotRows.length + pivotData.colValues.length + 1} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다.</td></tr>
+                      )}
+                    </tbody>
+                    {pivotData.rows.length > 0 && (
+                      <tfoot className="bg-violet-100 font-bold text-violet-800 border-t-2 border-violet-200">
+                        <tr>
+                          <td colSpan={pivotRows.length} className="px-4 py-3 text-center">총계 (Grand Total)</td>
+                          {pivotData.colValues.map(colVal => (
+                            <td key={colVal} className="px-4 py-3 text-right font-mono">
+                              {pivotData.rows.reduce((sum, row) => sum + (row[`_col_${colVal}`] || 0), 0).toLocaleString()}
+                            </td>
+                          ))}
+                          <td className="px-4 py-3 text-right font-mono">{pivotData.grandTotalQty.toLocaleString()}</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
