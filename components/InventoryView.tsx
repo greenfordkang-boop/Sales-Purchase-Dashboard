@@ -30,8 +30,8 @@ interface InventoryItem {
   amount?: number;
 }
 
-// Helper: Parse CSV line properly handling quoted fields and numeric commas
-const parseCSVLine = (line: string): string[] => {
+// Helper: Split CSV line handling quoted fields
+const splitCSVLine = (line: string): string[] => {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -41,24 +41,65 @@ const parseCSVLine = (line: string): string[] => {
     if (char === '"') {
       inQuotes = !inQuotes;
     } else if (char === ',' && !inQuotes) {
-      // Check if this comma is a thousands separator (e.g., "24,858")
-      // Pattern: digits before comma, exactly 3 digits after (or 3 digits then decimal)
-      const before = current.trim();
-      const after = line.substring(i + 1);
-      const isThousandsSep = /^\d+$/.test(before) && /^\d{3}(?:[.,]\d+)?(?:,|$|\s)/.test(after);
-
-      if (isThousandsSep) {
-        current += char;
-      } else {
-        result.push(current.trim().replace(/^"|"$/g, ''));
-        current = '';
-      }
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      current = '';
     } else {
       current += char;
     }
   }
   result.push(current.trim().replace(/^"|"$/g, ''));
   return result;
+};
+
+// Helper: Merge values that are parts of numbers with thousands separator
+// e.g., ["A", "B", "1", "234", "567.00"] -> ["A", "B", "1,234,567.00"]
+const mergeThousandsSeparatedNumbers = (values: string[]): string[] => {
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < values.length) {
+    const current = values[i];
+
+    // Check if current is a pure integer and next value looks like it continues a number
+    if (/^\d+$/.test(current) && i + 1 < values.length) {
+      // Look ahead to merge consecutive number parts
+      let merged = current;
+      let j = i + 1;
+
+      while (j < values.length) {
+        const next = values[j];
+        // Next should be exactly 3 digits, or 3 digits followed by decimal
+        if (/^\d{3}$/.test(next) || /^\d{3}\.\d+$/.test(next)) {
+          merged += ',' + next;
+          j++;
+          // If this part has decimal, stop merging
+          if (next.includes('.')) break;
+        } else {
+          break;
+        }
+      }
+
+      // Only use merged if we actually merged something
+      if (j > i + 1) {
+        result.push(merged);
+        i = j;
+      } else {
+        result.push(current);
+        i++;
+      }
+    } else {
+      result.push(current);
+      i++;
+    }
+  }
+
+  return result;
+};
+
+// Helper: Parse CSV line with thousands separator support
+const parseCSVLine = (line: string): string[] => {
+  const rawValues = splitCSVLine(line);
+  return mergeThousandsSeparatedNumbers(rawValues);
 };
 
 // Helper: Parse numeric value with comma formatting (e.g., "1,097.00" -> 1097)
