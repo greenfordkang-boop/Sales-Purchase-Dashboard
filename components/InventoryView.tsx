@@ -14,17 +14,19 @@ interface MaterialItem {
   qty: number;       // 현재고
 }
 
-// Parts/Warehouse Item Type
+// Parts/Warehouse Item Type (업로더: 품목유형>품목코드>고객사p/n>품목명>규격>단위>차종명>품목상태>창고명>재고위치>재고)
 interface InventoryItem {
   id: string;
+  itemType?: string;   // 품목유형
   code: string;
   customerPN?: string;
   name: string;
   spec?: string;
-  model?: string;
   unit: string;
-  status?: string;
-  location: string;
+  model?: string;     // 차종명
+  status?: string;    // 품목상태
+  location: string;   // 창고명
+  storageLocation?: string; // 재고위치
   qty: number;
   unitPrice?: number;
   amount?: number;
@@ -197,11 +199,12 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     const qtyIndex = values.length - 1;
     const qty = parseNumericValue(values[qtyIndex]);
 
-    let code: string, customerPN: string, name: string, spec: string;
-    let model: string, unit: string, status: string, location: string;
+    let itemType: string, code: string, customerPN: string, name: string, spec: string;
+    let model: string, unit: string, status: string, location: string, storageLocation: string;
 
     if (isNewFormat) {
       // 11컬럼: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고명(8), 재고위치(9), 재고(10)
+      itemType = values[0] || '';
       code = values[1] || '';
       customerPN = values[2] || '';
       name = values[3] || '';
@@ -209,10 +212,11 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       unit = values[5] || 'EA';
       model = values[6] || '';
       status = values[7] || '';
-      // location: 재고위치(9) 또는 창고명(8)
-      location = values[qtyIndex - 1] || values[8] || '';
+      location = values[8] || '';
+      storageLocation = values[9] || '';
     } else {
       // 9컬럼: 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
+      itemType = '';
       code = values[0] || '';
       customerPN = values[1] || '';
       name = values[2] || '';
@@ -221,12 +225,14 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       unit = values[5] || 'EA';
       status = values[6] || '';
       location = values[7] || '';
+      storageLocation = '';
     }
 
     if (!code) continue;
 
     const item: InventoryItem = {
       id: `parts-${i}`,
+      itemType: itemType || undefined,
       code,
       customerPN,
       name,
@@ -235,6 +241,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       unit,
       status,
       location,
+      storageLocation: storageLocation || undefined,
       qty
     };
 
@@ -291,16 +298,18 @@ const InventoryView: React.FC = () => {
   const [pivotCol, setPivotCol] = useState<string>('location');
   const [pivotSortConfig, setPivotSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // Pivot Field Options
+  // Pivot Field Options (업로더 순서: 품목유형>품목코드>고객사p/n>품목명>규격>단위>차종명>품목상태>창고명>재고위치>재고)
   const PIVOT_FIELDS = [
-    { key: 'model', label: '차종명' },
-    { key: 'customerPN', label: '고객사 P/N' },
+    { key: 'itemType', label: '품목유형' },
     { key: 'code', label: '품목코드' },
+    { key: 'customerPN', label: '고객사 P/N' },
     { key: 'name', label: '품목명' },
     { key: 'spec', label: '규격' },
     { key: 'unit', label: '단위' },
-    { key: 'status', label: '상태' },
+    { key: 'model', label: '차종명' },
+    { key: 'status', label: '품목상태' },
     { key: 'location', label: '창고명' },
+    { key: 'storageLocation', label: '재고위치' },
   ];
 
   // --- Persistence ---
@@ -438,6 +447,7 @@ const InventoryView: React.FC = () => {
   const filteredPartsData = useMemo(() => {
     let result = inventoryData.parts.filter(item => item.code && item.code.trim() !== '');
 
+    if (filterValues.itemType) result = result.filter(item => (item.itemType || '').toLowerCase().includes(filterValues.itemType.toLowerCase()));
     if (filterValues.code) result = result.filter(item => item.code.toLowerCase().includes(filterValues.code.toLowerCase()));
     if (filterValues.customerPN) result = result.filter(item => (item.customerPN || '').toLowerCase().includes(filterValues.customerPN.toLowerCase()));
     if (filterValues.name) result = result.filter(item => item.name.toLowerCase().includes(filterValues.name.toLowerCase()));
@@ -445,6 +455,7 @@ const InventoryView: React.FC = () => {
     if (filterValues.model) result = result.filter(item => (item.model || '').toLowerCase().includes(filterValues.model.toLowerCase()));
     if (filterValues.status) result = result.filter(item => (item.status || '').toLowerCase().includes(filterValues.status.toLowerCase()));
     if (filterValues.location) result = result.filter(item => item.location.toLowerCase().includes(filterValues.location.toLowerCase()));
+    if (filterValues.storageLocation) result = result.filter(item => (item.storageLocation || '').toLowerCase().includes(filterValues.storageLocation.toLowerCase()));
     if (filterValues.qty) result = result.filter(item => String(item.qty).includes(filterValues.qty));
 
     if (sortConfig) {
@@ -556,10 +567,10 @@ const InventoryView: React.FC = () => {
   };
 
   const handleDownloadParts = () => {
-    const headers = ['품목코드', '고객사 P/N', '품목명', '규격', '단위', '차종명', '상태', '창고명', '재고'];
+    const headers = ['품목유형', '품목코드', '고객사 P/N', '품목명', '규격', '단위', '차종명', '품목상태', '창고명', '재고위치', '재고'];
     const rows = filteredPartsData.map(item => [
-      item.code, item.customerPN, item.name, item.spec, item.unit,
-      item.model, item.status, item.location, item.qty
+      item.itemType ?? '', item.code, item.customerPN ?? '', item.name, item.spec ?? '', item.unit,
+      item.model ?? '', item.status ?? '', item.location, item.storageLocation ?? '', item.qty
     ]);
     downloadCSV('부품_창고별재고', headers, rows);
   };
@@ -845,31 +856,36 @@ const InventoryView: React.FC = () => {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
+                      <SortableHeader label="품목유형" sortKey="itemType" />
                       <SortableHeader label="품목코드" sortKey="code" />
                       <SortableHeader label="고객사 P/N" sortKey="customerPN" />
                       <SortableHeader label="품목명" sortKey="name" />
                       <SortableHeader label="규격" sortKey="spec" />
                       <SortableHeader label="단위" sortKey="unit" align="center" />
                       <SortableHeader label="차종명" sortKey="model" align="center" />
-                      <SortableHeader label="상태" sortKey="status" align="center" />
+                      <SortableHeader label="품목상태" sortKey="status" align="center" />
                       <SortableHeader label="창고명" sortKey="location" align="center" />
+                      <SortableHeader label="재고위치" sortKey="storageLocation" align="center" />
                       <SortableHeader label="재고" sortKey="qty" align="right" />
                     </tr>
                     <tr className="bg-slate-50">
+                      <th className="px-2 py-2"><input type="text" placeholder="품목유형" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.itemType || ''} onChange={(e) => handleFilterChange('itemType', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="품목코드" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.code || ''} onChange={(e) => handleFilterChange('code', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.customerPN || ''} onChange={(e) => handleFilterChange('customerPN', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="품목명" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.name || ''} onChange={(e) => handleFilterChange('name', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="규격" className="w-full p-1 border rounded text-xs font-normal" value={filterValues.spec || ''} onChange={(e) => handleFilterChange('spec', e.target.value)} /></th>
                       <th className="px-2 py-2"></th>
                       <th className="px-2 py-2"><input type="text" placeholder="차종명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.model || ''} onChange={(e) => handleFilterChange('model', e.target.value)} /></th>
-                      <th className="px-2 py-2"><input type="text" placeholder="상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="품목상태" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.status || ''} onChange={(e) => handleFilterChange('status', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="창고명" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.location || ''} onChange={(e) => handleFilterChange('location', e.target.value)} /></th>
+                      <th className="px-2 py-2"><input type="text" placeholder="재고위치" className="w-full p-1 border rounded text-xs font-normal text-center" value={filterValues.storageLocation || ''} onChange={(e) => handleFilterChange('storageLocation', e.target.value)} /></th>
                       <th className="px-2 py-2"><input type="text" placeholder="재고" className="w-full p-1 border rounded text-xs font-normal text-right" value={filterValues.qty || ''} onChange={(e) => handleFilterChange('qty', e.target.value)} /></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredPartsData.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-600">{item.itemType || '-'}</td>
                         <td className="px-4 py-3 font-mono text-slate-600">{item.code}</td>
                         <td className="px-4 py-3 text-slate-600">{item.customerPN || '-'}</td>
                         <td className="px-4 py-3 text-slate-800">{item.name}</td>
@@ -878,17 +894,18 @@ const InventoryView: React.FC = () => {
                         <td className="px-4 py-3 text-center text-slate-600">{item.model || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
+                        <td className="px-4 py-3 text-center text-slate-600">{item.storageLocation || '-'}</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
                       </tr>
                     ))}
                     {filteredPartsData.length === 0 && (
-                      <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
+                      <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-400">데이터가 없습니다. CSV를 업로드해주세요.</td></tr>
                     )}
                   </tbody>
                   {filteredPartsData.length > 0 && (
                     <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                       <tr>
-                        <td colSpan={8} className="px-4 py-3 text-center">합계 (Total)</td>
+                        <td colSpan={10} className="px-4 py-3 text-center">합계 (Total)</td>
                         <td className="px-4 py-3 text-right font-mono text-violet-600">{partsTotal.toLocaleString()}</td>
                       </tr>
                     </tfoot>
