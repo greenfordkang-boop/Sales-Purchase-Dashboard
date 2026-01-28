@@ -1081,8 +1081,7 @@ const SalesView: React.FC = () => {
           )}
 
           {/* 품목별 매출현황 (신규 섹션) */}
-          {itemRevenueStats.items.length > 0 && (
-            <div className="mb-6">
+          <div className="mb-6">
               <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
                 <span className="w-1 h-4 bg-emerald-500 rounded-full"></span>
                 품목별 매출현황
@@ -1143,8 +1142,7 @@ const SalesView: React.FC = () => {
                   </tfoot>
                 </table>
               </div>
-            </div>
-          )}
+          </div>
 
           {/* Revenue Data Table */}
           <div className="mt-6">
