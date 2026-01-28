@@ -1,16 +1,24 @@
-
 export interface RevenueItem {
   id: number;
-  year: number; // Added year field
-  month: string;
+  year: number;      // 고객사별 매출현황에서 사용
+  month: string;     // "01월" 형식
   customer: string;
   model: string;
-  // 품목별 매출현황을 위한 추가 필드 (옵션)
-  partNo?: string;
-  customerPN?: string;
-  partName?: string;
   qty: number;
   amount: number;
+}
+
+// 품목별 매출 업로더용 타입
+export interface ItemRevenueRow {
+  id: number;
+  period: string;     // 매출기간 (원본 문자열)
+  customer: string;   // 고객사
+  model: string;      // 품종 / Model
+  partNo: string;     // 품번
+  customerPN: string; // 고객사 P/N
+  partName: string;   // 품명
+  qty: number;        // 매출수량
+  amount: number;     // 매출금액
 }
 
 // Helper to split CSV line handling quoted commas
@@ -42,116 +50,68 @@ const parseNumber = (value: string | undefined): number => {
   return isNaN(num) ? 0 : num;
 };
 
-// 헤더에서 컬럼 인덱스 찾기 (공백/대소문자 무시)
-const findCol = (headers: string[], keywords: string[]): number => {
-  const normalized = headers.map(h => h.replace(/\s/g, '').toLowerCase());
-  for (const kw of keywords) {
-    const k = kw.replace(/\s/g, '').toLowerCase();
-    const idx = normalized.findIndex(h => h === k || h.includes(k) || k.includes(h));
-    if (idx !== -1) return idx;
-  }
-  return -1;
-};
-
 // Helper to normalize month string (e.g., "1" -> "01월", "01" -> "01월", "1월" -> "01월")
 const normalizeMonth = (value: string): string => {
   if (!value) return '00월';
-  // Remove existing '월' and whitespace
   const cleanValue = value.replace(/월/g, '').trim();
   const num = parseInt(cleanValue, 10);
-  
-  if (isNaN(num) || num < 1 || num > 12) return value; // Return original if not a valid month number
-  
-  // Pad with 0 and append '월'
+  if (isNaN(num) || num < 1 || num > 12) return value;
   return `${num.toString().padStart(2, '0')}월`;
 };
 
+// 기존 고객사별 매출현황 CSV 파서
+// CSV: Index, Month, Customer, Model, Qty, Amount
 export const parseRevenueCSV = (csvContent: string, year: number): RevenueItem[] => {
+  const lines = csvContent.split('\n').filter(line => line.trim() !== '');
+  if (lines.length < 2) return [];
+
+  // 첫 줄은 헤더라고 가정
+  const dataRows = lines.slice(1);
+
+  return dataRows.map((line, index) => {
+    const cols = splitCSVLine(line);
+    return {
+      id: Date.now() + index + year * 10000,
+      year,
+      month: normalizeMonth(cols[1] || ''),
+      customer: cols[2] || 'Unknown',
+      model: cols[3] || '',
+      qty: parseNumber(cols[4]),
+      amount: parseNumber(cols[5])
+    };
+  });
+};
+
+// 품목별 매출 업로더용 CSV 파서
+// 업로더: (첫 열 이름 없음), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액
+export const parseItemRevenueCSV = (csvContent: string): ItemRevenueRow[] => {
   const cleanText = csvContent.replace(/^\uFEFF/, '');
   const lines = cleanText.split('\n').filter(line => line.trim() !== '');
   if (lines.length < 2) return [];
 
-  const headerLine = lines[0];
-  const headerValues = splitCSVLine(headerLine);
+  const headerCols = splitCSVLine(lines[0]);
+  const offset = headerCols[0]?.trim() === '' ? 1 : 0;
 
-  // 새 업로더 형식 예시:
-  // [빈칸], 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액
-  const headerString = headerValues.join(',');
-  const hasKnownHeader =
-    /매출기간|고객사|매출수량|매출금액/i.test(headerString);
-
-  let dataStartIndex = hasKnownHeader ? 1 : 0;
-
-  let colMonth: number;
-  let colCustomer: number;
-  let colModel: number;
-  let colPartNo: number;
-  let colCustomerPN: number;
-  let colPartName: number;
-  let colQty: number;
-  let colAmount: number;
-
-  if (hasKnownHeader) {
-    const h = headerValues;
-
-    const idxMonth = findCol(h, ['매출기간', '기간', '월', 'Month']);
-    const idxCustomer = findCol(h, ['고객사', 'Customer']);
-    const idxModel = findCol(h, ['model', '모델', '품종', 'Model']);
-    const idxPartNo = findCol(h, ['품번', 'PartNo', 'Part No']);
-    const idxCustomerPN = findCol(h, ['고객사p/n', '고객사 P/N', 'P/N']);
-    const idxPartName = findCol(h, ['품명', '품목명', 'ItemName']);
-    const idxQty = findCol(h, ['매출수량', '수량', 'Qty', 'QTY']);
-    const idxAmount = findCol(h, ['매출금액', '금액', 'Amount']);
-
-    // 기본 위치 (업로더 규격): [index], 1:기간, 2:고객사, 3:model, 4:품번, 5:고객사p/n, 6:품명, 7:수량, 8:금액
-    colMonth = idxMonth >= 0 ? idxMonth : 1;
-    colCustomer = idxCustomer >= 0 ? idxCustomer : 2;
-    colModel = idxModel >= 0 ? idxModel : 3;
-    colPartNo = idxPartNo >= 0 ? idxPartNo : 4;
-    colCustomerPN = idxCustomerPN >= 0 ? idxCustomerPN : 5;
-    colPartName = idxPartName >= 0 ? idxPartName : 6;
-    colQty = idxQty >= 0 ? idxQty : 7;
-    colAmount = idxAmount >= 0 ? idxAmount : 8;
-  } else {
-    // 구(舊) 포맷 호환: Index, Month, Customer, Model, Qty, Amount
-    colMonth = 1;
-    colCustomer = 2;
-    colModel = 3;
-    colPartNo = -1;
-    colCustomerPN = -1;
-    colPartName = -1;
-    colQty = 4;
-    colAmount = 5;
-  }
-
-  const dataRows = lines.slice(dataStartIndex);
+  const dataRows = lines.slice(1);
 
   return dataRows
     .map((line, index) => {
       const cols = splitCSVLine(line);
-      if (cols.length === 0) return null;
+      if (cols.length < offset + 8) return null;
 
-      const monthRaw = cols[colMonth] || '';
-      const customer = cols[colCustomer] || 'Unknown';
-      const model = cols[colModel] || '';
-      const partNo = colPartNo >= 0 ? (cols[colPartNo] || '') : '';
-      const customerPN = colCustomerPN >= 0 ? (cols[colCustomerPN] || '') : '';
-      const partName = colPartName >= 0 ? (cols[colPartName] || '') : '';
-      const qty = parseNumber(cols[colQty]);
-      const amount = parseNumber(cols[colAmount]);
-
+      const base = offset;
       return {
-        id: Date.now() + index + year * 10000,
-        year,
-        month: normalizeMonth(monthRaw),
-        customer,
-        model,
-        partNo: partNo || undefined,
-        customerPN: customerPN || undefined,
-        partName: partName || undefined,
-        qty,
-        amount,
-      } as RevenueItem;
+        id: Date.now() + index,
+        period: cols[base] || '',
+        customer: cols[base + 1] || '',
+        model: cols[base + 2] || '',
+        partNo: cols[base + 3] || '',
+        customerPN: cols[base + 4] || '',
+        partName: cols[base + 5] || '',
+        qty: parseNumber(cols[base + 6]),
+        amount: parseNumber(cols[base + 7]),
+      };
     })
-    .filter((item): item is RevenueItem => item !== null);
+    .filter((row): row is ItemRevenueRow => row !== null);
 };
+
