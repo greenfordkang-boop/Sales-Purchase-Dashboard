@@ -155,26 +155,33 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
 };
 
 // Parse Parts CSV
-// CSV 형식: 품목유형, 품목코드, 고객사P/N, 품목명, 규격, 단위, 차종명, 품목상태, 창고위치, 재고위치, 재고 (11컬럼)
-// 천 단위 쉼표가 있으면 병합 후 10컬럼이 됨
+// CSV 형식: 품목유형, 품목코드, 고객사P/N, 품목명, 규격, 단위, 차종명, 품목상태, 창고명, 재고위치, 재고 (11컬럼)
 const parsePartsCSV = (csvText: string): InventoryItem[] => {
-  const lines = csvText.split('\n').filter(line => line.trim());
+  // BOM 제거
+  const cleanText = csvText.replace(/^\uFEFF/, '');
+  const lines = cleanText.split('\n').filter(line => line.trim());
+
   if (lines.length < 2) {
     console.warn('Parts CSV: 데이터가 없습니다.');
     return [];
   }
 
-  // 헤더 분석으로 형식 감지
-  const headerValues = parseCSVLine(lines[0]);
-  console.log('📦 Parts CSV Header:', headerValues);
-  console.log('📦 Total lines:', lines.length - 1);
+  // 헤더 분석 (BOM 제거된 상태)
+  const headerLine = lines[0].replace(/^\uFEFF/, '');
+  const headerValues = parseCSVLine(headerLine);
 
-  // 헤더에서 형식 감지: 첫 컬럼이 '품목유형'이면 11컬럼 형식
-  const isNewFormat = headerValues[0]?.includes('품목유형') ||
-                      headerValues[0]?.includes('유형') ||
+  // 첫 번째 헤더 정리 (BOM 및 공백 제거)
+  const firstHeader = headerValues[0]?.replace(/^\uFEFF/, '').trim() || '';
+
+  console.log('📦 Parts CSV Header:', headerValues);
+  console.log('📦 Header[0]:', JSON.stringify(firstHeader), 'Length:', headerValues.length);
+
+  // 11컬럼 형식 감지: 첫 컬럼이 '품목유형' 또는 컬럼 수가 10개 이상
+  const isNewFormat = firstHeader.includes('품목유형') ||
+                      firstHeader.includes('유형') ||
                       headerValues.length >= 10;
 
-  console.log('📦 Format detected:', isNewFormat ? '11컬럼 (새 형식)' : '9컬럼 (기존 형식)');
+  console.log('📦 isNewFormat:', isNewFormat);
 
   const result: InventoryItem[] = [];
 
@@ -182,7 +189,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     const values = parseCSVLine(lines[i]);
 
     if (values.length < 5) {
-      console.warn(`Parts Line ${i}: 컬럼 부족 (${values.length}개)`, values);
+      console.warn(`Parts Line ${i}: 컬럼 부족 (${values.length}개)`);
       continue;
     }
 
@@ -194,9 +201,7 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     let model: string, unit: string, status: string, location: string;
 
     if (isNewFormat) {
-      // 11컬럼 형식 (품목유형 컬럼이 있음 - 건너뜀)
-      // 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고위치(8), 재고위치(9), 재고(10)
-      // 병합 후: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고위치(8), 재고위치+재고(9)
+      // 11컬럼: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고명(8), 재고위치(9), 재고(10)
       code = values[1] || '';
       customerPN = values[2] || '';
       name = values[3] || '';
@@ -204,11 +209,10 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       unit = values[5] || 'EA';
       model = values[6] || '';
       status = values[7] || '';
-      // 재고위치는 마지막에서 2번째 (병합 전 9, 병합 후 8)
-      location = values[qtyIndex - 1] || '';
+      // location: 재고위치(9) 또는 창고명(8)
+      location = values[qtyIndex - 1] || values[8] || '';
     } else {
-      // 9컬럼 형식 (역방향 인덱싱)
-      // 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
+      // 9컬럼: 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
       code = values[0] || '';
       customerPN = values[1] || '';
       name = values[2] || '';
@@ -234,19 +238,18 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
       qty
     };
 
-    // 첫 3줄 디버그 출력
+    // 첫 3줄 디버그
     if (i <= 3) {
-      console.log(`📦 Parts Line ${i}:`, {
-        valuesCount: values.length,
-        raw: values.slice(0, 5).join(' | ') + '...',
-        parsed: { code: item.code, name: item.name, location: item.location, qty: item.qty }
+      console.log(`📦 Line ${i} [${values.length}]:`, {
+        v0: values[0], v1: values[1],
+        parsed_code: code, parsed_name: name.substring(0, 25), qty
       });
     }
 
     result.push(item);
   }
 
-  console.log(`✅ Parts 파싱 완료: ${result.length}개 항목, 총 수량: ${result.reduce((s, x) => s + x.qty, 0).toLocaleString()}`);
+  console.log(`✅ Parts: ${result.length}개, 총 재고: ${result.reduce((s, x) => s + x.qty, 0).toLocaleString()}`);
   return result;
 };
 
