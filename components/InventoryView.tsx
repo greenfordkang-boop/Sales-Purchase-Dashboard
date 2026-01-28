@@ -30,8 +30,19 @@ interface InventoryItem {
   amount?: number;
 }
 
-// Helper: Split CSV line handling quoted fields
-const splitCSVLine = (line: string): string[] => {
+// Helper: Parse numeric value - handles comma as thousands separator
+const parseNumericValue = (value: string): number => {
+  if (!value || typeof value !== 'string') return 0;
+  // Remove all commas and trim whitespace
+  const cleaned = value.replace(/,/g, '').trim();
+  if (!cleaned) return 0;
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
+// Helper: Parse CSV line - SIMPLE approach
+// Handles: quoted fields, thousands separators in numbers
+const parseCSVLine = (line: string): string[] => {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -48,96 +59,98 @@ const splitCSVLine = (line: string): string[] => {
     }
   }
   result.push(current.trim().replace(/^"|"$/g, ''));
-  return result;
-};
 
-// Helper: Merge values that are parts of numbers with thousands separator
-// e.g., ["A", "B", "1", "234", "567.00"] -> ["A", "B", "1,234,567.00"]
-const mergeThousandsSeparatedNumbers = (values: string[]): string[] => {
-  const result: string[] = [];
+  // Post-process: merge split numbers (e.g., ["1", "234.00"] -> ["1,234.00"])
+  // Only merge from the END of array (where qty column should be)
+  const merged: string[] = [];
   let i = 0;
 
-  while (i < values.length) {
-    const current = values[i];
+  while (i < result.length) {
+    const val = result[i];
 
-    // Check if current is a pure integer and next value looks like it continues a number
-    if (/^\d+$/.test(current) && i + 1 < values.length) {
-      // Look ahead to merge consecutive number parts
-      let merged = current;
-      let j = i + 1;
-
-      while (j < values.length) {
-        const next = values[j];
-        // Next should be exactly 3 digits, or 3 digits followed by decimal
-        if (/^\d{3}$/.test(next) || /^\d{3}\.\d+$/.test(next)) {
-          merged += ',' + next;
-          j++;
-          // If this part has decimal, stop merging
-          if (next.includes('.')) break;
-        } else {
-          break;
-        }
+    // Only try to merge if: pure digits AND next exists AND next looks like continuation
+    if (/^\d+$/.test(val) && i + 1 < result.length) {
+      const next = result[i + 1];
+      // Check if next is: 3 digits, OR 3+ digits with decimal, OR 2-3 digits with decimal
+      if (/^\d{2,3}$/.test(next) || /^\d{2,3}\.\d*$/.test(next)) {
+        // Merge them
+        merged.push(val + ',' + next);
+        i += 2;
+        continue;
       }
-
-      // Only use merged if we actually merged something
-      if (j > i + 1) {
-        result.push(merged);
-        i = j;
-      } else {
-        result.push(current);
-        i++;
-      }
-    } else {
-      result.push(current);
-      i++;
     }
+
+    merged.push(val);
+    i++;
   }
 
-  return result;
-};
-
-// Helper: Parse CSV line with thousands separator support
-const parseCSVLine = (line: string): string[] => {
-  const rawValues = splitCSVLine(line);
-  return mergeThousandsSeparatedNumbers(rawValues);
-};
-
-// Helper: Parse numeric value with comma formatting (e.g., "1,097.00" -> 1097)
-const parseNumericValue = (value: string): number => {
-  if (!value) return 0;
-  // Remove commas from number and parse
-  const cleaned = value.replace(/,/g, '').trim();
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+  return merged;
 };
 
 // Parse Material CSV (Resin/Paint)
-// CSV 형식: (index), 재질코드, 재질명, 단위, 창고명, 현재고
+// CSV 형식: 재질코드, 재질명, 단위, 창고명, 현재고 (5컬럼)
+// 또는: index, 재질코드, 재질명, 단위, 창고명, 현재고 (6컬럼)
 const parseMaterialCSV = (csvText: string): MaterialItem[] => {
   const lines = csvText.split('\n').filter(line => line.trim());
-  if (lines.length < 2) return [];
+  if (lines.length < 2) {
+    console.warn('CSV 파일에 데이터가 없습니다.');
+    return [];
+  }
+
+  // 헤더 분석으로 컬럼 수 확인
+  const headerValues = parseCSVLine(lines[0]);
+  console.log('📋 CSV Header:', headerValues);
+  console.log('📋 Total lines:', lines.length - 1);
 
   const result: MaterialItem[] = [];
+
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
-    if (values.length >= 5) {
-      // Check if first column is numeric (index column) - skip it
-      const hasIndexColumn = !isNaN(Number(values[0])) && values.length >= 6;
-      const offset = hasIndexColumn ? 1 : 0;
 
-      const code = values[offset] || '';
-      if (!code) continue;
-
-      result.push({
-        id: `mat-${i}`,
-        code: code,
-        name: values[offset + 1] || '',
-        unit: values[offset + 2] || 'Kg',
-        location: values[offset + 3] || '',
-        qty: parseNumericValue(values[offset + 4])
-      });
+    // 최소 5개 컬럼 필요
+    if (values.length < 5) {
+      console.warn(`Line ${i}: 컬럼 부족 (${values.length}개)`, values);
+      continue;
     }
+
+    // 인덱스 컬럼 감지: 첫 값이 순수 숫자이고 컬럼이 6개 이상
+    const firstVal = values[0];
+    const isFirstNumeric = /^\d+$/.test(firstVal);
+    const hasIndexColumn = isFirstNumeric && values.length >= 6;
+    const offset = hasIndexColumn ? 1 : 0;
+
+    // 마지막 값이 qty (숫자여야 함)
+    const qtyIndex = values.length - 1;
+    const qtyRaw = values[qtyIndex];
+    const qty = parseNumericValue(qtyRaw);
+
+    // 컬럼 매핑 (끝에서부터 역순으로)
+    const locationIndex = qtyIndex - 1;
+    const unitIndex = qtyIndex - 2;
+    const nameIndex = qtyIndex - 3;
+    const codeIndex = qtyIndex - 4;
+
+    const code = values[codeIndex] || '';
+    if (!code) continue;
+
+    const item: MaterialItem = {
+      id: `mat-${i}`,
+      code: code,
+      name: values[nameIndex] || '',
+      unit: values[unitIndex] || 'Kg',
+      location: values[locationIndex] || '',
+      qty: qty
+    };
+
+    // 첫 3줄 디버그 출력
+    if (i <= 3) {
+      console.log(`📋 Line ${i}:`, { raw: values, parsed: item, qtyRaw });
+    }
+
+    result.push(item);
   }
+
+  console.log(`✅ 파싱 완료: ${result.length}개 항목, 총 수량: ${result.reduce((s, x) => s + x.qty, 0).toLocaleString()}`);
   return result;
 };
 
