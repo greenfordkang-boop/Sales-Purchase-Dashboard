@@ -156,10 +156,20 @@ const parseMaterialCSV = (csvText: string): MaterialItem[] => {
   return result;
 };
 
+// 헤더에서 컬럼 인덱스 찾기 (앞에 번호 등 추가 컬럼이 있어도 올바른 컬럼 사용)
+const findCol = (headers: string[], keywords: string[]): number => {
+  const normalized = headers.map(h => h.replace(/\s/g, '').toLowerCase());
+  for (const kw of keywords) {
+    const k = kw.replace(/\s/g, '').toLowerCase();
+    const idx = normalized.findIndex(h => h === k || h.includes(k) || k.includes(h));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+};
+
 // Parse Parts CSV
-// CSV 형식: 품목유형, 품목코드, 고객사P/N, 품목명, 규격, 단위, 차종명, 품목상태, 창고명, 재고위치, 재고 (11컬럼)
+// 업로더 형식: 품목유형, 품목코드, 고객사P/N, 품목명, 규격, 단위, 차종명, 품목상태, 창고명, 재고위치, 재고 (11컬럼)
 const parsePartsCSV = (csvText: string): InventoryItem[] => {
-  // BOM 제거
   const cleanText = csvText.replace(/^\uFEFF/, '');
   const lines = cleanText.split('\n').filter(line => line.trim());
 
@@ -168,92 +178,82 @@ const parsePartsCSV = (csvText: string): InventoryItem[] => {
     return [];
   }
 
-  // 헤더 분석 (BOM 제거된 상태)
   const headerLine = lines[0].replace(/^\uFEFF/, '');
   const headerValues = parseCSVLine(headerLine);
 
-  // 첫 번째 헤더 정리 (BOM 및 공백 제거)
-  const firstHeader = headerValues[0]?.replace(/^\uFEFF/, '').trim() || '';
-
   console.log('📦 Parts CSV Header:', headerValues);
-  console.log('📦 Header[0]:', JSON.stringify(firstHeader), 'Length:', headerValues.length);
 
-  // 11컬럼 형식 감지: 첫 컬럼이 '품목유형' 또는 컬럼 수가 10개 이상
-  const isNewFormat = firstHeader.includes('품목유형') ||
-                      firstHeader.includes('유형') ||
-                      headerValues.length >= 10;
+  const hasItemType = findCol(headerValues, ['품목유형', '유형']) >= 0;
+  const hasStorageLocation = findCol(headerValues, ['재고위치']) >= 0;
+  const isNewFormat = hasItemType || hasStorageLocation || headerValues.length >= 10;
 
-  console.log('📦 isNewFormat:', isNewFormat);
+  // 헤더 이름으로 컬럼 인덱스 계산 (앞에 번호 등 추가 컬럼이 있어도 올바른 컬럼 사용)
+  const colItemType = findCol(headerValues, ['품목유형', '유형']);
+  const colCode = findCol(headerValues, ['품목코드', '코드']);
+  const colCustomerPN = findCol(headerValues, ['고객사P/N', '고객사 P/N', '고객사p/n']);
+  const colName = findCol(headerValues, ['품목명']);
+  const colSpec = findCol(headerValues, ['규격']);
+  const colUnit = findCol(headerValues, ['단위']);
+  const colModel = findCol(headerValues, ['차종명']);
+  const colStatus = findCol(headerValues, ['품목상태', '상태']);
+  const colLocation = findCol(headerValues, ['창고명']);
+  const colStorageLocation = findCol(headerValues, ['재고위치']);
+  // '재고'만 매칭 (재고위치 제외): 정확히 '재고'인 헤더 또는 마지막 컬럼
+  const colQty = headerValues.findIndex((h: string) => h.trim() === '재고') >= 0
+    ? headerValues.findIndex((h: string) => h.trim() === '재고')
+    : headerValues.length - 1;
+
+  const col = {
+    itemType: isNewFormat ? colItemType : -1,
+    code: colCode >= 0 ? colCode : 0,
+    customerPN: colCustomerPN >= 0 ? colCustomerPN : 1,
+    name: colName >= 0 ? colName : 2,
+    spec: colSpec >= 0 ? colSpec : 3,
+    unit: colUnit >= 0 ? colUnit : 5,
+    model: colModel >= 0 ? colModel : 6,
+    status: colStatus >= 0 ? colStatus : 7,
+    location: colLocation >= 0 ? colLocation : 8,
+    storageLocation: colStorageLocation >= 0 ? colStorageLocation : -1,
+    qty: colQty,
+  };
+  console.log('📦 Column map:', col);
 
   const result: InventoryItem[] = [];
 
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i]);
+    if (values.length < 3) continue;
 
-    if (values.length < 5) {
-      console.warn(`Parts Line ${i}: 컬럼 부족 (${values.length}개)`);
-      continue;
-    }
+    const read = (idx: number, fallback: string) => (idx >= 0 && idx < values.length ? values[idx] || '' : fallback);
 
-    // 마지막 컬럼이 재고(qty)
-    const qtyIndex = values.length - 1;
-    const qty = parseNumericValue(values[qtyIndex]);
+    const itemType = col.itemType >= 0 ? read(col.itemType, '') : '';
+    const code = read(col.code, '');
+    const customerPN = read(col.customerPN, '');
+    const name = read(col.name, '');
+    const spec = read(col.spec, '');
+    const unit = read(col.unit, 'EA');
+    const model = read(col.model, '');
+    const status = read(col.status, '');
+    const location = read(col.location, '');
+    const storageLocation = col.storageLocation >= 0 ? read(col.storageLocation, '') : '';
+    const qty = parseNumericValue(read(col.qty, '0'));
 
-    let itemType: string, code: string, customerPN: string, name: string, spec: string;
-    let model: string, unit: string, status: string, location: string, storageLocation: string;
+    if (!code || !code.trim()) continue;
 
-    if (isNewFormat) {
-      // 11컬럼: 품목유형(0), 품목코드(1), 고객사P/N(2), 품목명(3), 규격(4), 단위(5), 차종명(6), 품목상태(7), 창고명(8), 재고위치(9), 재고(10)
-      itemType = values[0] || '';
-      code = values[1] || '';
-      customerPN = values[2] || '';
-      name = values[3] || '';
-      spec = values[4] || '';
-      unit = values[5] || 'EA';
-      model = values[6] || '';
-      status = values[7] || '';
-      location = values[8] || '';
-      storageLocation = values[9] || '';
-    } else {
-      // 9컬럼: 품목코드(0), 고객사P/N(1), 품목명(2), 규격(3), 차종명(4), 단위(5), 상태(6), 창고명(7), 재고(8)
-      itemType = '';
-      code = values[0] || '';
-      customerPN = values[1] || '';
-      name = values[2] || '';
-      spec = values[3] || '';
-      model = values[4] || '';
-      unit = values[5] || 'EA';
-      status = values[6] || '';
-      location = values[7] || '';
-      storageLocation = '';
-    }
-
-    if (!code) continue;
-
-    const item: InventoryItem = {
+    result.push({
       id: `parts-${i}`,
-      itemType: itemType || undefined,
-      code,
-      customerPN,
-      name,
-      spec,
-      model,
-      unit,
-      status,
-      location,
-      storageLocation: storageLocation || undefined,
-      qty
-    };
-
-    // 첫 3줄 디버그
-    if (i <= 3) {
-      console.log(`📦 Line ${i} [${values.length}]:`, {
-        v0: values[0], v1: values[1],
-        parsed_code: code, parsed_name: name.substring(0, 25), qty
-      });
-    }
-
-    result.push(item);
+      itemType: itemType?.trim() || undefined,
+      code: code.trim(),
+      customerPN: customerPN?.trim() || undefined,
+      name: (name || '').trim(),
+      spec: spec?.trim() || undefined,
+      unit: unit?.trim() || 'EA',
+      model: model?.trim() || undefined,
+      status: status?.trim() || undefined,
+      location: (location || '').trim(),
+      storageLocation: storageLocation?.trim() || undefined,
+      qty,
+    });
   }
 
   console.log(`✅ Parts: ${result.length}개, 총 재고: ${result.reduce((s, x) => s + x.qty, 0).toLocaleString()}`);
