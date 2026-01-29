@@ -87,20 +87,47 @@ export const parseRevenueCSV = (csvContent: string, year: number): RevenueItem[]
 export const parseItemRevenueCSV = (csvContent: string): ItemRevenueRow[] => {
   const cleanText = csvContent.replace(/^\uFEFF/, '');
   const lines = cleanText.split('\n').filter(line => line.trim() !== '');
-  if (lines.length < 2) return [];
+  
+  console.log(`📊 품목별 매출 CSV 파싱 시작: ${lines.length}줄`);
+  
+  if (lines.length < 2) {
+    console.warn('품목별 매출 CSV: 데이터가 없습니다 (최소 2줄 필요: 헤더 + 데이터)');
+    return [];
+  }
 
   const headerCols = splitCSVLine(lines[0]);
-  const offset = headerCols[0]?.trim() === '' ? 1 : 0;
+  console.log('📊 헤더 컬럼:', headerCols);
+  console.log('📊 헤더 컬럼 수:', headerCols.length);
+  
+  // 첫 열이 비어있는지 확인 (헤더 또는 첫 데이터 행 기준)
+  let offset = 0;
+  if (headerCols.length > 0 && headerCols[0]?.trim() === '') {
+    offset = 1;
+    console.log('📊 첫 열이 비어있음 - offset = 1');
+  } else if (lines.length > 1) {
+    // 첫 데이터 행 확인
+    const firstDataCols = splitCSVLine(lines[1]);
+    if (firstDataCols.length > 0 && firstDataCols[0]?.trim() === '') {
+      offset = 1;
+      console.log('📊 첫 데이터 행의 첫 열이 비어있음 - offset = 1');
+    }
+  }
 
   const dataRows = lines.slice(1);
+  console.log(`📊 데이터 행 수: ${dataRows.length}`);
 
-  return dataRows
+  const result = dataRows
     .map((line, index) => {
       const cols = splitCSVLine(line);
-      if (cols.length < offset + 8) return null;
+      const requiredCols = offset + 8; // offset + 8개 컬럼 필요
+      
+      if (cols.length < requiredCols) {
+        console.warn(`📊 행 ${index + 2} 건너뜀: 컬럼 수 부족 (${cols.length} < ${requiredCols})`, cols);
+        return null;
+      }
 
       const base = offset;
-      return {
+      const row = {
         id: Date.now() + index,
         period: cols[base] || '',
         customer: cols[base + 1] || '',
@@ -111,7 +138,23 @@ export const parseItemRevenueCSV = (csvContent: string): ItemRevenueRow[] => {
         qty: parseNumber(cols[base + 6]),
         amount: parseNumber(cols[base + 7]),
       };
+
+      // 빈 행 체크 (모든 필드가 비어있으면 제외)
+      if (!row.period && !row.customer && !row.model && !row.partNo && row.qty === 0 && row.amount === 0) {
+        return null;
+      }
+
+      return row;
     })
     .filter((row): row is ItemRevenueRow => row !== null);
+
+  console.log(`✅ 품목별 매출 파싱 완료: ${result.length}건 (총 ${dataRows.length}행 중)`);
+  
+  if (result.length === 0 && dataRows.length > 0) {
+    console.error('📊 파싱된 데이터가 없습니다. CSV 형식을 확인하세요.');
+    console.error('📊 예상 형식: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
+  }
+
+  return result;
 };
 

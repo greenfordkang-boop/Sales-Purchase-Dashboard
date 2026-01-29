@@ -682,10 +682,66 @@ const SalesView: React.FC = () => {
   // 품목별 매출 CSV 업로드 핸들러 (별도 파일)
   const handleItemRevenueFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const parsed = parseItemRevenueCSV(event.target?.result as string);
+    if (!file) {
+      e.target.value = '';
+      return;
+    }
+
+    // CSV 인코딩 자동 감지 (UTF-8 우선, 깨지면 EUC-KR 재시도)
+    const readCsvWithEncoding = (
+      file: File,
+      onLoaded: (text: string) => void
+    ) => {
+      const readAsEncoding = (encoding: string, cb: (text: string) => void) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          cb((event.target?.result as string) || '');
+        };
+        reader.onerror = () => {
+          console.error(`파일 읽기 실패 (${encoding})`);
+          cb('');
+        };
+        reader.readAsText(file, encoding);
+      };
+
+      // 1차: UTF-8
+      readAsEncoding('utf-8', (utf8Text) => {
+        if (!utf8Text) {
+          // UTF-8 읽기 실패 시 EUC-KR 시도
+          readAsEncoding('euc-kr', (eucKrText) => onLoaded(eucKrText || utf8Text));
+          return;
+        }
+
+        const brokenPattern = /�|Ã.|Â./g;
+        const brokenMatches = utf8Text.match(brokenPattern);
+        const brokenRatio = brokenMatches ? brokenMatches.length / utf8Text.length : 0;
+
+        if (brokenRatio > 0.01) {
+          // 깨짐 비율이 높으면 EUC-KR로 다시 읽기
+          readAsEncoding('euc-kr', (eucKrText) => onLoaded(eucKrText || utf8Text));
+        } else {
+          onLoaded(utf8Text);
+        }
+      });
+    };
+
+    readCsvWithEncoding(file, async (csvText) => {
+      try {
+        if (!csvText || csvText.trim().length === 0) {
+          alert('파일이 비어있거나 읽을 수 없습니다.');
+          return;
+        }
+
+        console.log('📂 품목별 매출 CSV 파싱 시작...');
+        const parsed = parseItemRevenueCSV(csvText);
+        
+        if (parsed.length === 0) {
+          alert('CSV 파일에서 데이터를 찾을 수 없습니다.\n파일 형식을 확인해주세요.\n\n필요한 컬럼: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
+          return;
+        }
+
+        console.log(`✅ 품목별 매출 데이터 파싱 완료: ${parsed.length}건`);
+        
         setItemRevenueData(parsed);
         localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(parsed));
 
@@ -693,14 +749,20 @@ const SalesView: React.FC = () => {
         if (isSupabaseConfigured()) {
           try {
             await itemRevenueService.saveAll(parsed);
-            console.log('✅ 품목별 매출 데이터 Supabase 동기화 완료');
+            console.log(`✅ 품목별 매출 데이터 Supabase 동기화 완료: ${parsed.length}건`);
           } catch (err) {
             console.error('Supabase 동기화 실패:', err);
+            alert('데이터는 로컬에 저장되었지만 Supabase 동기화에 실패했습니다.');
           }
         }
-      };
-      reader.readAsText(file);
-    }
+
+        alert(`품목별 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
+      } catch (err) {
+        console.error('품목별 매출 데이터 업로드 실패:', err);
+        alert('품목별 매출 데이터 업로드에 실패했습니다.\nCSV 형식을 확인해주세요.\n\n필요한 컬럼: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
+      }
+    });
+
     e.target.value = '';
   };
 
