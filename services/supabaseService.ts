@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { SalesItem, CustomerSalesData, MonthlyStats } from '../utils/salesDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
 import { RevenueItem, ItemRevenueRow } from '../utils/revenueDataParser';
+import { SupplierItem } from '../utils/supplierDataParser';
 import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
@@ -939,6 +940,66 @@ export const rfqService = {
 };
 
 // ============================================
+// Supplier Data Service (협력사 관리)
+// ============================================
+
+export const supplierService = {
+  async getAll(): Promise<SupplierItem[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_supplierData');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const { data, error } = await supabase!
+      .from('supplier_data')
+      .select('*')
+      .order('company_name');
+
+    if (error) handleError(error, 'supplier getAll');
+
+    return data?.map((row: any, index: number) => ({
+      id: row.id || `supplier-${Date.now()}-${index}`,
+      companyName: row.company_name || '',
+      businessNumber: row.business_number || '',
+      ceo: row.ceo || '',
+      address: row.address || '',
+      purchaseAmount2025: row.purchase_amount_2025 || 0,
+      purchaseAmount2024: row.purchase_amount_2024 || 0,
+      purchaseAmount2023: row.purchase_amount_2023 || 0,
+    })) || [];
+  },
+
+  async saveAll(data: SupplierItem[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+      return;
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('supplier_data')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) handleError(deleteError, 'supplier delete');
+
+    // localStorage에 먼저 저장 (데이터 손실 방지)
+    localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+
+    const rows = data.map(item => ({
+      company_name: item.companyName,
+      business_number: item.businessNumber,
+      ceo: item.ceo,
+      address: item.address,
+      purchase_amount_2025: Math.round(item.purchaseAmount2025 || 0),
+      purchase_amount_2024: Math.round(item.purchaseAmount2024 || 0),
+      purchase_amount_2023: Math.round(item.purchaseAmount2023 || 0),
+    }));
+
+    await insertInBatches('supplier_data', rows);
+  }
+};
+
+// ============================================
 // Utility: Sync All Data to Supabase
 // ============================================
 
@@ -957,6 +1018,7 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
     const inventoryV2Data = localStorage.getItem('dashboard_inventory_v2');
     const crData = localStorage.getItem('dashboard_crData');
     const rfqData = localStorage.getItem('dashboard_rfqData');
+    const supplierData = localStorage.getItem('dashboard_supplierData');
 
     // Sync each data type
     if (salesData) await salesService.saveAll(JSON.parse(salesData));
@@ -967,6 +1029,7 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
     if (inventoryV2Data) await inventoryService.saveInventoryV2?.(JSON.parse(inventoryV2Data));
     if (crData) await crService.saveAll(JSON.parse(crData));
     if (rfqData) await rfqService.saveAll(JSON.parse(rfqData));
+    if (supplierData) await supplierService.saveAll(JSON.parse(supplierData));
 
     return { success: true, message: 'All data synced to Supabase successfully!' };
   } catch (error: any) {
@@ -993,6 +1056,7 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
     const inventoryV2Data = await inventoryService.getInventoryV2?.();
     const crData = await crService.getAll();
     const rfqData = await rfqService.getAll();
+    const supplierData = await supplierService.getAll();
 
     localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
     localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
@@ -1002,6 +1066,7 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
     if (inventoryV2Data) localStorage.setItem('dashboard_inventory_v2', JSON.stringify(inventoryV2Data));
     localStorage.setItem('dashboard_crData', JSON.stringify(crData));
     localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
+    localStorage.setItem('dashboard_supplierData', JSON.stringify(supplierData));
 
     return { success: true, message: 'All data loaded from Supabase successfully!' };
   } catch (error: any) {
