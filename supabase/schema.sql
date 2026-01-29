@@ -41,6 +41,28 @@ CREATE INDEX IF NOT EXISTS idx_revenue_year ON revenue_data(year);
 CREATE INDEX IF NOT EXISTS idx_revenue_customer ON revenue_data(customer);
 
 -- ============================================
+-- 2-1. Item Revenue Data Table (품목별 매출현황)
+-- ============================================
+CREATE TABLE IF NOT EXISTS item_revenue_data (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  period TEXT NOT NULL,           -- 매출기간 (원본 문자열)
+  customer TEXT NOT NULL,         -- 고객사
+  model TEXT,                     -- 품종 / Model
+  part_no TEXT,                   -- 품번
+  customer_pn TEXT,               -- 고객사 P/N
+  part_name TEXT,                 -- 품명
+  qty INTEGER DEFAULT 0,          -- 매출수량
+  amount NUMERIC(15, 2) DEFAULT 0, -- 매출금액
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_item_revenue_customer ON item_revenue_data(customer);
+CREATE INDEX IF NOT EXISTS idx_item_revenue_model ON item_revenue_data(model);
+CREATE INDEX IF NOT EXISTS idx_item_revenue_part_no ON item_revenue_data(part_no);
+
+-- ============================================
 -- 3. Purchase Data Table (구매 입고)
 -- ============================================
 CREATE TABLE IF NOT EXISTS purchase_data (
@@ -98,6 +120,36 @@ CREATE INDEX IF NOT EXISTS idx_inventory_type ON inventory_data(type);
 CREATE INDEX IF NOT EXISTS idx_inventory_code ON inventory_data(code);
 
 -- ============================================
+-- 4-1. Inventory V2 Data Table (재고 V2: Resin, Paint, Parts)
+-- ============================================
+CREATE TABLE IF NOT EXISTS inventory_v2 (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  type TEXT CHECK (type IN ('resin', 'paint', 'parts')) NOT NULL,
+  code TEXT,
+  name TEXT,
+  unit TEXT,
+  location TEXT,
+  qty INTEGER DEFAULT 0,
+  -- Parts-specific fields (nullable)
+  customer_pn TEXT,
+  spec TEXT,
+  model TEXT,
+  status TEXT,
+  unit_price NUMERIC(15, 2),
+  amount NUMERIC(15, 2),
+  -- Storage location for parts (재고위치)
+  storage_location TEXT,
+  -- Item type for parts (품목유형)
+  item_type TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_inventory_v2_type ON inventory_v2(type);
+CREATE INDEX IF NOT EXISTS idx_inventory_v2_code ON inventory_v2(code);
+
+-- ============================================
 -- 5. CR Data Table (Cost Reduction)
 -- ============================================
 CREATE TABLE IF NOT EXISTS cr_data (
@@ -152,16 +204,20 @@ CREATE INDEX IF NOT EXISTS idx_rfq_status ON rfq_data(status);
 -- Enable RLS on all tables (uncomment if needed)
 -- ALTER TABLE sales_data ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE revenue_data ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE item_revenue_data ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE purchase_data ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE inventory_data ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE inventory_v2 ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE cr_data ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE rfq_data ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous read/write access (for development)
 -- CREATE POLICY "Allow anonymous access" ON sales_data FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON revenue_data FOR ALL USING (true);
+-- CREATE POLICY "Allow anonymous access" ON item_revenue_data FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON purchase_data FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON inventory_data FOR ALL USING (true);
+-- CREATE POLICY "Allow anonymous access" ON inventory_v2 FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON cr_data FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON rfq_data FOR ALL USING (true);
 
@@ -205,4 +261,14 @@ CREATE TRIGGER update_cr_data_updated_at
 DROP TRIGGER IF EXISTS update_rfq_data_updated_at ON rfq_data;
 CREATE TRIGGER update_rfq_data_updated_at
   BEFORE UPDATE ON rfq_data
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_inventory_v2_updated_at ON inventory_v2;
+CREATE TRIGGER update_inventory_v2_updated_at
+  BEFORE UPDATE ON inventory_v2
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_item_revenue_data_updated_at ON item_revenue_data;
+CREATE TRIGGER update_item_revenue_data_updated_at
+  BEFORE UPDATE ON item_revenue_data
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
