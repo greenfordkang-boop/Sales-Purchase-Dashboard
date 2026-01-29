@@ -5,6 +5,7 @@ import Overview from './components/Overview';
 import SalesView from './components/SalesView';
 import PurchaseView from './components/PurchaseView';
 import InventoryView from './components/InventoryView';
+import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
 
 const App: React.FC = () => {
@@ -125,11 +126,7 @@ const App: React.FC = () => {
           {activeTab === DashboardTab.SALES && <SalesView />}
           {activeTab === DashboardTab.PURCHASE && <PurchaseView />}
           {activeTab === DashboardTab.INVENTORY && <InventoryView />}
-          {activeTab === DashboardTab.SUPPLIER && (
-            <div className="bg-white p-20 rounded-3xl border border-slate-200 text-center">
-              <p className="text-slate-400 font-bold">협력사관리 모듈 준비 중입니다.</p>
-            </div>
-          )}
+          {activeTab === DashboardTab.SUPPLIER && <SupplierView />}
         </div>
       </main>
 

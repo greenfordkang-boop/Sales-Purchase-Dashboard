@@ -197,6 +197,26 @@ CREATE INDEX IF NOT EXISTS idx_rfq_customer ON rfq_data(customer);
 CREATE INDEX IF NOT EXISTS idx_rfq_status ON rfq_data(status);
 
 -- ============================================
+-- 7. Supplier Data Table (협력사 관리)
+-- ============================================
+CREATE TABLE IF NOT EXISTS supplier_data (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  company_name TEXT NOT NULL,              -- 거래처명
+  business_number TEXT,                    -- 사업자등록번호
+  ceo TEXT,                                -- 대표이사
+  address TEXT,                            -- 주소
+  purchase_amount_2025 NUMERIC(15, 2) DEFAULT 0,  -- 매입액(-VAT) 2025년
+  purchase_amount_2024 NUMERIC(15, 2) DEFAULT 0,  -- 매입액(-VAT) 2024년
+  purchase_amount_2023 NUMERIC(15, 2) DEFAULT 0,  -- 매입액(-VAT) 2023년
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_supplier_company_name ON supplier_data(company_name);
+CREATE INDEX IF NOT EXISTS idx_supplier_business_number ON supplier_data(business_number);
+
+-- ============================================
 -- Row Level Security (RLS) - Optional
 -- Enable if you want to restrict access
 -- ============================================
@@ -210,6 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_rfq_status ON rfq_data(status);
 -- ALTER TABLE inventory_v2 ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE cr_data ENABLE ROW LEVEL SECURITY;
 -- ALTER TABLE rfq_data ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE supplier_data ENABLE ROW LEVEL SECURITY;
 
 -- Allow anonymous read/write access (for development)
 -- CREATE POLICY "Allow anonymous access" ON sales_data FOR ALL USING (true);
@@ -220,6 +241,7 @@ CREATE INDEX IF NOT EXISTS idx_rfq_status ON rfq_data(status);
 -- CREATE POLICY "Allow anonymous access" ON inventory_v2 FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON cr_data FOR ALL USING (true);
 -- CREATE POLICY "Allow anonymous access" ON rfq_data FOR ALL USING (true);
+-- CREATE POLICY "Allow anonymous access" ON supplier_data FOR ALL USING (true);
 
 -- ============================================
 -- Updated_at Trigger Function
@@ -271,4 +293,14 @@ CREATE TRIGGER update_inventory_v2_updated_at
 DROP TRIGGER IF EXISTS update_item_revenue_data_updated_at ON item_revenue_data;
 CREATE TRIGGER update_item_revenue_data_updated_at
   BEFORE UPDATE ON item_revenue_data
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_supplier_data_updated_at ON supplier_data;
+CREATE TRIGGER update_supplier_data_updated_at
+  BEFORE UPDATE ON supplier_data
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_supplier_data_updated_at ON supplier_data;
+CREATE TRIGGER update_supplier_data_updated_at
+  BEFORE UPDATE ON supplier_data
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
