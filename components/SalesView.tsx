@@ -105,6 +105,13 @@ const SalesView: React.FC = () => {
   const [revenueSortConfig, setRevenueSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
   const [isUploadingRevenue, setIsUploadingRevenue] = useState(false);
 
+  // 품목별 매출현황 필터/정렬/접기 상태
+  const [itemRevenueListOpen, setItemRevenueListOpen] = useState(false);
+  const [itemRevenueFilter, setItemRevenueFilter] = useState({
+    model: '', partNo: '', customerPN: '', partName: '', qty: '', amount: ''
+  });
+  const [itemRevenueSortConfig, setItemRevenueSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
   // 품목별 매출현황용 데이터 (별도 업로더)
   const getInitialItemRevenueData = (): ItemRevenueRow[] => {
     if (typeof window === 'undefined') return [];
@@ -490,17 +497,48 @@ const SalesView: React.FC = () => {
       item.amount += d.amount;
     });
 
-    const items = Array.from(map.values());
+    let items = Array.from(map.values());
     const totalAmount = items.reduce((sum, i) => sum + i.amount, 0);
     const totalQty = items.reduce((sum, i) => sum + i.qty, 0);
-    const withShare = items.map(i => ({
+    let withShare = items.map(i => ({
       ...i,
       share: totalAmount > 0 ? (i.amount / totalAmount) * 100 : 0,
     }));
 
-    withShare.sort((a, b) => b.amount - a.amount);
+    // Apply filters
+    withShare = withShare.filter(item => {
+      const matchModel = itemRevenueFilter.model === '' || item.model.toLowerCase().includes(itemRevenueFilter.model.toLowerCase());
+      const matchPartNo = itemRevenueFilter.partNo === '' || item.partNo.toLowerCase().includes(itemRevenueFilter.partNo.toLowerCase());
+      const matchCustomerPN = itemRevenueFilter.customerPN === '' || (item.customerPN || '').toLowerCase().includes(itemRevenueFilter.customerPN.toLowerCase());
+      const matchPartName = itemRevenueFilter.partName === '' || item.partName.toLowerCase().includes(itemRevenueFilter.partName.toLowerCase());
+      const matchQty = itemRevenueFilter.qty === '' || item.qty.toString().includes(itemRevenueFilter.qty.replace(/,/g, ''));
+      const matchAmount = itemRevenueFilter.amount === '' || item.amount.toString().includes(itemRevenueFilter.amount.replace(/,/g, ''));
+
+      return matchModel && matchPartNo && matchCustomerPN && matchPartName && matchQty && matchAmount;
+    });
+
+    // Apply sorting
+    if (itemRevenueSortConfig) {
+      withShare.sort((a, b) => {
+        const aValue = a[itemRevenueSortConfig.key as keyof typeof a];
+        const bValue = b[itemRevenueSortConfig.key as keyof typeof b];
+        if (aValue === bValue) return 0;
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return itemRevenueSortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+        if (aStr < bStr) return itemRevenueSortConfig.direction === 'asc' ? -1 : 1;
+        if (aStr > bStr) return itemRevenueSortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    } else {
+      // 기본 정렬: 매출금액 내림차순
+      withShare.sort((a, b) => b.amount - a.amount);
+    }
+
     return { items: withShare, totalAmount, totalQty };
-  }, [itemRevenueData, selectedRevenueCustomer]);
+  }, [itemRevenueData, selectedRevenueCustomer, itemRevenueFilter, itemRevenueSortConfig]);
 
   const revenueTotal = useMemo(() => {
     const totalAmount = filteredRevenueData.reduce((sum, d) => sum + d.amount, 0);
@@ -788,6 +826,19 @@ const SalesView: React.FC = () => {
     );
   };
 
+  // Item Revenue Filter/Sort Handlers
+  const handleItemRevenueFilterChange = (field: keyof typeof itemRevenueFilter, value: string) => {
+    setItemRevenueFilter(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleItemRevenueSort = (key: string) => {
+    setItemRevenueSortConfig(prev =>
+      prev?.key === key
+        ? { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' }
+        : { key, direction: 'asc' }
+    );
+  };
+
   // Revenue Download Handler
   const handleDownloadRevenue = () => {
     const headers = ['월', '고객사', 'Model', '매출수량', '매출금액'];
@@ -955,7 +1006,7 @@ const SalesView: React.FC = () => {
   const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }];
 
   // Helper component for table headers
-  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T, align?: string, currentSort: { key: keyof T, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T) => void }) => (
+  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T | string) => void }) => (
     <th 
         className={`px-4 py-3 min-w-[${String(sortKey) === 'index' ? '50px' : '100px'}] ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group`}
         onClick={() => onSort(sortKey)}
@@ -1313,58 +1364,95 @@ const SalesView: React.FC = () => {
           </div>
 
           {/* Item Revenue Table */}
-          <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="px-4 py-3">Model</th>
-                  <th className="px-4 py-3">품번</th>
-                  <th className="px-4 py-3">고객사 P/N</th>
-                  <th className="px-4 py-3">품명</th>
-                  <th className="px-4 py-3 text-right">매출수량</th>
-                  <th className="px-4 py-3 text-right">매출금액</th>
-                  <th className="px-4 py-3 text-right">비중(%)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {itemRevenueStats.items.slice(0, 50).map((item, idx) => (
-                  <tr key={`${item.model}-${item.partNo}-${idx}`} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 text-slate-700">{item.model}</td>
-                    <td className="px-4 py-3 font-mono text-slate-700">{item.partNo || '-'}</td>
-                    <td className="px-4 py-3 font-mono text-slate-500">{item.customerPN || '-'}</td>
-                    <td className="px-4 py-3 text-slate-700 truncate max-w-[240px]" title={item.partName}>{item.partName || '-'}</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-700">{item.qty.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-slate-500">{item.share.toFixed(1)}%</td>
-                  </tr>
-                ))}
-                {itemRevenueStats.items.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="text-4xl">📊</span>
-                        <p className="font-medium">데이터가 없습니다.</p>
-                        <p className="text-xs">품목별 매출 CSV 파일을 업로드하여 데이터를 추가하세요.</p>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-              {itemRevenueStats.items.length > 0 && (
-                <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
-                  <tr>
-                    <td colSpan={4} className="px-4 py-3 text-right">합계</td>
-                    <td className="px-4 py-3 text-right font-mono text-emerald-700">
-                      {itemRevenueStats.totalQty.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-800">
-                      ₩{itemRevenueStats.totalAmount.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right text-slate-500">100.0%</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => setItemRevenueListOpen(!itemRevenueListOpen)}
+                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"
+              >
+                <svg className={`w-5 h-5 transition-transform ${itemRevenueListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                상세 품목별 매출 리스트 ({itemRevenueStats.items.length}건)
+              </button>
+            </div>
+
+            {itemRevenueListOpen && (
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                      <SortableHeader label="Model" sortKey="model" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="품번" sortKey="partNo" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="고객사 P/N" sortKey="customerPN" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="품명" sortKey="partName" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="매출수량" sortKey="qty" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="매출금액" sortKey="amount" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="비중(%)" sortKey="share" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                    </tr>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="Model" className="w-full p-1 border rounded text-xs font-normal" value={itemRevenueFilter.model} onChange={(e) => handleItemRevenueFilterChange('model', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="품번" className="w-full p-1 border rounded text-xs font-normal" value={itemRevenueFilter.partNo} onChange={(e) => handleItemRevenueFilterChange('partNo', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="고객사 P/N" className="w-full p-1 border rounded text-xs font-normal" value={itemRevenueFilter.customerPN} onChange={(e) => handleItemRevenueFilterChange('customerPN', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="품명" className="w-full p-1 border rounded text-xs font-normal" value={itemRevenueFilter.partName} onChange={(e) => handleItemRevenueFilterChange('partName', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="수량" className="w-full p-1 border rounded text-xs font-normal text-right" value={itemRevenueFilter.qty} onChange={(e) => handleItemRevenueFilterChange('qty', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2">
+                        <input type="text" placeholder="금액" className="w-full p-1 border rounded text-xs font-normal text-right" value={itemRevenueFilter.amount} onChange={(e) => handleItemRevenueFilterChange('amount', e.target.value)} />
+                      </th>
+                      <th className="px-2 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itemRevenueStats.items.map((item, idx) => (
+                      <tr key={`${item.model}-${item.partNo}-${idx}`} className="hover:bg-slate-50">
+                        <td className="px-4 py-3 text-slate-700">{item.model}</td>
+                        <td className="px-4 py-3 font-mono text-slate-700">{item.partNo || '-'}</td>
+                        <td className="px-4 py-3 font-mono text-slate-500">{item.customerPN || '-'}</td>
+                        <td className="px-4 py-3 text-slate-700 truncate max-w-[240px]" title={item.partName}>{item.partName || '-'}</td>
+                        <td className="px-4 py-3 text-right font-mono text-emerald-700">{item.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-slate-500">{item.share.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                    {itemRevenueStats.items.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="text-4xl">📊</span>
+                            <p className="font-medium">데이터가 없습니다.</p>
+                            <p className="text-xs">품목별 매출 CSV 파일을 업로드하여 데이터를 추가하세요.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                  {itemRevenueStats.items.length > 0 && (
+                    <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                      <tr>
+                        <td colSpan={4} className="px-4 py-3 text-right">합계</td>
+                        <td className="px-4 py-3 text-right font-mono text-emerald-700">
+                          {itemRevenueStats.totalQty.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-800">
+                          ₩{itemRevenueStats.totalAmount.toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-500">100.0%</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            )}
           </div>
         </div>
       </section>
