@@ -38,6 +38,11 @@ const PurchaseView: React.FC = () => {
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
   const [purchaseListOpen, setPurchaseListOpen] = useState(true);
 
+  // 월 선택 상태 (업로드용)
+  const [uploadMonth, setUploadMonth] = useState<string>('');
+  // 월 필터 상태 (그래프 및 상세 데이터용)
+  const [selectedMonth, setSelectedMonth] = useState<string>('All'); // 'All' 또는 '01월', '02월' 등
+
   // Filters for Inbound Tab
   const [filter, setFilter] = useState({
     date: '',
@@ -143,18 +148,28 @@ const PurchaseView: React.FC = () => {
     return Array.from(monthMap.values());
   }, [activeYearData]);
 
+  // 월 필터가 적용된 데이터 (그래프용)
+  const monthFilteredData = useMemo(() => {
+    if (selectedMonth === 'All') {
+      return activeYearData;
+    }
+    return activeYearData.filter(item => item.month === selectedMonth);
+  }, [activeYearData, selectedMonth]);
+
   const typeShareData = useMemo(() => {
-    const partsTotal = activeYearData.filter(d => d.category === 'Parts').reduce((sum, d) => sum + d.amount, 0);
-    const materialTotal = activeYearData.filter(d => d.category === 'Material').reduce((sum, d) => sum + d.amount, 0);
+    const partsTotal = monthFilteredData.filter(d => d.category === 'Parts').reduce((sum, d) => sum + d.amount, 0);
+    const materialTotal = monthFilteredData.filter(d => d.category === 'Material').reduce((sum, d) => sum + d.amount, 0);
     
     return [
       { name: '부품 (Parts)', value: partsTotal },
       { name: '원재료 (Materials)', value: materialTotal }
     ].filter(d => d.value > 0);
-  }, [activeYearData]);
+  }, [monthFilteredData]);
 
   const filteredItems = useMemo(() => {
     let result = activeYearData.filter(item => {
+      // 월 필터 적용
+      const matchMonth = selectedMonth === 'All' || item.month === selectedMonth;
       const matchDate = filter.date === '' || item.date.includes(filter.date);
       const matchType = filter.type === '' || item.type.includes(filter.type);
       const matchSupplier = filter.supplier === '' || item.supplier.includes(filter.supplier);
@@ -162,7 +177,7 @@ const PurchaseView: React.FC = () => {
       const matchQty = filter.qty === '' || item.qty.toString().includes(filter.qty);
       const matchAmount = filter.amount === '' || item.amount.toString().includes(filter.amount.replace(/,/g, ''));
 
-      return matchDate && matchType && matchSupplier && matchItem && matchQty && matchAmount;
+      return matchMonth && matchDate && matchType && matchSupplier && matchItem && matchQty && matchAmount;
     });
 
     if (inboundSortConfig) {
@@ -171,7 +186,7 @@ const PurchaseView: React.FC = () => {
         result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
     return result;
-  }, [activeYearData, filter, inboundSortConfig]);
+  }, [activeYearData, selectedMonth, filter, inboundSortConfig]);
 
   const filteredTotal = useMemo(() => {
     return filteredItems.reduce((acc, item) => ({
@@ -180,7 +195,7 @@ const PurchaseView: React.FC = () => {
     }), { qty: 0, amount: 0 });
   }, [filteredItems]);
 
-  const totalPurchaseAmount = activeYearData.reduce((sum, item) => sum + item.amount, 0);
+  const totalPurchaseAmount = monthFilteredData.reduce((sum, item) => sum + item.amount, 0);
 
   // --- Derived Data for SUPPLIER Tab ---
   const supplierStats = useMemo(() => {
@@ -282,10 +297,25 @@ const PurchaseView: React.FC = () => {
     }
 
     readCsvWithEncoding(file, async (csvText) => {
+      if (!uploadMonth) {
+        alert('업로드할 월을 선택해주세요.');
+        return;
+      }
+
       const newParts = parsePartsCSV(csvText);
-      // 기존 Material 데이터는 유지하고, Parts는 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-      const existingMaterials = purchaseData.filter(d => d.category === 'Material');
-      const updatedData = [...existingMaterials, ...newParts];
+      
+      // 업로드된 데이터에 선택한 월 적용
+      const partsWithMonth = newParts.map(item => ({
+        ...item,
+        month: uploadMonth,
+        year: selectedYears[0] || new Date().getFullYear(),
+      }));
+
+      // 해당 월의 Parts 데이터만 삭제하고 새 데이터로 교체
+      const otherData = purchaseData.filter(d => 
+        !(d.category === 'Parts' && d.month === uploadMonth && d.year === (selectedYears[0] || new Date().getFullYear()))
+      );
+      const updatedData = [...otherData, ...partsWithMonth];
       
       // localStorage 즉시 저장
       localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
@@ -294,8 +324,8 @@ const PurchaseView: React.FC = () => {
       // Supabase 저장 (완료 후 최신 데이터 재로드)
       if (isSupabaseConfigured()) {
         try {
-          await purchaseService.saveAll(updatedData);
-          console.log('✅ 부품 데이터 Supabase 동기화 완료');
+          await purchaseService.saveByMonthAndCategory(partsWithMonth, uploadMonth, 'Parts', selectedYears[0] || new Date().getFullYear());
+          console.log(`✅ ${uploadMonth} 부품 데이터 Supabase 동기화 완료`);
           
           const latestData = await purchaseService.getAll();
           setPurchaseData(latestData);
@@ -305,6 +335,9 @@ const PurchaseView: React.FC = () => {
           console.error('Supabase 동기화 실패:', err);
         }
       }
+
+      alert(`${uploadMonth} 부품 데이터 ${partsWithMonth.length}건이 업로드되었습니다.`);
+      setUploadMonth(''); // 업로드 후 월 선택 초기화
     });
 
     e.target.value = '';
@@ -318,10 +351,25 @@ const PurchaseView: React.FC = () => {
     }
 
     readCsvWithEncoding(file, async (csvText) => {
+      if (!uploadMonth) {
+        alert('업로드할 월을 선택해주세요.');
+        return;
+      }
+
       const newMaterials = parseMaterialCSV(csvText);
-      // 기존 Parts 데이터는 유지하고, Material은 기존 데이터 제거 후 새 데이터만 사용 (누적 방지)
-      const existingParts = purchaseData.filter(d => d.category === 'Parts');
-      const updatedData = [...existingParts, ...newMaterials];
+      
+      // 업로드된 데이터에 선택한 월 적용
+      const materialsWithMonth = newMaterials.map(item => ({
+        ...item,
+        month: uploadMonth,
+        year: selectedYears[0] || new Date().getFullYear(),
+      }));
+
+      // 해당 월의 Material 데이터만 삭제하고 새 데이터로 교체
+      const otherData = purchaseData.filter(d => 
+        !(d.category === 'Material' && d.month === uploadMonth && d.year === (selectedYears[0] || new Date().getFullYear()))
+      );
+      const updatedData = [...otherData, ...materialsWithMonth];
       
       // localStorage 즉시 저장
       localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
@@ -330,8 +378,8 @@ const PurchaseView: React.FC = () => {
       // Supabase 저장 (완료 후 최신 데이터 재로드)
       if (isSupabaseConfigured()) {
         try {
-          await purchaseService.saveAll(updatedData);
-          console.log('✅ 원재료 데이터 Supabase 동기화 완료');
+          await purchaseService.saveByMonthAndCategory(materialsWithMonth, uploadMonth, 'Material', selectedYears[0] || new Date().getFullYear());
+          console.log(`✅ ${uploadMonth} 원재료 데이터 Supabase 동기화 완료`);
           
           const latestData = await purchaseService.getAll();
           setPurchaseData(latestData);
@@ -341,6 +389,9 @@ const PurchaseView: React.FC = () => {
           console.error('Supabase 동기화 실패:', err);
         }
       }
+
+      alert(`${uploadMonth} 원재료 데이터 ${materialsWithMonth.length}건이 업로드되었습니다.`);
+      setUploadMonth(''); // 업로드 후 월 선택 초기화
     });
 
     e.target.value = '';
@@ -501,14 +552,25 @@ const PurchaseView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+            <div className="flex flex-col md:flex-row gap-2">
+              <select
+                value={uploadMonth}
+                onChange={(e) => setUploadMonth(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 min-w-[120px]"
+              >
+                <option value="">월 선택 (필수)</option>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const month = `${(i + 1).toString().padStart(2, '0')}월`;
+                  return <option key={month} value={month}>{month}</option>;
+                })}
+              </select>
+              <label className={`bg-indigo-600 ${uploadMonth ? 'hover:bg-indigo-700' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
                 <span>⚙️ 부품 입고 업로드</span>
-                <input type="file" accept=".csv" onChange={handlePartsFileUpload} className="hidden" />
+                <input type="file" accept=".csv" onChange={handlePartsFileUpload} className="hidden" disabled={!uploadMonth} />
               </label>
-              <label className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+              <label className={`bg-rose-500 ${uploadMonth ? 'hover:bg-rose-600' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
                 <span>🧪 원재료 입고 업로드</span>
-                <input type="file" accept=".csv" onChange={handleMaterialFileUpload} className="hidden" />
+                <input type="file" accept=".csv" onChange={handleMaterialFileUpload} className="hidden" disabled={!uploadMonth} />
               </label>
             </div>
           </div>
@@ -525,8 +587,8 @@ const PurchaseView: React.FC = () => {
           />
           <MetricCard 
             label="부품 매입 비중" 
-            value={`${typeShareData.length > 0 ? ((typeShareData.find(d => d.name.includes('Parts'))?.value || 0) / totalPurchaseAmount * 100).toFixed(1) : 0}%`}
-            subValue="전체 매입액 대비"
+            value={`${typeShareData.length > 0 && monthFilteredData.length > 0 ? ((typeShareData.find(d => d.name.includes('Parts'))?.value || 0) / (monthFilteredData.reduce((sum, d) => sum + d.amount, 0) || 1) * 100).toFixed(1) : 0}%`}
+            subValue={selectedMonth === 'All' ? '전체 매입액 대비' : `${selectedMonth} 매입액 대비`}
             color="blue" 
           />
           <MetricCard 
@@ -571,10 +633,23 @@ const PurchaseView: React.FC = () => {
             </div>
 
             <div className="w-full lg:w-1/3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-                <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
-                    <span className="w-1 h-5 bg-slate-500 rounded-full"></span>
-                    매입 유형별 비중
-                </h3>
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-black text-slate-800 flex items-center gap-2">
+                        <span className="w-1 h-5 bg-slate-500 rounded-full"></span>
+                        매입 유형별 비중
+                    </h3>
+                    <select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-slate-500/20"
+                    >
+                        <option value="All">전체</option>
+                        {Array.from({ length: 12 }, (_, i) => {
+                          const month = `${(i + 1).toString().padStart(2, '0')}월`;
+                          return <option key={month} value={month}>{month}</option>;
+                        })}
+                    </select>
+                </div>
                 <div className="flex-1 min-h-[300px] flex items-center justify-center relative">
                      <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -606,15 +681,28 @@ const PurchaseView: React.FC = () => {
         {/* List Table */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-4">
-             <button 
-              onClick={() => setPurchaseListOpen(!purchaseListOpen)}
-              className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors"
-            >
-              <svg className={`w-5 h-5 transition-transform ${purchaseListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-              상세 입고 리스트 (Purchase List)
-            </button>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setPurchaseListOpen(!purchaseListOpen)}
+                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors"
+              >
+                <svg className={`w-5 h-5 transition-transform ${purchaseListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+                상세 입고 리스트 (Purchase List)
+              </button>
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="All">전체 월</option>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const month = `${(i + 1).toString().padStart(2, '0')}월`;
+                  return <option key={month} value={month}>{month}</option>;
+                })}
+              </select>
+            </div>
             <button 
                 onClick={handleDownloadInbound}
                 className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
