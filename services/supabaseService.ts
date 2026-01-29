@@ -2,7 +2,7 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { SalesItem, CustomerSalesData, MonthlyStats } from '../utils/salesDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
-import { RevenueItem } from '../utils/revenueDataParser';
+import { RevenueItem, ItemRevenueRow } from '../utils/revenueDataParser';
 import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
@@ -276,6 +276,69 @@ export const revenueService = {
 };
 
 // ============================================
+// Item Revenue Data Service (품목별 매출현황)
+// ============================================
+
+export const itemRevenueService = {
+  async getAll(): Promise<ItemRevenueRow[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_itemRevenueData');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const { data, error } = await supabase!
+      .from('item_revenue_data')
+      .select('*')
+      .order('period', { ascending: false })
+      .order('customer');
+
+    if (error) handleError(error, 'itemRevenue getAll');
+
+    return data?.map((row: any, index: number) => ({
+      id: typeof row.id === 'number' ? row.id : (Date.now() + index),
+      period: row.period || '',
+      customer: row.customer || '',
+      model: row.model || '',
+      partNo: row.part_no || '',
+      customerPN: row.customer_pn || '',
+      partName: row.part_name || '',
+      qty: row.qty || 0,
+      amount: row.amount || 0
+    })) || [];
+  },
+
+  async saveAll(data: ItemRevenueRow[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+      return;
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('item_revenue_data')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) handleError(deleteError, 'itemRevenue delete');
+
+    // localStorage에 먼저 저장 (데이터 손실 방지)
+    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+
+    const rows = data.map(item => ({
+      period: item.period,
+      customer: item.customer,
+      model: item.model,
+      part_no: item.partNo,
+      customer_pn: item.customerPN,
+      part_name: item.partName,
+      qty: Math.round(item.qty || 0),
+      amount: Math.round(item.amount || 0)
+    }));
+
+    await insertInBatches('item_revenue_data', rows, REVENUE_BATCH_SIZE);
+  }
+};
+
+// ============================================
 // Purchase Data Service
 // ============================================
 
@@ -380,6 +443,8 @@ interface PartsItemV2 {
   qty: number;
   unitPrice?: number;
   amount?: number;
+  storageLocation?: string;
+  itemType?: string;
 }
 
 interface InventoryDataV2 {
@@ -561,7 +626,9 @@ export const inventoryService = {
             location: row.location || '',
             qty: row.qty || 0,
             unitPrice: row.unit_price,
-            amount: row.amount
+            amount: row.amount,
+            storageLocation: row.storage_location,
+            itemType: row.item_type
           });
         }
       });
@@ -637,7 +704,9 @@ export const inventoryService = {
             location: item.location,
             qty: Math.round(item.qty || 0),
             unit_price: item.unitPrice,
-            amount: item.amount
+            amount: item.amount,
+            storage_location: item.storageLocation,
+            item_type: item.itemType
           });
         }
       });
@@ -882,16 +951,20 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
     // Get all data from localStorage
     const salesData = localStorage.getItem('dashboard_salesData');
     const revenueData = localStorage.getItem('dashboard_revenueData');
+    const itemRevenueData = localStorage.getItem('dashboard_itemRevenueData');
     const purchaseData = localStorage.getItem('dashboard_purchaseData');
     const inventoryData = localStorage.getItem('dashboard_inventoryData');
+    const inventoryV2Data = localStorage.getItem('dashboard_inventory_v2');
     const crData = localStorage.getItem('dashboard_crData');
     const rfqData = localStorage.getItem('dashboard_rfqData');
 
     // Sync each data type
     if (salesData) await salesService.saveAll(JSON.parse(salesData));
     if (revenueData) await revenueService.saveAll(JSON.parse(revenueData));
+    if (itemRevenueData) await itemRevenueService.saveAll(JSON.parse(itemRevenueData));
     if (purchaseData) await purchaseService.saveAll(JSON.parse(purchaseData));
     if (inventoryData) await inventoryService.saveAll(JSON.parse(inventoryData));
+    if (inventoryV2Data) await inventoryService.saveInventoryV2?.(JSON.parse(inventoryV2Data));
     if (crData) await crService.saveAll(JSON.parse(crData));
     if (rfqData) await rfqService.saveAll(JSON.parse(rfqData));
 
@@ -914,15 +987,19 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
     // Load all data from Supabase and save to localStorage
     const salesData = await salesService.getAll();
     const revenueData = await revenueService.getAll();
+    const itemRevenueData = await itemRevenueService.getAll();
     const purchaseData = await purchaseService.getAll();
     const inventoryData = await inventoryService.getAll();
+    const inventoryV2Data = await inventoryService.getInventoryV2?.();
     const crData = await crService.getAll();
     const rfqData = await rfqService.getAll();
 
     localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
     localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
+    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(itemRevenueData));
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
     localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
+    if (inventoryV2Data) localStorage.setItem('dashboard_inventory_v2', JSON.stringify(inventoryV2Data));
     localStorage.setItem('dashboard_crData', JSON.stringify(crData));
     localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
 
