@@ -407,6 +407,69 @@ export const purchaseService = {
     await insertInBatches('purchase_data', rows);
 
     localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+  },
+
+  // 월별/카테고리별 데이터 저장 (기존 해당 월/카테고리 데이터만 삭제 후 새 데이터 추가)
+  async saveByMonthAndCategory(data: PurchaseItem[], month: string, category: 'Parts' | 'Material', year: number): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      // localStorage 처리: 해당 월/카테고리 데이터만 삭제 후 새 데이터 추가
+      const stored = localStorage.getItem('dashboard_purchaseData');
+      const existing: PurchaseItem[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(item => 
+        !(item.month === month && item.category === category && item.year === year)
+      );
+      const merged = [...filtered, ...data];
+      localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+      return;
+    }
+
+    try {
+      // Supabase에서 해당 월/카테고리/연도 데이터만 삭제
+      const { error: deleteError } = await supabase!
+        .from('purchase_data')
+        .delete()
+        .eq('month', month)
+        .eq('category', category)
+        .eq('year', year);
+
+      if (deleteError) {
+        console.error('Error deleting purchase data for month/category:', deleteError);
+        // Don't throw - continue to insert
+      }
+
+      // 새 데이터 삽입
+      const rows = data.map(item => ({
+        year: item.year,
+        month: item.month,
+        date: item.date,
+        supplier: item.supplier,
+        type: item.type,
+        category: item.category,
+        item_code: item.itemCode,
+        item_name: item.itemName,
+        spec: item.spec,
+        unit: item.unit,
+        qty: Math.round(item.qty || 0),
+        unit_price: item.unitPrice,
+        amount: item.amount
+      }));
+
+      await insertInBatches('purchase_data', rows);
+
+      // localStorage도 업데이트
+      const stored = localStorage.getItem('dashboard_purchaseData');
+      const existing: PurchaseItem[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(item => 
+        !(item.month === month && item.category === category && item.year === year)
+      );
+      const merged = [...filtered, ...data];
+      localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+
+      console.log(`✅ Purchase data for ${year}년 ${month} ${category} saved to Supabase (${rows.length} rows)`);
+    } catch (error) {
+      console.error('Failed to save purchase data by month/category:', error);
+      // localStorage는 이미 업데이트됨
+    }
   }
 };
 
