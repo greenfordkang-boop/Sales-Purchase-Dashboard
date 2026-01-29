@@ -98,7 +98,7 @@ const SalesView: React.FC = () => {
   const [revenueData, setRevenueData] = useState<RevenueItem[]>(getInitialRevenueData);
   const [selectedRevenueYear, setSelectedRevenueYear] = useState<number>(2026);
   const [selectedRevenueCustomer, setSelectedRevenueCustomer] = useState<string>('All');
-  const [revenueListOpen, setRevenueListOpen] = useState(true);
+  const [revenueListOpen, setRevenueListOpen] = useState(false);
   const [revenueFilter, setRevenueFilter] = useState({
     month: '', customer: '', model: '', qty: '', amount: ''
   });
@@ -389,14 +389,16 @@ const SalesView: React.FC = () => {
       result = result.filter(d => d.customer === selectedRevenueCustomer);
     }
 
-    // Apply filters
-    result = result.filter(item =>
-      (revenueFilter.month === '' || item.month.includes(revenueFilter.month)) &&
-      (revenueFilter.customer === '' || item.customer.toLowerCase().includes(revenueFilter.customer.toLowerCase())) &&
-      (revenueFilter.model === '' || item.model.toLowerCase().includes(revenueFilter.model.toLowerCase())) &&
-      (revenueFilter.qty === '' || item.qty.toString().includes(revenueFilter.qty)) &&
-      (revenueFilter.amount === '' || item.amount.toString().includes(revenueFilter.amount))
-    );
+    // Apply filters (구매 리스트와 동일한 방식으로 개선)
+    result = result.filter(item => {
+      const matchMonth = revenueFilter.month === '' || item.month.includes(revenueFilter.month);
+      const matchCustomer = revenueFilter.customer === '' || item.customer.toLowerCase().includes(revenueFilter.customer.toLowerCase());
+      const matchModel = revenueFilter.model === '' || item.model.toLowerCase().includes(revenueFilter.model.toLowerCase());
+      const matchQty = revenueFilter.qty === '' || item.qty.toString().includes(revenueFilter.qty.replace(/,/g, ''));
+      const matchAmount = revenueFilter.amount === '' || item.amount.toString().includes(revenueFilter.amount.replace(/,/g, ''));
+
+      return matchMonth && matchCustomer && matchModel && matchQty && matchAmount;
+    });
 
     // Apply sorting
     if (revenueSortConfig) {
@@ -412,6 +414,13 @@ const SalesView: React.FC = () => {
         if (aStr < bStr) return revenueSortConfig.direction === 'asc' ? -1 : 1;
         if (aStr > bStr) return revenueSortConfig.direction === 'asc' ? 1 : -1;
         return 0;
+      });
+    } else {
+      // 기본 정렬: 날짜 내림차순 (최신순)
+      result.sort((a, b) => {
+        const aMonth = parseInt(a.month.replace('월', '')) || 0;
+        const bMonth = parseInt(b.month.replace('월', '')) || 0;
+        return bMonth - aMonth;
       });
     }
 
