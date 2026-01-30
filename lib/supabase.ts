@@ -52,10 +52,13 @@ export async function signIn(email: string, password: string): Promise<{ success
     // 프로필 로드
     const profile = await loadUserProfile(user.id);
 
-    // 관리자가 아니고 승인되지 않은 경우
-    if (email !== ADMIN_EMAIL && profile && !profile.approved) {
-      await supabase.auth.signOut();
-      return { success: false, error: '관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.' };
+    // 관리자가 아닌 경우 승인 확인
+    if (email !== ADMIN_EMAIL) {
+      // 프로필이 없거나 승인되지 않은 경우
+      if (!profile || !profile.approved) {
+        await supabase.auth.signOut();
+        return { success: false, error: '관리자 승인 대기 중입니다. 승인 후 로그인이 가능합니다.' };
+      }
     }
 
     // 접근 로그 기록
@@ -84,6 +87,23 @@ export async function signUp(email: string, password: string, displayName?: stri
       options: { data: { display_name: displayName || email.split('@')[0] } }
     });
     if (error) throw error;
+
+    // user_profiles 테이블에 프로필 생성 (승인 대기 상태)
+    if (data.user) {
+      const isAdminUser = email === ADMIN_EMAIL;
+      await supabase.from('user_profiles').insert({
+        id: data.user.id,
+        email: email,
+        display_name: displayName || email.split('@')[0],
+        role: isAdminUser ? 'admin' : 'viewer',
+        approved: isAdminUser,  // 관리자만 자동 승인
+        is_active: true
+      });
+    }
+
+    if (email === ADMIN_EMAIL) {
+      return { success: true, message: '관리자 계정이 생성되었습니다.' };
+    }
     return { success: true, message: '회원가입 완료. 관리자 승인 후 로그인 가능합니다.' };
   } catch (e: any) {
     console.error('회원가입 실패:', e);
@@ -138,6 +158,14 @@ export async function checkAuthSession(): Promise<{ user: User | null; profile: 
       if (profile && !profile.is_active) {
         await supabase.auth.signOut();
         return { user: null, profile: null };
+      }
+
+      // 관리자가 아닌 경우 승인 체크
+      if (session.user.email !== ADMIN_EMAIL) {
+        if (!profile || !profile.approved) {
+          await supabase.auth.signOut();
+          return { user: null, profile: null };
+        }
       }
 
       return { user: session.user, profile };
