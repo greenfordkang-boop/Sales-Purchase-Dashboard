@@ -25,7 +25,23 @@ import { downloadCSV } from '../utils/csvExport';
 // ============================================
 const MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 const STORAGE_KEY_FORECAST = 'dashboard_forecastData';
+const STORAGE_KEY_PREV_FORECAST = 'dashboard_forecastData_prev';
+const STORAGE_KEY_PREV_SUMMARY = 'dashboard_forecastData_prev_summary';
 const STORAGE_KEY_UPLOADS = 'dashboard_forecastUploads';
+
+// 증감 내역 타입
+interface ChangeItem {
+  customer: string;
+  model: string;
+  type: 'increase' | 'decrease' | 'new' | 'removed';
+  prevMonthlyQty: number[];  // 이전 월별 수량
+  currMonthlyQty: number[];  // 현재 월별 수량
+  prevTotalRevenue: number;
+  currTotalRevenue: number;
+  revenueDiff: number;
+  qtyDiff: number;
+  description: string;  // 요약 설명
+}
 
 const formatBillion = (v: number) => {
   if (Math.abs(v) >= 1e8) return `${(v / 1e8).toFixed(1)}억`;
@@ -61,11 +77,26 @@ const SalesForecast: React.FC = () => {
     } catch { return []; }
   });
 
+  const [prevItems, setPrevItems] = useState<ForecastItem[]>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PREV_FORECAST);
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+
+  const [prevSummary, setPrevSummary] = useState<ForecastSummary | null>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_PREV_SUMMARY);
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+
   const [isUploading, setIsUploading] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('All');
   const [detailOpen, setDetailOpen] = useState(true);
   const [changeTableOpen, setChangeTableOpen] = useState(true);
   const [customerTableOpen, setCustomerTableOpen] = useState(true);
+  const [diffOpen, setDiffOpen] = useState(true);
   const [uploadHistoryOpen, setUploadHistoryOpen] = useState(false);
 
   // Filters & Sort
@@ -94,6 +125,16 @@ const SalesForecast: React.FC = () => {
         alert('파싱된 데이터가 없습니다. 엑셀 파일 형식을 확인해주세요.');
         setIsUploading(false);
         return;
+      }
+
+      // Save previous data before overwriting (for diff)
+      if (forecastItems.length > 0) {
+        setPrevItems(forecastItems);
+        localStorage.setItem(STORAGE_KEY_PREV_FORECAST, JSON.stringify(forecastItems));
+        if (summary) {
+          setPrevSummary(summary);
+          localStorage.setItem(STORAGE_KEY_PREV_SUMMARY, JSON.stringify(summary));
+        }
       }
 
       // Save items
@@ -191,6 +232,129 @@ const SalesForecast: React.FC = () => {
     return main;
   }, [forecastItems]);
 
+  // 전기 대비 증감 내역 (고객사+모델 단위 비교)
+  const changeItems = useMemo((): ChangeItem[] => {
+    if (prevItems.length === 0 || forecastItems.length === 0) return [];
+
+    // 고객사+모델 단위로 집계
+    const aggregate = (items: ForecastItem[]) => {
+      const map = new Map<string, { customer: string; model: string; monthlyQty: number[]; totalRevenue: number }>();
+      items.forEach(item => {
+        const key = `${item.customer}||${item.model}`;
+        const existing = map.get(key);
+        if (existing) {
+          item.monthlyQty.forEach((q, i) => { existing.monthlyQty[i] += q; });
+          existing.totalRevenue += item.totalRevenue;
+        } else {
+          map.set(key, {
+            customer: item.customer,
+            model: item.model,
+            monthlyQty: [...item.monthlyQty],
+            totalRevenue: item.totalRevenue,
+          });
+        }
+      });
+      return map;
+    };
+
+    const prevMap = aggregate(prevItems);
+    const currMap = aggregate(forecastItems);
+    const changes: ChangeItem[] = [];
+
+    // 현재 데이터 기준으로 증감 확인
+    currMap.forEach((curr, key) => {
+      const prev = prevMap.get(key);
+      if (!prev) {
+        // 신규 추가
+        const totalQty = curr.monthlyQty.reduce((s, q) => s + q, 0);
+        if (totalQty > 0 || curr.totalRevenue > 0) {
+          changes.push({
+            customer: curr.customer,
+            model: curr.model,
+            type: 'new',
+            prevMonthlyQty: new Array(12).fill(0),
+            currMonthlyQty: curr.monthlyQty,
+            prevTotalRevenue: 0,
+            currTotalRevenue: curr.totalRevenue,
+            revenueDiff: curr.totalRevenue,
+            qtyDiff: totalQty,
+            description: `신규 추가 (월평균 ${formatBillion(totalQty / 12)} EA)`,
+          });
+        }
+      } else {
+        // 기존 항목 비교
+        const qtyDiffs = curr.monthlyQty.map((q, i) => q - prev.monthlyQty[i]);
+        const totalQtyDiff = qtyDiffs.reduce((s, d) => s + d, 0);
+        const revDiff = curr.totalRevenue - prev.totalRevenue;
+
+        // 의미있는 변화만 (수량 100 이상 또는 매출 1000만원 이상 변동)
+        if (Math.abs(totalQtyDiff) >= 100 || Math.abs(revDiff) >= 10_000_000) {
+          // 변화가 큰 월 구간 파악
+          const changedMonths: string[] = [];
+          let i = 0;
+          while (i < 12) {
+            if (Math.abs(qtyDiffs[i]) >= 50) {
+              const startMonth = i + 1;
+              let endMonth = startMonth;
+              while (i + 1 < 12 && Math.abs(qtyDiffs[i + 1]) >= 50 && Math.sign(qtyDiffs[i + 1]) === Math.sign(qtyDiffs[i])) {
+                i++;
+                endMonth = i + 1;
+              }
+              const avgPrev = prev.monthlyQty.slice(startMonth - 1, endMonth).reduce((s, v) => s + v, 0) / (endMonth - startMonth + 1);
+              const avgCurr = curr.monthlyQty.slice(startMonth - 1, endMonth).reduce((s, v) => s + v, 0) / (endMonth - startMonth + 1);
+              const rangeStr = startMonth === endMonth ? `${startMonth}월` : `${startMonth}~${endMonth}월`;
+              const prevK = avgPrev >= 1000 ? `${(avgPrev / 1000).toFixed(1)}K` : Math.round(avgPrev).toLocaleString();
+              const currK = avgCurr >= 1000 ? `${(avgCurr / 1000).toFixed(1)}K` : Math.round(avgCurr).toLocaleString();
+              changedMonths.push(`${rangeStr} ${prevK} → ${currK}/월`);
+            }
+            i++;
+          }
+
+          const desc = changedMonths.length > 0
+            ? changedMonths.join(', ')
+            : `연간 ${totalQtyDiff >= 0 ? '+' : ''}${Math.round(totalQtyDiff).toLocaleString()} EA`;
+
+          changes.push({
+            customer: curr.customer,
+            model: curr.model,
+            type: totalQtyDiff >= 0 ? 'increase' : 'decrease',
+            prevMonthlyQty: prev.monthlyQty,
+            currMonthlyQty: curr.monthlyQty,
+            prevTotalRevenue: prev.totalRevenue,
+            currTotalRevenue: curr.totalRevenue,
+            revenueDiff: revDiff,
+            qtyDiff: totalQtyDiff,
+            description: desc,
+          });
+        }
+      }
+    });
+
+    // 삭제된 항목
+    prevMap.forEach((prev, key) => {
+      if (!currMap.has(key)) {
+        const totalQty = prev.monthlyQty.reduce((s, q) => s + q, 0);
+        if (totalQty > 0 || prev.totalRevenue > 0) {
+          changes.push({
+            customer: prev.customer,
+            model: prev.model,
+            type: 'removed',
+            prevMonthlyQty: prev.monthlyQty,
+            currMonthlyQty: new Array(12).fill(0),
+            prevTotalRevenue: prev.totalRevenue,
+            currTotalRevenue: 0,
+            revenueDiff: -prev.totalRevenue,
+            qtyDiff: -totalQty,
+            description: '삭제됨',
+          });
+        }
+      }
+    });
+
+    // 매출 증감 절대값 기준 내림차순 정렬
+    return changes.sort((a, b) => Math.abs(b.revenueDiff) - Math.abs(a.revenueDiff));
+  }, [forecastItems, prevItems]);
+
   // Filtered + sorted detail table
   const filteredItems = useMemo(() => {
     let items = filteredByCustomer;
@@ -249,6 +413,25 @@ const SalesForecast: React.FC = () => {
     const yearLabel = summary?.year || new Date().getFullYear();
     const customerLabel = selectedCustomer === 'All' ? '전체' : selectedCustomer;
     downloadCSV(`매출계획_${yearLabel}_${customerLabel}`, headers, rows);
+  };
+
+  const handleDownloadDiff = () => {
+    if (changeItems.length === 0) return;
+    const prevLabel = prevSummary ? `${prevSummary.revision}(${prevSummary.reportDate})` : '이전';
+    const currLabel = summary ? `${summary.revision}(${summary.reportDate})` : '현재';
+    const headers = ['구분', '고객사', '모델/차종',
+      '이전 1월', '이전 2월', '이전 3월', '이전 4월', '이전 5월', '이전 6월', '이전 7월', '이전 8월', '이전 9월', '이전 10월', '이전 11월', '이전 12월',
+      '현재 1월', '현재 2월', '현재 3월', '현재 4월', '현재 5월', '현재 6월', '현재 7월', '현재 8월', '현재 9월', '현재 10월', '현재 11월', '현재 12월',
+      '이전 매출', '현재 매출', '매출 증감', '수량 증감', '요약'];
+    const rows = changeItems.map(c => [
+      c.type === 'increase' ? '증량' : c.type === 'decrease' ? '감량' : c.type === 'new' ? '신규' : '삭제',
+      c.customer, c.model,
+      ...c.prevMonthlyQty.map(q => Math.round(q)),
+      ...c.currMonthlyQty.map(q => Math.round(q)),
+      Math.round(c.prevTotalRevenue), Math.round(c.currTotalRevenue), Math.round(c.revenueDiff), Math.round(c.qtyDiff),
+      c.description,
+    ]);
+    downloadCSV(`증감내역_${prevLabel}_vs_${currLabel}`, headers, rows);
   };
 
   const handleDeleteUpload = (uploadId: string) => {
@@ -466,6 +649,123 @@ const SalesForecast: React.FC = () => {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* Revision Diff - 전기 대비 증감내역 */}
+          {changeItems.length > 0 && (
+            <div className="bg-white p-6 rounded-3xl border border-orange-200 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setDiffOpen(!diffOpen)}
+                  className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-orange-600 transition-colors"
+                >
+                  <svg className={`w-5 h-5 transition-transform ${diffOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                  <span className="w-1 h-5 bg-orange-500 rounded-full"></span>
+                  전기 대비 증감내역 ({changeItems.length}건)
+                  <span className="text-xs font-normal text-slate-500 ml-2">
+                    {prevSummary ? `${prevSummary.revision}` : '이전'} → {summary ? `${summary.revision}` : '현재'}
+                  </span>
+                </button>
+                <button onClick={handleDownloadDiff} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  엑셀 다운로드
+                </button>
+              </div>
+              {diffOpen && (
+                <div className="space-y-3">
+                  {/* 요약 배지 */}
+                  <div className="flex gap-3 flex-wrap mb-2">
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">
+                      증량 {changeItems.filter(c => c.type === 'increase').length}건
+                    </span>
+                    <span className="px-3 py-1.5 bg-rose-50 text-rose-700 rounded-lg text-xs font-bold">
+                      감량 {changeItems.filter(c => c.type === 'decrease').length}건
+                    </span>
+                    {changeItems.filter(c => c.type === 'new').length > 0 && (
+                      <span className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold">
+                        신규 {changeItems.filter(c => c.type === 'new').length}건
+                      </span>
+                    )}
+                    {changeItems.filter(c => c.type === 'removed').length > 0 && (
+                      <span className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold">
+                        삭제 {changeItems.filter(c => c.type === 'removed').length}건
+                      </span>
+                    )}
+                    <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold">
+                      매출 증감 합계: {(() => {
+                        const total = changeItems.reduce((s, c) => s + c.revenueDiff, 0);
+                        return `${total >= 0 ? '+' : ''}${formatBillion(total)}원`;
+                      })()}
+                    </span>
+                  </div>
+
+                  {/* 증감 리스트 */}
+                  <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                    <table className="w-full text-xs text-left">
+                      <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3">구분</th>
+                          <th className="px-4 py-3">고객사</th>
+                          <th className="px-4 py-3">모델/차종</th>
+                          <th className="px-4 py-3 text-right">수량 증감</th>
+                          <th className="px-4 py-3 text-right">매출 증감</th>
+                          <th className="px-4 py-3" style={{ minWidth: '300px' }}>변동 내역</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {changeItems.map((c, idx) => (
+                          <tr key={`${c.customer}-${c.model}-${idx}`} className="hover:bg-slate-50">
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                                c.type === 'increase' ? 'bg-emerald-100 text-emerald-700' :
+                                c.type === 'decrease' ? 'bg-rose-100 text-rose-700' :
+                                c.type === 'new' ? 'bg-blue-100 text-blue-700' :
+                                'bg-slate-100 text-slate-500'
+                              }`}>
+                                {c.type === 'increase' ? '▲ 증량' : c.type === 'decrease' ? '▼ 감량' : c.type === 'new' ? '★ 신규' : '✕ 삭제'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-bold text-slate-800">{c.customer}</td>
+                            <td className="px-4 py-3 text-slate-700">{c.model}</td>
+                            <td className="px-4 py-3 text-right font-mono">
+                              <span className={c.qtyDiff >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                                {c.qtyDiff >= 0 ? '+' : ''}{Math.round(c.qtyDiff).toLocaleString()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono font-bold">
+                              <span className={c.revenueDiff >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                                {c.revenueDiff >= 0 ? '+' : ''}{formatBillion(c.revenueDiff)}원
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-slate-600">{c.description}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
+                        <tr>
+                          <td colSpan={3} className="px-4 py-3 text-center">합계 ({changeItems.length}건)</td>
+                          <td className="px-4 py-3 text-right font-mono">
+                            {(() => {
+                              const total = changeItems.reduce((s, c) => s + c.qtyDiff, 0);
+                              return <span className={total >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{total >= 0 ? '+' : ''}{Math.round(total).toLocaleString()}</span>;
+                            })()}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono">
+                            {(() => {
+                              const total = changeItems.reduce((s, c) => s + c.revenueDiff, 0);
+                              return <span className={total >= 0 ? 'text-emerald-600' : 'text-rose-600'}>{total >= 0 ? '+' : ''}{formatBillion(total)}원</span>;
+                            })()}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Monthly Change Table */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
