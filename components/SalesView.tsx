@@ -13,6 +13,7 @@ import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { salesService, crService, rfqService, revenueService, itemRevenueService } from '../services/supabaseService';
 import SalesForecast from './SalesForecast';
+import type { ForecastItem, ForecastSummary } from '../utils/salesForecastParser';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -116,6 +117,22 @@ const SalesView: React.FC = () => {
   });
   const [revenueSortConfig, setRevenueSortConfig] = useState<{ key: keyof RevenueItem; direction: 'asc' | 'desc' } | null>(null);
   const [isUploadingRevenue, setIsUploadingRevenue] = useState(false);
+
+  // 매출계획 데이터 (forecast) - 계획 대비 실적 비교용
+  const [forecastItems, setForecastItems] = useState<ForecastItem[]>([]);
+  const [forecastSummary, setForecastSummary] = useState<ForecastSummary | null>(null);
+
+  // 매출계획 데이터 로드 (탭 전환 시마다 최신 데이터 반영)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('dashboard_forecastData');
+      if (stored) setForecastItems(JSON.parse(stored));
+      else setForecastItems([]);
+      const storedSummary = localStorage.getItem('dashboard_forecastData_summary');
+      if (storedSummary) setForecastSummary(JSON.parse(storedSummary));
+      else setForecastSummary(null);
+    } catch { /* ignore */ }
+  }, [activeSubTab]);
 
   // 품목별 매출현황 필터/정렬/접기 상태
   const [itemRevenueListOpen, setItemRevenueListOpen] = useState(false);
@@ -464,15 +481,63 @@ const SalesView: React.FC = () => {
     const uniqueCustomers = new Set(filtered.map(d => d.customer)).size;
     const uniqueModels = new Set(filtered.map(d => d.model)).size;
 
-    // Monthly chart data
-    const monthlyMap = new Map<string, { month: string; amount: number; qty: number }>();
+    // 매출계획 데이터에서 월별 계획금액 계산
+    const forecastYear = forecastSummary?.year;
+    const hasForecast = forecastItems.length > 0 && forecastYear === selectedRevenueYear;
+    const planMonthlyMap = new Map<number, number>(); // monthIndex (0-11) → planAmount
+    if (hasForecast) {
+      const filteredForecast = selectedRevenueCustomer === 'All'
+        ? forecastItems
+        : forecastItems.filter(fi => fi.customer === selectedRevenueCustomer);
+      filteredForecast.forEach(fi => {
+        fi.monthlyRevenue.forEach((rev, idx) => {
+          planMonthlyMap.set(idx, (planMonthlyMap.get(idx) || 0) + rev);
+        });
+      });
+    }
+
+    // 월 라벨 통일 함수 ("01월" / "1월" → "1월")
+    const normalizeMonth = (m: string) => {
+      const num = parseInt(m.replace('월', ''));
+      return `${num}월`;
+    };
+
+    // Monthly chart data (실적 + 계획)
+    const monthlyMap = new Map<string, { month: string; amount: number; qty: number; planAmount: number }>();
     filtered.forEach(d => {
-      const existing = monthlyMap.get(d.month) || { month: d.month, amount: 0, qty: 0 };
+      const key = normalizeMonth(d.month);
+      const existing = monthlyMap.get(key) || { month: key, amount: 0, qty: 0, planAmount: 0 };
       existing.amount += d.amount;
       existing.qty += d.qty;
-      monthlyMap.set(d.month, existing);
+      monthlyMap.set(key, existing);
     });
-    const chartData = Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month));
+
+    // 계획 데이터 병합 (실적이 없는 월에도 계획이 있으면 추가)
+    if (hasForecast) {
+      for (let m = 0; m < 12; m++) {
+        const planAmt = planMonthlyMap.get(m) || 0;
+        if (planAmt <= 0) continue;
+        if (selectedRevenueMonth !== 'all') {
+          const filterMonth = parseInt(selectedRevenueMonth);
+          if (m + 1 !== filterMonth) continue;
+        }
+        const monthLabel = `${m + 1}월`;
+        const existing = monthlyMap.get(monthLabel) || { month: monthLabel, amount: 0, qty: 0, planAmount: 0 };
+        existing.planAmount = planAmt;
+        monthlyMap.set(monthLabel, existing);
+      }
+    }
+
+    const chartData = Array.from(monthlyMap.values())
+      .sort((a, b) => parseInt(a.month.replace('월', '')) - parseInt(b.month.replace('월', '')))
+      .map(d => ({ ...d, achieveRate: d.planAmount > 0 ? (d.amount / d.planAmount) * 100 : 0 }));
+
+    // 계획 총액
+    const totalPlanAmount = hasForecast
+      ? (selectedRevenueMonth !== 'all'
+        ? (planMonthlyMap.get(parseInt(selectedRevenueMonth) - 1) || 0)
+        : Array.from(planMonthlyMap.values()).reduce((s, v) => s + v, 0))
+      : 0;
 
     // Customer breakdown
     const customerMap = new Map<string, number>();
@@ -481,8 +546,8 @@ const SalesView: React.FC = () => {
       .map(([customer, amount]) => ({ customer, amount, share: totalAmount > 0 ? (amount / totalAmount) * 100 : 0 }))
       .sort((a, b) => b.amount - a.amount);
 
-    return { totalAmount, totalQty, uniqueCustomers, uniqueModels, chartData, customerBreakdown };
-  }, [revenueData, selectedRevenueYear, selectedRevenueMonth, selectedRevenueCustomer]);
+    return { totalAmount, totalQty, uniqueCustomers, uniqueModels, chartData, customerBreakdown, totalPlanAmount, hasForecast };
+  }, [revenueData, selectedRevenueYear, selectedRevenueMonth, selectedRevenueCustomer, forecastItems, forecastSummary]);
 
   // 품목별 매출현황 (별도 업로더 기준, Model/품번/품명 집계)
   const itemRevenueStats = useMemo(() => {
@@ -1183,9 +1248,9 @@ const SalesView: React.FC = () => {
           </div>
 
           {/* Revenue Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className={`grid grid-cols-1 ${revenueMetrics.hasForecast ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 mb-6`}>
             <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm">
-              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">총 매출금액</p>
+              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">총 매출실적</p>
               <p className="text-3xl font-black text-blue-600">
                 {revenueMetrics.totalAmount >= 100000000
                   ? `${(revenueMetrics.totalAmount / 100000000).toFixed(1)}억`
@@ -1193,6 +1258,19 @@ const SalesView: React.FC = () => {
               </p>
               <p className="text-xs text-slate-400 mt-1">{selectedRevenueYear}년 {selectedRevenueCustomer === 'All' ? '전체' : selectedRevenueCustomer}</p>
             </div>
+            {revenueMetrics.hasForecast && (
+              <div className="bg-gradient-to-br from-amber-50 to-white p-6 rounded-2xl border border-amber-100 shadow-sm">
+                <p className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-2">매출계획</p>
+                <p className="text-3xl font-black text-amber-600">
+                  {revenueMetrics.totalPlanAmount >= 100000000
+                    ? `${(revenueMetrics.totalPlanAmount / 100000000).toFixed(1)}억`
+                    : `${(revenueMetrics.totalPlanAmount / 10000).toFixed(0)}만`}원
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  달성률 {revenueMetrics.totalPlanAmount > 0 ? ((revenueMetrics.totalAmount / revenueMetrics.totalPlanAmount) * 100).toFixed(1) : '0.0'}%
+                </p>
+              </div>
+            )}
             <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
               <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">총 매출수량</p>
               <p className="text-3xl font-black text-emerald-600">{revenueMetrics.totalQty.toLocaleString()} EA</p>
@@ -1210,27 +1288,41 @@ const SalesView: React.FC = () => {
             <div className="mb-6">
               <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
                 <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
-                월별 매출 추이
+                월별 매출 추이 {revenueMetrics.hasForecast && <span className="text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">계획 vs 실적</span>}
               </h3>
-              <div className="h-[300px] w-full">
+              <div className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={revenueMetrics.chartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
+                    <defs>
+                      <linearGradient id="gradPlan" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#a78bfa" stopOpacity={0.85} />
+                        <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.45} />
+                      </linearGradient>
+                      <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2563eb" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.7} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 500, fill: '#64748b' }} />
                     <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(value) => `${(value / 100000000).toFixed(1)}억`} />
-                    <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={(value) => value.toLocaleString()} />
                     <Tooltip
                       contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
-                      formatter={(value: number, name: string) => [
-                        name === '매출금액' ? `₩${value.toLocaleString()}` : `${value.toLocaleString()} EA`,
-                        name
-                      ]}
+                      formatter={(value: number, name: string) => {
+                        if (name === '달성률') return [`${(value as number).toFixed(1)}%`, name];
+                        return [`₩${Math.round(value).toLocaleString()}`, name];
+                      }}
                     />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: 600 }} />
-                    <Bar yAxisId="left" name="매출금액" dataKey="amount" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
-                      <LabelList dataKey="amount" position="top" formatter={(value: number) => `${(value / 100000000).toFixed(1)}억`} style={{ fontSize: 10, fontWeight: 600, fill: '#3b82f6' }} />
+                    <Bar yAxisId="left" name="매출계획" dataKey="planAmount" fill="url(#gradPlan)" radius={[6, 6, 0, 0]} barSize={28} hide={!revenueMetrics.hasForecast}>
+                      <LabelList dataKey="planAmount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 9, fontWeight: 500, fill: '#7c3aed' }} />
                     </Bar>
-                    <Line yAxisId="right" type="monotone" name="수량" dataKey="qty" stroke="#10b981" strokeWidth={2} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} />
+                    <Bar yAxisId="left" name="매출실적" dataKey="amount" fill="url(#gradActual)" radius={[6, 6, 0, 0]} barSize={28}>
+                      <LabelList dataKey="amount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#1d4ed8' }} />
+                      {revenueMetrics.hasForecast && (
+                        <LabelList dataKey="achieveRate" position="top" offset={18} formatter={(value: number) => value > 0 ? `${value.toFixed(1)}%` : ''} style={{ fontSize: 9, fontWeight: 700, fill: '#dc2626' }} />
+                      )}
+                    </Bar>
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
