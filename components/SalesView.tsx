@@ -12,6 +12,7 @@ import { INITIAL_RFQ_CSV } from '../data/initialRfqData';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { salesService, crService, rfqService, revenueService, itemRevenueService } from '../services/supabaseService';
+import SalesForecast from './SalesForecast';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -77,7 +78,7 @@ const SalesView: React.FC = () => {
   };
 
   // --- State Management ---
-  const [activeSubTab, setActiveSubTab] = useState<'sales' | 'unitprice' | 'cr'>('sales');
+  const [activeSubTab, setActiveSubTab] = useState<'forecast' | 'sales' | 'unitprice' | 'cr'>('forecast');
 
   // Quantity States
   const [salesData, setSalesData] = useState<CustomerSalesData[]>(getInitialSalesData);
@@ -1023,7 +1024,7 @@ const SalesView: React.FC = () => {
   const handleDownloadRfq = () => { const headers = ['순번', '고객사', '제품군', '프로젝트명', '공정단계', '현상태', '시작일', '견적일', '최초주문일', 'Model', '월평균수량', '예상단가', '예상매출', '비고']; const rows = filteredRfqItems.map(item => [item.index, item.customer, item.projectType, item.projectName, item.process, item.status, item.dateSelection, item.dateQuotation, item.datePO, item.model, item.qty, item.unitPrice, item.amount, item.remark]); downloadCSV(`RFQ_현황`, headers, rows); };
 
   // Helper
-  const SUB_TABS = [{ id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }];
+  const SUB_TABS = [{ id: 'forecast', label: '매출계획' }, { id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }];
 
   // Helper component for table headers
   const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T | string) => void }) => (
@@ -1053,6 +1054,8 @@ const SalesView: React.FC = () => {
         ))}
       </div>
 
+
+      {activeSubTab === 'forecast' && <SalesForecast />}
 
       {activeSubTab === 'sales' && (
       <section className="space-y-6">
