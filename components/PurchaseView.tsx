@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
+import PurchaseSummaryView from './PurchaseSummaryView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
@@ -32,7 +33,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'price' | 'cr' | 'supplier'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'price' | 'cr' | 'supplier' | 'summary'>('inbound');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -474,6 +475,7 @@ const PurchaseView: React.FC = () => {
 
   const SUB_TABS = [
     { id: 'inbound', label: '구매현황(입고)' },
+    { id: 'summary', label: '매입종합집계' },
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
     { id: 'supplier', label: '협력사 현황' },
@@ -591,7 +593,7 @@ const PurchaseView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <MetricCard 
             label="총 매입 실적 (Total Purchase)" 
-            value={`₩${totalPurchaseAmount.toLocaleString()}`} 
+            value={`₩${Math.round(totalPurchaseAmount).toLocaleString()}`}
             subValue={selectedYears.length > 1 ? `${selectedYears.join(', ')}년 합계` : `${selectedYears[0]}년 전체`}
             trend="neutral"
             color="slate" 
@@ -626,7 +628,7 @@ const PurchaseView: React.FC = () => {
                         <Tooltip 
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                         cursor={{ fill: '#f8fafc' }}
-                        formatter={(value: number) => `₩${value.toLocaleString()}`}
+                        formatter={(value: number) => `₩${Math.round(value).toLocaleString()}`}
                         />
                         <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
                         <Bar name="부품 (Parts)" dataKey="parts" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} barSize={40} />
@@ -680,7 +682,7 @@ const PurchaseView: React.FC = () => {
                         </Pie>
                         <Tooltip 
                             contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            formatter={(value: number) => `₩${value.toLocaleString()}`}
+                            formatter={(value: number) => `₩${Math.round(value).toLocaleString()}`}
                         />
                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                         </PieChart>
@@ -761,7 +763,7 @@ const PurchaseView: React.FC = () => {
                         <td className="px-4 py-3 font-medium text-slate-800">{item.supplier}</td>
                         <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.itemName}>{item.itemName}</td>
                         <td className="px-4 py-3 text-right font-mono">{item.qty.toLocaleString()} <span className="text-[10px] text-slate-400">{item.unit}</span></td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{Math.round(item.amount).toLocaleString()}</td>
                       </tr>
                     ))}
                     {filteredItems.length === 0 && (
@@ -774,7 +776,7 @@ const PurchaseView: React.FC = () => {
                     <tr>
                       <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
                       <td className="px-4 py-3 text-right font-mono">{filteredTotal.qty.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono text-indigo-700">₩{filteredTotal.amount.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-indigo-700">₩{Math.round(filteredTotal.amount).toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -783,6 +785,11 @@ const PurchaseView: React.FC = () => {
         </div>
       </div>
       )}
+
+      {/* =================================================================================
+          2. PURCHASE SUMMARY TAB (매입종합집계)
+         ================================================================================= */}
+      {activeSubTab === 'summary' && <PurchaseSummaryView />}
 
       {/* =================================================================================
           3. PRICE TAB (Derived Data)
@@ -823,9 +830,9 @@ const PurchaseView: React.FC = () => {
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
                                     <td className="px-4 py-3 text-slate-600">{item.supplier}</td>
                                     <td className="px-4 py-3 text-center text-slate-500">{item.unit}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-indigo-600">₩{item.latestPrice.toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-right text-slate-500">₩{item.maxPrice.toLocaleString()}</td>
-                                    <td className="px-4 py-3 text-right text-slate-500">₩{item.minPrice.toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-indigo-600">₩{Math.round(item.latestPrice).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-slate-500">₩{Math.round(item.maxPrice).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right text-slate-500">₩{Math.round(item.minPrice).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right font-mono text-slate-400">{item.date}</td>
                                 </tr>
                             ))}
@@ -879,7 +886,7 @@ const PurchaseView: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <MetricCard label="등록된 협력사 수" value={`${supplierStats.length}개사`} color="blue" />
-                    <MetricCard label="총 거래 규모" value={`₩${totalPurchaseAmount.toLocaleString()}`} color="slate" />
+                    <MetricCard label="총 거래 규모" value={`₩${Math.round(totalPurchaseAmount).toLocaleString()}`} color="slate" />
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
@@ -897,7 +904,7 @@ const PurchaseView: React.FC = () => {
                             {supplierStats.map((item, idx) => (
                                 <tr key={idx} className="hover:bg-slate-50">
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-slate-700">₩{item.totalAmount.toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-slate-700">₩{Math.round(item.totalAmount).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-slate-500">
                                         {item.share.toFixed(1)}%
                                     </td>
