@@ -176,15 +176,22 @@ const SalesForecast: React.FC = () => {
     return forecastItems.filter(i => i.customer === selectedCustomer);
   }, [forecastItems, selectedCustomer]);
 
-  // Chart data - monthly revenue & qty
+  // Chart data - 현재 vs 직전 매출
+  const filteredPrevByCustomer = useMemo(() => {
+    if (selectedCustomer === 'All') return prevItems;
+    return prevItems.filter(i => i.customer === selectedCustomer);
+  }, [prevItems, selectedCustomer]);
+
   const chartData = useMemo(() => {
     if (filteredByCustomer.length === 0) return [];
+    const hasPrev = filteredPrevByCustomer.length > 0;
     return MONTH_LABELS.map((label, idx) => {
       const revenue = filteredByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0);
-      const qty = filteredByCustomer.reduce((sum, item) => sum + (item.monthlyQty[idx] || 0), 0);
-      return { month: label, revenue, qty };
+      const prevRevenue = hasPrev ? filteredPrevByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0) : 0;
+      const diff = hasPrev ? revenue - prevRevenue : 0;
+      return { month: label, revenue, prevRevenue: hasPrev ? prevRevenue : undefined, diff };
     });
-  }, [filteredByCustomer]);
+  }, [filteredByCustomer, filteredPrevByCustomer]);
 
   // Month-over-month change data
   const monthlyChanges = useMemo(() => {
@@ -613,7 +620,17 @@ const SalesForecast: React.FC = () => {
             </div>
             <div className="h-[420px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData} margin={{ top: 40, right: 40, bottom: 20, left: 40 }}>
+                <ComposedChart data={chartData} margin={{ top: 50, right: 30, bottom: 20, left: 30 }}>
+                  <defs>
+                    <linearGradient id="gradPrev" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.2} />
+                    </linearGradient>
+                    <linearGradient id="gradCurrent" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2563eb" stopOpacity={0.95} />
+                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.7} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                   <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 600, fill: '#64748b' }} />
                   <YAxis
@@ -623,40 +640,37 @@ const SalesForecast: React.FC = () => {
                     tick={{ fontSize: 11, fill: '#94a3b8' }}
                     tickFormatter={(v) => formatBillion(v)}
                   />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: '#94a3b8' }}
-                    tickFormatter={(v) => v.toLocaleString()}
-                  />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
                     cursor={{ fill: '#f8fafc' }}
-                    formatter={(value: number, name: string) => [
-                      name === '예상매출' ? formatWon(value) : `${Math.round(value).toLocaleString()} EA`,
-                      name,
-                    ]}
+                    formatter={(value: number, name: string) => {
+                      if (name === '증감') return [value !== 0 ? `${value >= 0 ? '+' : ''}${formatBillion(value)}` : '-', name];
+                      return [formatWon(value), name];
+                    }}
                   />
                   <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
-                  <Bar yAxisId="left" name="예상매출" dataKey="revenue" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={32}>
+                  <Bar yAxisId="left" name="직전" dataKey="prevRevenue" fill="url(#gradPrev)" radius={[6, 6, 0, 0]} barSize={26} hide={chartData[0]?.prevRevenue === undefined} />
+                  <Bar yAxisId="left" name="현재" dataKey="revenue" fill="url(#gradCurrent)" radius={[6, 6, 0, 0]} barSize={26}>
                     <LabelList
-                      dataKey="revenue"
+                      dataKey="diff"
                       position="top"
-                      formatter={(v: number) => formatBillion(v)}
-                      style={{ fontSize: 10, fontWeight: 700, fill: '#3b82f6' }}
+                      formatter={(v: number) => {
+                        if (v === 0 || v === undefined) return '';
+                        return `${v > 0 ? '▲' : '▼'}${formatBillion(Math.abs(v))}`;
+                      }}
+                      style={{ fontSize: 9, fontWeight: 700 }}
+                      fill=""
+                      content={({ x, y, width, value }: any) => {
+                        if (!value || value === 0) return null;
+                        const color = value > 0 ? '#059669' : '#dc2626';
+                        return (
+                          <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={color} fontSize={9} fontWeight={700}>
+                            {value > 0 ? '▲' : '▼'}{formatBillion(Math.abs(value))}
+                          </text>
+                        );
+                      }}
                     />
                   </Bar>
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    name="예상수량"
-                    dataKey="qty"
-                    stroke="#10b981"
-                    strokeWidth={2.5}
-                    dot={{ r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
-                  />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
