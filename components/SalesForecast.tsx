@@ -33,6 +33,7 @@ const STORAGE_KEY_UPLOADS = 'dashboard_forecastUploads';
 interface ChangeItem {
   customer: string;
   model: string;
+  partNos: string[];  // P.N 목록
   type: 'increase' | 'decrease' | 'new' | 'removed';
   prevMonthlyQty: number[];  // 이전 월별 수량
   currMonthlyQty: number[];  // 현재 월별 수량
@@ -246,17 +247,21 @@ const SalesForecast: React.FC = () => {
 
     // 고객사+모델 단위로 집계
     const aggregate = (items: ForecastItem[]) => {
-      const map = new Map<string, { customer: string; model: string; monthlyQty: number[]; totalRevenue: number }>();
+      const map = new Map<string, { customer: string; model: string; partNos: Set<string>; monthlyQty: number[]; totalRevenue: number }>();
       items.forEach(item => {
         const key = `${item.customer}||${item.model}`;
         const existing = map.get(key);
         if (existing) {
           item.monthlyQty.forEach((q, i) => { existing.monthlyQty[i] += q; });
           existing.totalRevenue += item.totalRevenue;
+          if (item.partNo) existing.partNos.add(item.partNo);
         } else {
+          const partNos = new Set<string>();
+          if (item.partNo) partNos.add(item.partNo);
           map.set(key, {
             customer: item.customer,
             model: item.model,
+            partNos,
             monthlyQty: [...item.monthlyQty],
             totalRevenue: item.totalRevenue,
           });
@@ -279,6 +284,7 @@ const SalesForecast: React.FC = () => {
           changes.push({
             customer: curr.customer,
             model: curr.model,
+            partNos: Array.from(curr.partNos),
             type: 'new',
             prevMonthlyQty: new Array(12).fill(0),
             currMonthlyQty: curr.monthlyQty,
@@ -322,9 +328,11 @@ const SalesForecast: React.FC = () => {
             ? changedMonths.join(', ')
             : `연간 ${totalQtyDiff >= 0 ? '+' : ''}${Math.round(totalQtyDiff).toLocaleString()} EA`;
 
+          const allPartNos = new Set([...Array.from(curr.partNos), ...Array.from(prev.partNos)]);
           changes.push({
             customer: curr.customer,
             model: curr.model,
+            partNos: Array.from(allPartNos),
             type: totalQtyDiff >= 0 ? 'increase' : 'decrease',
             prevMonthlyQty: prev.monthlyQty,
             currMonthlyQty: curr.monthlyQty,
@@ -346,6 +354,7 @@ const SalesForecast: React.FC = () => {
           changes.push({
             customer: prev.customer,
             model: prev.model,
+            partNos: Array.from(prev.partNos),
             type: 'removed',
             prevMonthlyQty: prev.monthlyQty,
             currMonthlyQty: new Array(12).fill(0),
@@ -427,13 +436,13 @@ const SalesForecast: React.FC = () => {
     if (changeItems.length === 0) return;
     const prevLabel = prevSummary ? `${prevSummary.revision}(${prevSummary.reportDate})` : '이전';
     const currLabel = summary ? `${summary.revision}(${summary.reportDate})` : '현재';
-    const headers = ['구분', '고객사', '모델/차종',
+    const headers = ['구분', '고객사', '모델/차종', 'P.N',
       '이전 1월', '이전 2월', '이전 3월', '이전 4월', '이전 5월', '이전 6월', '이전 7월', '이전 8월', '이전 9월', '이전 10월', '이전 11월', '이전 12월',
       '현재 1월', '현재 2월', '현재 3월', '현재 4월', '현재 5월', '현재 6월', '현재 7월', '현재 8월', '현재 9월', '현재 10월', '현재 11월', '현재 12월',
       '이전 매출', '현재 매출', '매출 증감', '수량 증감', '요약'];
     const rows = changeItems.map(c => [
       c.type === 'increase' ? '증량' : c.type === 'decrease' ? '감량' : c.type === 'new' ? '신규' : '삭제',
-      c.customer, c.model,
+      c.customer, c.model, c.partNos.join(' / '),
       ...c.prevMonthlyQty.map(q => Math.round(q)),
       ...c.currMonthlyQty.map(q => Math.round(q)),
       Math.round(c.prevTotalRevenue), Math.round(c.currTotalRevenue), Math.round(c.revenueDiff), Math.round(c.qtyDiff),
@@ -652,21 +661,24 @@ const SalesForecast: React.FC = () => {
                   <Bar yAxisId="left" name="직전" dataKey="prevRevenue" fill="url(#gradPrev)" radius={[6, 6, 0, 0]} barSize={26} hide={chartData[0]?.prevRevenue === undefined} />
                   <Bar yAxisId="left" name="현재" dataKey="revenue" fill="url(#gradCurrent)" radius={[6, 6, 0, 0]} barSize={26}>
                     <LabelList
-                      dataKey="diff"
+                      dataKey="revenue"
                       position="top"
-                      formatter={(v: number) => {
-                        if (v === 0 || v === undefined) return '';
-                        return `${v > 0 ? '▲' : '▼'}${formatBillion(Math.abs(v))}`;
-                      }}
-                      style={{ fontSize: 9, fontWeight: 700 }}
-                      fill=""
-                      content={({ x, y, width, value }: any) => {
+                      content={({ x, y, width, value, index }: any) => {
                         if (!value || value === 0) return null;
-                        const color = value > 0 ? '#059669' : '#dc2626';
+                        const diff = chartData[index]?.diff;
+                        const hasDiff = diff !== undefined && diff !== 0;
+                        const diffColor = diff > 0 ? '#059669' : '#dc2626';
                         return (
-                          <text x={x + width / 2} y={y - 6} textAnchor="middle" fill={color} fontSize={9} fontWeight={700}>
-                            {value > 0 ? '▲' : '▼'}{formatBillion(Math.abs(value))}
-                          </text>
+                          <g>
+                            <text x={x + width / 2} y={y - (hasDiff ? 18 : 6)} textAnchor="middle" fill="#1d4ed8" fontSize={10} fontWeight={700}>
+                              {formatBillion(value)}
+                            </text>
+                            {hasDiff && (
+                              <text x={x + width / 2} y={y - 4} textAnchor="middle" fill={diffColor} fontSize={9} fontWeight={700}>
+                                {diff > 0 ? '▲' : '▼'}{formatBillion(Math.abs(diff))}
+                              </text>
+                            )}
+                          </g>
                         );
                       }}
                     />
@@ -734,6 +746,7 @@ const SalesForecast: React.FC = () => {
                           <th className="px-4 py-3">구분</th>
                           <th className="px-4 py-3">고객사</th>
                           <th className="px-4 py-3">모델/차종</th>
+                          <th className="px-4 py-3">P.N</th>
                           <th className="px-4 py-3 text-right">수량 증감</th>
                           <th className="px-4 py-3 text-right">매출 증감</th>
                           <th className="px-4 py-3" style={{ minWidth: '300px' }}>변동 내역</th>
@@ -754,6 +767,7 @@ const SalesForecast: React.FC = () => {
                             </td>
                             <td className="px-4 py-3 font-bold text-slate-800">{c.customer}</td>
                             <td className="px-4 py-3 text-slate-700">{c.model}</td>
+                            <td className="px-4 py-3 font-mono text-slate-500 text-[10px]">{c.partNos.join(', ')}</td>
                             <td className="px-4 py-3 text-right font-mono">
                               <span className={c.qtyDiff >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
                                 {c.qtyDiff >= 0 ? '+' : ''}{Math.round(c.qtyDiff).toLocaleString()}
@@ -770,7 +784,7 @@ const SalesForecast: React.FC = () => {
                       </tbody>
                       <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                         <tr>
-                          <td colSpan={3} className="px-4 py-3 text-center">합계 ({changeItems.length}건)</td>
+                          <td colSpan={4} className="px-4 py-3 text-center">합계 ({changeItems.length}건)</td>
                           <td className="px-4 py-3 text-right font-mono">
                             {(() => {
                               const total = changeItems.reduce((s, c) => s + c.qtyDiff, 0);
