@@ -574,7 +574,7 @@ const SalesForecast: React.FC = () => {
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">연간 총 수량</p>
-              <p className="text-2xl font-black text-emerald-600">{totals.totalQty.toLocaleString()} EA</p>
+              <p className="text-2xl font-black text-emerald-600">{Math.round(totals.totalQty).toLocaleString()} EA</p>
               <p className="text-xs text-slate-400 mt-1">월평균 {Math.round(totals.totalQty / 12).toLocaleString()} EA</p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
