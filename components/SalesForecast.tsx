@@ -98,6 +98,7 @@ const SalesForecast: React.FC = () => {
   const [customerTableOpen, setCustomerTableOpen] = useState(true);
   const [diffOpen, setDiffOpen] = useState(true);
   const [uploadHistoryOpen, setUploadHistoryOpen] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Filters & Sort
   const [filter, setFilter] = useState({
@@ -435,10 +436,10 @@ const SalesForecast: React.FC = () => {
   };
 
   const handleDeleteUpload = (uploadId: string) => {
-    if (!window.confirm('이 업로드 이력을 삭제하시겠습니까?')) return;
     const updated = uploads.filter(u => u.id !== uploadId);
     setUploads(updated);
     localStorage.setItem(STORAGE_KEY_UPLOADS, JSON.stringify(updated));
+    setDeleteConfirmId(null);
   };
 
   // --- SortableHeader Component ---
@@ -533,13 +534,20 @@ const SalesForecast: React.FC = () => {
                         <td className="px-4 py-2.5 text-right font-mono text-slate-600">{Math.round(u.totalQty).toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-right font-mono text-slate-600">{u.itemCount}개</td>
                         <td className="px-4 py-2.5 text-center">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteUpload(u.id); }}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
-                            title="삭제"
-                          >
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          </button>
+                          {deleteConfirmId === u.id ? (
+                            <span className="inline-flex gap-1">
+                              <button onClick={(e) => { e.stopPropagation(); handleDeleteUpload(u.id); }} className="px-2 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-md hover:bg-rose-600 transition-colors">삭제</button>
+                              <button onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }} className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 rounded-md hover:bg-slate-300 transition-colors">취소</button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(u.id); }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                              title="삭제"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
