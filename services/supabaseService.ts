@@ -2,11 +2,13 @@
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { SalesItem, CustomerSalesData, MonthlyStats } from '../utils/salesDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
+import { PurchaseItemMaster, PurchaseMonthlySummary } from '../utils/purchaseSummaryTypes';
 import { RevenueItem, ItemRevenueRow } from '../utils/revenueDataParser';
 import { SupplierItem } from '../utils/supplierDataParser';
 import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
+import { ForecastItem, ForecastSummary, ForecastUpload } from '../utils/salesForecastParser';
 
 // ============================================
 // Helper Functions
@@ -88,6 +90,39 @@ const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
 
 const REVENUE_BATCH_SIZE = 200;
 
+// Paginated fetch helper - Supabase default limit is 1000 rows
+const fetchAllRows = async (
+  table: string,
+  orderBy: string,
+  orderOpts?: { ascending?: boolean },
+  extraOrder?: { column: string; ascending?: boolean }
+): Promise<any[]> => {
+  const pageSize = 1000;
+  let from = 0;
+  let allRows: any[] = [];
+
+  while (true) {
+    let query = supabase!
+      .from(table)
+      .select('*')
+      .order(orderBy, orderOpts || {})
+      .range(from, from + pageSize - 1);
+
+    if (extraOrder) {
+      query = query.order(extraOrder.column, { ascending: extraOrder.ascending ?? true });
+    }
+
+    const { data, error } = await query;
+    if (error) { handleError(error, `${table} fetchAll`); break; }
+    if (!data || data.length === 0) break;
+    allRows = allRows.concat(data);
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allRows;
+};
+
 // ============================================
 // Sales Data Service
 // ============================================
@@ -99,12 +134,7 @@ export const salesService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('sales_data')
-      .select('*')
-      .order('customer');
-
-    if (error) handleError(error, 'sales getAll');
+    const data = await fetchAllRows('sales_data', 'customer');
 
     // Group by customer
     const customerMap = new Map<string, CustomerSalesData>();
@@ -184,22 +214,16 @@ export const revenueService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('revenue_data')
-      .select('*')
-      .order('year', { ascending: false })
-      .order('month');
-
-    if (error) handleError(error, 'revenue getAll');
+    const data = await fetchAllRows('revenue_data', 'year', { ascending: false }, { column: 'month', ascending: true });
 
     return data?.map((row: any, index: number) => ({
       id: typeof row.id === 'number' ? row.id : (Date.now() + index),
-      year: row.year,
+      year: typeof row.year === 'number' ? row.year : Number(row.year) || 0,
       month: row.month,
       customer: row.customer,
       model: row.model || '',
-      qty: row.qty || 0,
-      amount: row.amount || 0
+      qty: Number(row.qty) || 0,
+      amount: Number(row.amount) || 0
     })) || [];
   },
 
@@ -287,13 +311,7 @@ export const itemRevenueService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('item_revenue_data')
-      .select('*')
-      .order('period', { ascending: false })
-      .order('customer');
-
-    if (error) handleError(error, 'itemRevenue getAll');
+    const data = await fetchAllRows('item_revenue_data', 'period', { ascending: false }, { column: 'customer', ascending: true });
 
     return data?.map((row: any, index: number) => ({
       id: typeof row.id === 'number' ? row.id : (Date.now() + index),
@@ -303,8 +321,8 @@ export const itemRevenueService = {
       partNo: row.part_no || '',
       customerPN: row.customer_pn || '',
       partName: row.part_name || '',
-      qty: row.qty || 0,
-      amount: row.amount || 0
+      qty: Number(row.qty) || 0,
+      amount: Number(row.amount) || 0
     })) || [];
   },
 
@@ -350,16 +368,11 @@ export const purchaseService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('purchase_data')
-      .select('*')
-      .order('date', { ascending: false });
-
-    if (error) handleError(error, 'purchase getAll');
+    const data = await fetchAllRows('purchase_data', 'date', { ascending: false });
 
     return data?.map((row: any) => ({
       id: row.id,
-      year: row.year,
+      year: typeof row.year === 'number' ? row.year : Number(row.year) || 0,
       month: row.month,
       date: row.date,
       supplier: row.supplier,
@@ -369,9 +382,9 @@ export const purchaseService = {
       itemName: row.item_name,
       spec: row.spec || '',
       unit: row.unit || '',
-      qty: row.qty || 0,
-      unitPrice: row.unit_price || 0,
-      amount: row.amount || 0
+      qty: Number(row.qty) || 0,
+      unitPrice: Number(row.unit_price) || 0,
+      amount: Number(row.amount) || 0
     })) || [];
   },
 
@@ -799,12 +812,7 @@ export const crService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('cr_data')
-      .select('*')
-      .order('month');
-
-    if (error) handleError(error, 'cr getAll');
+    const data = await fetchAllRows('cr_data', 'month');
 
     return data?.map((row: any) => ({
       month: row.month,
@@ -859,12 +867,7 @@ export const rfqService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('rfq_data')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) handleError(error, 'rfq getAll');
+    const data = await fetchAllRows('rfq_data', 'created_at', { ascending: false });
 
     return data?.map((row: any) => ({
       id: row.id,
@@ -1013,12 +1016,7 @@ export const supplierService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const { data, error } = await supabase!
-      .from('supplier_data')
-      .select('*')
-      .order('company_name');
-
-    if (error) handleError(error, 'supplier getAll');
+    const data = await fetchAllRows('supplier_data', 'company_name');
 
     return data?.map((row: any, index: number) => ({
       id: row.id || `supplier-${Date.now()}-${index}`,
@@ -1063,6 +1061,317 @@ export const supplierService = {
 };
 
 // ============================================
+// Purchase Item Master Service (품목기준정보)
+// ============================================
+
+export const purchaseItemMasterService = {
+  async getAll(): Promise<PurchaseItemMaster[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_purchaseItemMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+      const { data, error } = await supabase!
+        .from('purchase_item_master')
+        .select('*')
+        .order('part_no')
+        .range(from, from + pageSize - 1);
+
+      if (error) { handleError(error, 'purchaseItemMaster getAll'); break; }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return allRows.map((row: any) => ({
+      id: row.id,
+      partNo: row.part_no || '',
+      costType: row.cost_type || '',
+      purchaseType: row.purchase_type || '',
+      materialType: row.material_type || '',
+      process: row.process || '',
+      customer: row.customer || '',
+    }));
+  },
+
+  async getMap(): Promise<Map<string, PurchaseItemMaster>> {
+    const items = await this.getAll();
+    const map = new Map<string, PurchaseItemMaster>();
+    items.forEach(item => map.set(item.partNo, item));
+    return map;
+  },
+
+  async saveAll(data: PurchaseItemMaster[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
+      return;
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('purchase_item_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) handleError(deleteError, 'purchaseItemMaster delete');
+
+    localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
+
+    const rows = data.map(item => ({
+      part_no: item.partNo,
+      cost_type: item.costType,
+      purchase_type: item.purchaseType,
+      material_type: item.materialType,
+      process: item.process,
+      customer: item.customer,
+    }));
+
+    await insertInBatches('purchase_item_master', rows);
+  },
+
+  async upsertBatch(data: PurchaseItemMaster[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_purchaseItemMaster');
+      const existing: PurchaseItemMaster[] = stored ? JSON.parse(stored) : [];
+      const map = new Map(existing.map(i => [i.partNo, i]));
+      data.forEach(item => map.set(item.partNo, item));
+      localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(Array.from(map.values())));
+      return;
+    }
+
+    const rows = data.map(item => ({
+      part_no: item.partNo,
+      cost_type: item.costType,
+      purchase_type: item.purchaseType,
+      material_type: item.materialType,
+      process: item.process,
+      customer: item.customer,
+    }));
+
+    for (let i = 0; i < rows.length; i += 500) {
+      const batch = rows.slice(i, i + 500);
+      const { error } = await supabase!
+        .from('purchase_item_master')
+        .upsert(batch, { onConflict: 'part_no' });
+
+      if (error) console.error('purchaseItemMaster upsert error:', error);
+      if (i + 500 < rows.length) await sleep(BATCH_DELAY_MS);
+    }
+  }
+};
+
+// ============================================
+// Purchase Monthly Summary Service (매입종합집계)
+// ============================================
+
+export const purchaseSummaryService = {
+  async getAll(year?: number): Promise<PurchaseMonthlySummary[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_purchaseSummary');
+      const all: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+      return year ? all.filter(d => d.year === year) : all;
+    }
+
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+      let query = supabase!
+        .from('purchase_monthly_summary')
+        .select('*')
+        .order('month')
+        .order('supplier')
+        .range(from, from + pageSize - 1);
+
+      if (year) query = query.eq('year', year);
+
+      const { data, error } = await query;
+      if (error) { handleError(error, 'purchaseSummary getAll'); break; }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return allRows.map((row: any) => ({
+      id: row.id,
+      year: row.year,
+      month: row.month || '',
+      supplier: row.supplier || '',
+      partNo: row.part_no || '',
+      partName: row.part_name || '',
+      spec: row.spec || '',
+      unit: row.unit || '',
+      salesQty: Number(row.sales_qty) || 0,
+      closingQty: Number(row.closing_qty) || 0,
+      unitPrice: Number(row.unit_price) || 0,
+      amount: Number(row.amount) || 0,
+      location: row.location || '',
+      costType: row.cost_type || '',
+      purchaseType: row.purchase_type || '',
+      materialType: row.material_type || '',
+      process: row.process || '',
+      customer: row.customer || '',
+      remark: row.remark || '',
+      closingMonth: row.closing_month || '',
+    }));
+  },
+
+  async saveByYearMonth(data: PurchaseMonthlySummary[], year: number, month: string): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_purchaseSummary');
+      const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(d => !(d.year === year && d.month === month));
+      const merged = [...filtered, ...data];
+      localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(merged));
+      return;
+    }
+
+    // 해당 년월 데이터 삭제
+    const { error: deleteError } = await supabase!
+      .from('purchase_monthly_summary')
+      .delete()
+      .eq('year', year)
+      .eq('month', month);
+
+    if (deleteError) console.error('purchaseSummary delete error:', deleteError);
+
+    const rows = data.map(item => ({
+      year: item.year,
+      month: item.month,
+      supplier: item.supplier,
+      part_no: item.partNo,
+      part_name: item.partName,
+      spec: item.spec,
+      unit: item.unit,
+      sales_qty: item.salesQty,
+      closing_qty: item.closingQty,
+      unit_price: item.unitPrice,
+      amount: item.amount,
+      location: item.location,
+      cost_type: item.costType,
+      purchase_type: item.purchaseType,
+      material_type: item.materialType,
+      process: item.process,
+      customer: item.customer,
+      remark: item.remark,
+      closing_month: item.closingMonth,
+    }));
+
+    await insertInBatches('purchase_monthly_summary', rows);
+
+    // localStorage도 업데이트
+    const stored = localStorage.getItem('dashboard_purchaseSummary');
+    const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+    const filtered = existing.filter(d => !(d.year === year && d.month === month));
+    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify([...filtered, ...data]));
+
+    console.log(`✅ Purchase summary ${year}년 ${month} saved: ${rows.length} rows`);
+  },
+
+  async saveAll(data: PurchaseMonthlySummary[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
+      return;
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('purchase_monthly_summary')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) handleError(deleteError, 'purchaseSummary delete');
+
+    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
+
+    const rows = data.map(item => ({
+      year: item.year,
+      month: item.month,
+      supplier: item.supplier,
+      part_no: item.partNo,
+      part_name: item.partName,
+      spec: item.spec,
+      unit: item.unit,
+      sales_qty: item.salesQty,
+      closing_qty: item.closingQty,
+      unit_price: item.unitPrice,
+      amount: item.amount,
+      location: item.location,
+      cost_type: item.costType,
+      purchase_type: item.purchaseType,
+      material_type: item.materialType,
+      process: item.process,
+      customer: item.customer,
+      remark: item.remark,
+      closing_month: item.closingMonth,
+    }));
+
+    await insertInBatches('purchase_monthly_summary', rows);
+  }
+};
+
+// ============================================
+// Utility: Check if Supabase has data & Auto-sync
+// ============================================
+
+export const checkAndAutoSync = async (): Promise<{ action: 'synced_up' | 'synced_down' | 'none'; message: string }> => {
+  if (!isSupabaseConfigured()) {
+    return { action: 'none', message: 'Supabase not configured' };
+  }
+
+  try {
+    // Check if Supabase has any data (quick check on sales_data)
+    const { count, error } = await supabase!
+      .from('sales_data')
+      .select('*', { count: 'exact', head: true });
+
+    if (error) {
+      console.error('checkAndAutoSync: count error', error);
+      return { action: 'none', message: `Check failed: ${error.message}` };
+    }
+
+    const supabaseHasData = (count || 0) > 0;
+
+    // Check if localStorage has any data
+    const localKeys = [
+      'dashboard_salesData', 'dashboard_revenueData', 'dashboard_itemRevenueData',
+      'dashboard_purchaseData', 'dashboard_inventoryData', 'dashboard_inventory_v2',
+      'dashboard_crData', 'dashboard_rfqData', 'dashboard_supplierData',
+      'dashboard_forecastData'
+    ];
+    const localHasData = localKeys.some(key => {
+      const val = localStorage.getItem(key);
+      if (!val) return false;
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) return parsed.length > 0;
+        if (typeof parsed === 'object') return Object.values(parsed).some((v: any) => Array.isArray(v) && v.length > 0);
+        return false;
+      } catch { return false; }
+    });
+
+    if (!supabaseHasData && localHasData) {
+      // Supabase empty, localStorage has data → sync UP only when cloud is completely empty
+      console.log('Auto-sync: Supabase empty, pushing localStorage to cloud...');
+      const result = await syncAllDataToSupabase();
+      return { action: 'synced_up', message: result.message };
+    }
+
+    // Do NOT auto sync-down. Use manual "클라우드에서 다운로드" button instead.
+    return { action: 'none', message: supabaseHasData ? 'Supabase has data' : 'No data to sync' };
+  } catch (error: any) {
+    console.error('checkAndAutoSync error:', error);
+    return { action: 'none', message: `Auto-sync error: ${error.message}` };
+  }
+};
+
+// ============================================
 // Utility: Sync All Data to Supabase
 // ============================================
 
@@ -1071,33 +1380,69 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
     return { success: false, message: 'Supabase is not configured. Data is stored locally.' };
   }
 
-  try {
-    // Get all data from localStorage
-    const salesData = localStorage.getItem('dashboard_salesData');
-    const revenueData = localStorage.getItem('dashboard_revenueData');
-    const itemRevenueData = localStorage.getItem('dashboard_itemRevenueData');
-    const purchaseData = localStorage.getItem('dashboard_purchaseData');
-    const inventoryData = localStorage.getItem('dashboard_inventoryData');
-    const inventoryV2Data = localStorage.getItem('dashboard_inventory_v2');
-    const crData = localStorage.getItem('dashboard_crData');
-    const rfqData = localStorage.getItem('dashboard_rfqData');
-    const supplierData = localStorage.getItem('dashboard_supplierData');
+  const errors: string[] = [];
+  let syncedCount = 0;
 
-    // Sync each data type
-    if (salesData) await salesService.saveAll(JSON.parse(salesData));
-    if (revenueData) await revenueService.saveAll(JSON.parse(revenueData));
-    if (itemRevenueData) await itemRevenueService.saveAll(JSON.parse(itemRevenueData));
-    if (purchaseData) await purchaseService.saveAll(JSON.parse(purchaseData));
-    if (inventoryData) await inventoryService.saveAll(JSON.parse(inventoryData));
-    if (inventoryV2Data) await inventoryService.saveInventoryV2?.(JSON.parse(inventoryV2Data));
-    if (crData) await crService.saveAll(JSON.parse(crData));
-    if (rfqData) await rfqService.saveAll(JSON.parse(rfqData));
-    if (supplierData) await supplierService.saveAll(JSON.parse(supplierData));
+  // Helper: sync one service independently so failures don't block others
+  const syncOne = async (name: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+      syncedCount++;
+      console.log(`✅ ${name} synced`);
+    } catch (err: any) {
+      console.error(`❌ ${name} sync failed:`, err);
+      errors.push(name);
+    }
+  };
 
-    return { success: true, message: 'All data synced to Supabase successfully!' };
-  } catch (error: any) {
-    return { success: false, message: `Sync failed: ${error.message}` };
+  // Get all data from localStorage
+  const salesData = localStorage.getItem('dashboard_salesData');
+  const revenueData = localStorage.getItem('dashboard_revenueData');
+  const itemRevenueData = localStorage.getItem('dashboard_itemRevenueData');
+  const purchaseData = localStorage.getItem('dashboard_purchaseData');
+  const inventoryData = localStorage.getItem('dashboard_inventoryData');
+  const inventoryV2Data = localStorage.getItem('dashboard_inventory_v2');
+  const crData = localStorage.getItem('dashboard_crData');
+  const rfqData = localStorage.getItem('dashboard_rfqData');
+  const supplierData = localStorage.getItem('dashboard_supplierData');
+
+  // Sync each data type independently (with row count logging)
+  if (salesData) {
+    const parsed = JSON.parse(salesData);
+    console.log(`📤 sales uploading: ${parsed.length} customers, ${parsed.reduce((s: number, c: any) => s + (c.items?.length || 0), 0)} items`);
+    await syncOne('sales', () => salesService.saveAll(parsed));
   }
+  if (revenueData) {
+    const parsed = JSON.parse(revenueData);
+    const total2026 = parsed.filter((r: any) => r.year === 2026).reduce((s: number, r: any) => s + (r.amount || 0), 0);
+    console.log(`📤 revenue uploading: ${parsed.length} rows, 2026 total: ${(total2026/100000000).toFixed(1)}억`);
+    await syncOne('revenue', () => revenueService.saveAll(parsed));
+  }
+  if (itemRevenueData) await syncOne('itemRevenue', () => itemRevenueService.saveAll(JSON.parse(itemRevenueData)));
+  if (purchaseData) await syncOne('purchase', () => purchaseService.saveAll(JSON.parse(purchaseData)));
+  if (inventoryData) await syncOne('inventory', () => inventoryService.saveAll(JSON.parse(inventoryData)));
+  if (inventoryV2Data) await syncOne('inventoryV2', () => inventoryService.saveInventoryV2(JSON.parse(inventoryV2Data)));
+  if (crData) await syncOne('cr', () => crService.saveAll(JSON.parse(crData)));
+  if (rfqData) await syncOne('rfq', () => rfqService.saveAll(JSON.parse(rfqData)));
+  if (supplierData) await syncOne('supplier', () => supplierService.saveAll(JSON.parse(supplierData)));
+
+  // Forecast data
+  const forecastData = localStorage.getItem('dashboard_forecastData');
+  const forecastSummaryData = localStorage.getItem('dashboard_forecastData_summary');
+  const forecastPrevData = localStorage.getItem('dashboard_forecastData_prev');
+  const forecastPrevSummaryData = localStorage.getItem('dashboard_forecastData_prev_summary');
+  const forecastUploadsData = localStorage.getItem('dashboard_forecastUploads');
+
+  if (forecastData) await syncOne('forecast', () => forecastService.saveItems(JSON.parse(forecastData), 'current'));
+  if (forecastSummaryData) await syncOne('forecastSummary', () => forecastService.saveSummary(JSON.parse(forecastSummaryData), 'current'));
+  if (forecastPrevData) await syncOne('forecastPrev', () => forecastService.saveItems(JSON.parse(forecastPrevData), 'previous'));
+  if (forecastPrevSummaryData) await syncOne('forecastPrevSummary', () => forecastService.saveSummary(JSON.parse(forecastPrevSummaryData), 'previous'));
+  if (forecastUploadsData) await syncOne('forecastUploads', () => forecastService.saveUploads(JSON.parse(forecastUploadsData)));
+
+  if (errors.length === 0) {
+    return { success: true, message: `동기화 완료! (${syncedCount}개 항목)` };
+  }
+  return { success: false, message: `동기화 부분 완료: ${syncedCount}개 성공, ${errors.length}개 실패 (${errors.join(', ')})` };
 };
 
 // ============================================
@@ -1109,30 +1454,332 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
     return { success: false, message: 'Supabase is not configured. Using local data.' };
   }
 
-  try {
-    // Load all data from Supabase and save to localStorage
-    const salesData = await salesService.getAll();
-    const revenueData = await revenueService.getAll();
-    const itemRevenueData = await itemRevenueService.getAll();
-    const purchaseData = await purchaseService.getAll();
-    const inventoryData = await inventoryService.getAll();
-    const inventoryV2Data = await inventoryService.getInventoryV2?.();
-    const crData = await crService.getAll();
-    const rfqData = await rfqService.getAll();
-    const supplierData = await supplierService.getAll();
+  const errors: string[] = [];
+  let loadedCount = 0;
 
-    localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
-    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(itemRevenueData));
-    localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
-    localStorage.setItem('dashboard_inventoryData', JSON.stringify(inventoryData));
-    if (inventoryV2Data) localStorage.setItem('dashboard_inventory_v2', JSON.stringify(inventoryV2Data));
-    localStorage.setItem('dashboard_crData', JSON.stringify(crData));
-    localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
-    localStorage.setItem('dashboard_supplierData', JSON.stringify(supplierData));
+  const loadOne = async (name: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+      loadedCount++;
+    } catch (err: any) {
+      console.error(`❌ ${name} load failed:`, err);
+      errors.push(name);
+    }
+  };
 
-    return { success: true, message: 'All data loaded from Supabase successfully!' };
-  } catch (error: any) {
-    return { success: false, message: `Load failed: ${error.message}` };
+  // Load each data type independently (with row count logging)
+  await loadOne('sales', async () => {
+    const data = await salesService.getAll();
+    console.log(`📊 sales downloaded: ${data.length} customers, ${data.reduce((s, c) => s + (c.items?.length || 0), 0)} items`);
+    localStorage.setItem('dashboard_salesData', JSON.stringify(data));
+  });
+  await loadOne('revenue', async () => {
+    const data = await revenueService.getAll();
+    const total2026 = data.filter(r => r.year === 2026).reduce((s, r) => s + (r.amount || 0), 0);
+    console.log(`📊 revenue downloaded: ${data.length} rows, 2026 total: ${(total2026/100000000).toFixed(1)}억`);
+    localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+  });
+  await loadOne('itemRevenue', async () => {
+    const data = await itemRevenueService.getAll();
+    console.log(`📊 itemRevenue downloaded: ${data.length} rows`);
+    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+  });
+  await loadOne('purchase', async () => {
+    const data = await purchaseService.getAll();
+    console.log(`📊 purchase downloaded: ${data.length} rows`);
+    localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+  });
+  await loadOne('inventory', async () => {
+    const data = await inventoryService.getAll();
+    localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
+  });
+  await loadOne('inventoryV2', async () => {
+    const data = await inventoryService.getInventoryV2();
+    if (data) localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+  });
+  await loadOne('cr', async () => {
+    const data = await crService.getAll();
+    localStorage.setItem('dashboard_crData', JSON.stringify(data));
+  });
+  await loadOne('rfq', async () => {
+    const data = await rfqService.getAll();
+    localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+  });
+  await loadOne('supplier', async () => {
+    const data = await supplierService.getAll();
+    localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+  });
+
+  // Forecast data
+  await loadOne('forecast', async () => {
+    const items = await forecastService.getItems('current');
+    localStorage.setItem('dashboard_forecastData', JSON.stringify(items));
+    const summary = await forecastService.getSummary('current');
+    if (summary) localStorage.setItem('dashboard_forecastData_summary', JSON.stringify(summary));
+  });
+  await loadOne('forecastPrev', async () => {
+    const items = await forecastService.getItems('previous');
+    localStorage.setItem('dashboard_forecastData_prev', JSON.stringify(items));
+    const summary = await forecastService.getSummary('previous');
+    if (summary) localStorage.setItem('dashboard_forecastData_prev_summary', JSON.stringify(summary));
+  });
+  await loadOne('forecastUploads', async () => {
+    const data = await forecastService.getUploads();
+    localStorage.setItem('dashboard_forecastUploads', JSON.stringify(data));
+  });
+
+  if (errors.length === 0) {
+    return { success: true, message: `다운로드 완료! (${loadedCount}개 항목)` };
+  }
+  return { success: false, message: `다운로드 부분 완료: ${loadedCount}개 성공, ${errors.length}개 실패 (${errors.join(', ')})` };
+};
+
+// ============================================
+// Forecast Data Service (매출계획)
+// ============================================
+
+export const forecastService = {
+  async getItems(version: 'current' | 'previous' = 'current'): Promise<ForecastItem[]> {
+    if (!isSupabaseConfigured()) {
+      const key = version === 'current' ? 'dashboard_forecastData' : 'dashboard_forecastData_prev';
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+      const { data, error } = await supabase!
+        .from('forecast_data')
+        .select('*')
+        .eq('version', version)
+        .order('no')
+        .range(from, from + pageSize - 1);
+
+      if (error) { handleError(error, 'forecast getItems'); break; }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    const items = allRows.map((row: any) => ({
+      no: row.no || 0,
+      customer: row.customer || '',
+      model: row.model || '',
+      stage: row.stage || '',
+      partNo: row.part_no || '',
+      newPartNo: row.new_part_no || '',
+      type: row.type || '',
+      unitPrice: Number(row.unit_price) || 0,
+      category: row.category || '',
+      partName: row.part_name || '',
+      monthlyQty: row.monthly_qty || [],
+      totalQty: Number(row.total_qty) || 0,
+      monthlyRevenue: row.monthly_revenue || [],
+      totalRevenue: Number(row.total_revenue) || 0,
+    }));
+
+    const total = items.reduce((s, i) => s + i.totalRevenue, 0);
+    console.log(`📊 forecast ${version} loaded: ${items.length}개, 총매출: ${(total/1e8).toFixed(1)}억`);
+    return items;
+  },
+
+  async saveItems(data: ForecastItem[], version: 'current' | 'previous' = 'current'): Promise<void> {
+    const key = version === 'current' ? 'dashboard_forecastData' : 'dashboard_forecastData_prev';
+    localStorage.setItem(key, JSON.stringify(data));
+
+    if (!isSupabaseConfigured()) return;
+
+    // Delete existing data for this version
+    const { error: deleteError } = await supabase!
+      .from('forecast_data')
+      .delete()
+      .eq('version', version);
+
+    if (deleteError) console.error('forecast_data delete error:', deleteError);
+
+    if (data.length === 0) return;
+
+    // Sanitize: filter out rows with null/undefined customer (NOT NULL constraint)
+    const validData = data.filter(item => item.customer != null && String(item.customer).trim() !== '');
+    if (validData.length < data.length) {
+      console.warn(`forecast_data: ${data.length - validData.length} rows filtered (empty customer)`);
+    }
+
+    const rows = validData.map(item => ({
+      version,
+      no: typeof item.no === 'number' ? item.no : 0,
+      customer: String(item.customer).trim(),
+      model: item.model || '',
+      stage: item.stage || '',
+      part_no: item.partNo || '',
+      new_part_no: item.newPartNo || '',
+      type: item.type || '',
+      unit_price: Number(item.unitPrice) || 0,
+      category: item.category || '',
+      part_name: item.partName || '',
+      monthly_qty: Array.isArray(item.monthlyQty) ? item.monthlyQty : [],
+      total_qty: Math.round(Number(item.totalQty) || 0),
+      monthly_revenue: Array.isArray(item.monthlyRevenue) ? item.monthlyRevenue : [],
+      total_revenue: Number(item.totalRevenue) || 0,
+    }));
+
+    const inputTotal = rows.reduce((s, r) => s + (Number(r.total_revenue) || 0), 0);
+    await insertInBatches('forecast_data', rows);
+
+    // Verify: count actual rows in Supabase after insert
+    const { count } = await supabase!
+      .from('forecast_data')
+      .select('*', { count: 'exact', head: true })
+      .eq('version', version);
+    console.log(`✅ Forecast ${version} items: 입력 ${rows.length}개 → DB ${count}개, 총매출: ${(inputTotal/1e8).toFixed(1)}억`);
+  },
+
+  async getSummary(version: 'current' | 'previous' = 'current'): Promise<ForecastSummary | null> {
+    if (!isSupabaseConfigured()) {
+      const key = version === 'current' ? 'dashboard_forecastData_summary' : 'dashboard_forecastData_prev_summary';
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : null;
+    }
+
+    const { data, error } = await supabase!
+      .from('forecast_summary')
+      .select('*')
+      .eq('version', version)
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null; // No rows found
+      console.error('forecast_summary get error:', error);
+      return null;
+    }
+
+    return data ? {
+      reportDate: data.report_date || '',
+      year: data.year || 0,
+      revision: data.revision || '',
+      monthlyQtyTotals: data.monthly_qty_totals || [],
+      monthlyRevenueTotals: data.monthly_revenue_totals || [],
+      totalQty: data.total_qty || 0,
+      totalRevenue: Number(data.total_revenue) || 0,
+      prevRevenueTotals: data.prev_revenue_totals || undefined,
+      revenueDiff: data.revenue_diff || undefined,
+    } : null;
+  },
+
+  async saveSummary(data: ForecastSummary | null, version: 'current' | 'previous' = 'current'): Promise<void> {
+    const key = version === 'current' ? 'dashboard_forecastData_summary' : 'dashboard_forecastData_prev_summary';
+    if (data) {
+      localStorage.setItem(key, JSON.stringify(data));
+    } else {
+      localStorage.removeItem(key);
+    }
+
+    if (!isSupabaseConfigured()) return;
+
+    // Delete existing summary for this version
+    const { error: deleteError } = await supabase!
+      .from('forecast_summary')
+      .delete()
+      .eq('version', version);
+
+    if (deleteError) console.error('forecast_summary delete error:', deleteError);
+
+    if (!data) return;
+
+    const row = {
+      version,
+      report_date: data.reportDate || '',
+      year: typeof data.year === 'number' ? data.year : parseInt(String(data.year)) || 0,
+      revision: data.revision || '',
+      monthly_qty_totals: Array.isArray(data.monthlyQtyTotals) ? data.monthlyQtyTotals : [],
+      monthly_revenue_totals: Array.isArray(data.monthlyRevenueTotals) ? data.monthlyRevenueTotals : [],
+      total_qty: Math.round(Number(data.totalQty) || 0),
+      total_revenue: Number(data.totalRevenue) || 0,
+      prev_revenue_totals: Array.isArray(data.prevRevenueTotals) ? data.prevRevenueTotals : null,
+      revenue_diff: Array.isArray(data.revenueDiff) ? data.revenueDiff : null,
+    };
+
+    const { error } = await supabase!
+      .from('forecast_summary')
+      .insert(row);
+
+    if (error) console.error('forecast_summary insert error:', error, 'row:', JSON.stringify(row).substring(0, 200));
+    else console.log(`✅ Forecast ${version} summary saved`);
+  },
+
+  async getUploads(): Promise<ForecastUpload[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_forecastUploads');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const { data, error } = await supabase!
+      .from('forecast_uploads')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('forecast_uploads get error:', error);
+      return [];
+    }
+
+    return data?.map((row: any) => ({
+      id: row.upload_id || row.id,
+      fileName: row.file_name || '',
+      uploadDate: row.upload_date || '',
+      reportDate: row.report_date || '',
+      revision: row.revision || '',
+      year: row.year || 0,
+      totalRevenue: Number(row.total_revenue) || 0,
+      totalQty: row.total_qty || 0,
+      itemCount: row.item_count || 0,
+    })) || [];
+  },
+
+  async saveUploads(data: ForecastUpload[]): Promise<void> {
+    localStorage.setItem('dashboard_forecastUploads', JSON.stringify(data));
+
+    if (!isSupabaseConfigured()) return;
+
+    // Delete all and re-insert
+    const { error: deleteError } = await supabase!
+      .from('forecast_uploads')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) console.error('forecast_uploads delete error:', deleteError);
+
+    if (data.length === 0) return;
+
+    const rows = data.map((item, idx) => ({
+      upload_id: item.id || `upload_${Date.now()}_${idx}`,
+      file_name: item.fileName || '',
+      upload_date: item.uploadDate || '',
+      report_date: item.reportDate || '',
+      revision: item.revision || '',
+      year: typeof item.year === 'number' ? item.year : parseInt(String(item.year)) || 0,
+      total_revenue: Number(item.totalRevenue) || 0,
+      total_qty: Math.round(Number(item.totalQty) || 0),
+      item_count: Math.round(Number(item.itemCount) || 0),
+    }));
+
+    await insertInBatches('forecast_uploads', rows);
+    console.log(`✅ Forecast uploads saved: ${rows.length} records`);
+  },
+
+  async deleteUpload(uploadId: string): Promise<void> {
+    if (!isSupabaseConfigured()) return;
+
+    const { error } = await supabase!
+      .from('forecast_uploads')
+      .delete()
+      .eq('upload_id', uploadId);
+
+    if (error) console.error('forecast_uploads delete error:', error);
   }
 };

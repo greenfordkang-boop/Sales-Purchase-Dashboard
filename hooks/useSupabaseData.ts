@@ -85,7 +85,9 @@ export function useGlobalSync() {
     setSyncMessage(result.message);
     setIsSyncing(false);
 
-    setTimeout(() => setSyncMessage(null), 3000);
+    // Show error messages longer
+    const timeout = result.success ? 3000 : 8000;
+    setTimeout(() => setSyncMessage(null), timeout);
     return result;
   }, []);
 
@@ -102,7 +104,8 @@ export function useGlobalSync() {
     if (result.success) {
       setTimeout(() => window.location.reload(), 1500);
     } else {
-      setTimeout(() => setSyncMessage(null), 3000);
+      // Show error message longer, then reload anyway to apply partial data
+      setTimeout(() => window.location.reload(), 5000);
     }
 
     return result;

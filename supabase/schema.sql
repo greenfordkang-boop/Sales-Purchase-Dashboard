@@ -300,7 +300,67 @@ CREATE TRIGGER update_supplier_data_updated_at
   BEFORE UPDATE ON supplier_data
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-DROP TRIGGER IF EXISTS update_supplier_data_updated_at ON supplier_data;
-CREATE TRIGGER update_supplier_data_updated_at
-  BEFORE UPDATE ON supplier_data
+-- ============================================
+-- 8. Purchase Item Master (구매 품목기준정보)
+-- ============================================
+CREATE TABLE IF NOT EXISTS purchase_item_master (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  part_no TEXT UNIQUE NOT NULL,          -- 도번
+  cost_type TEXT,                         -- 재료비구분: 직구입/외주가공
+  purchase_type TEXT,                     -- 구입구분: FELT 외/PAINT/도장/사출/증착 등
+  material_type TEXT,                     -- 재료구분: FELT 외/도장/사출/증착 등
+  process TEXT,                           -- 공정: 조립/사출/도장/증착/포장 등
+  customer TEXT,                          -- 고객사: 동국실업/LG/모트렉스 등
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pim_part_no ON purchase_item_master(part_no);
+CREATE INDEX IF NOT EXISTS idx_pim_customer ON purchase_item_master(customer);
+CREATE INDEX IF NOT EXISTS idx_pim_process ON purchase_item_master(process);
+
+DROP TRIGGER IF EXISTS update_purchase_item_master_updated_at ON purchase_item_master;
+CREATE TRIGGER update_purchase_item_master_updated_at
+  BEFORE UPDATE ON purchase_item_master
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================
+-- 9. Purchase Monthly Summary (매입종합집계)
+-- ============================================
+CREATE TABLE IF NOT EXISTS purchase_monthly_summary (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  year INTEGER NOT NULL,                  -- 연도
+  month TEXT NOT NULL,                    -- 1월, 2월, ...
+  supplier TEXT NOT NULL,                 -- 매입처
+  part_no TEXT NOT NULL,                  -- 도번
+  part_name TEXT,                         -- 품명
+  spec TEXT,                              -- 규격
+  unit TEXT,                              -- 단위
+  sales_qty NUMERIC(15,2) DEFAULT 0,      -- 매출수량
+  closing_qty NUMERIC(15,2) DEFAULT 0,    -- 마감수량
+  unit_price NUMERIC(15,4) DEFAULT 0,     -- 단가
+  amount NUMERIC(15,2) DEFAULT 0,         -- 금액
+  location TEXT,                          -- 사용처
+  cost_type TEXT,                         -- 재료비구분
+  purchase_type TEXT,                     -- 구입구분
+  material_type TEXT,                     -- 재료구분
+  process TEXT,                           -- 공정
+  customer TEXT,                          -- 고객사
+  remark TEXT,                            -- 비고
+  closing_month TEXT,                     -- 마감월
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(year, month, supplier, part_no)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pms_year ON purchase_monthly_summary(year);
+CREATE INDEX IF NOT EXISTS idx_pms_month ON purchase_monthly_summary(month);
+CREATE INDEX IF NOT EXISTS idx_pms_supplier ON purchase_monthly_summary(supplier);
+CREATE INDEX IF NOT EXISTS idx_pms_part_no ON purchase_monthly_summary(part_no);
+CREATE INDEX IF NOT EXISTS idx_pms_customer ON purchase_monthly_summary(customer);
+CREATE INDEX IF NOT EXISTS idx_pms_process ON purchase_monthly_summary(process);
+
+DROP TRIGGER IF EXISTS update_purchase_monthly_summary_updated_at ON purchase_monthly_summary;
+CREATE TRIGGER update_purchase_monthly_summary_updated_at
+  BEFORE UPDATE ON purchase_monthly_summary
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

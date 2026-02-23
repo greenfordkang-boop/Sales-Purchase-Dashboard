@@ -22,6 +22,7 @@ import {
   SECURITY_CONFIG,
   UserProfile
 } from './lib/supabase';
+import { checkAndAutoSync } from './services/supabaseService';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -114,6 +115,13 @@ const App: React.FC = () => {
           setIsAuthenticated(true);
           resetSessionTimer();
           logAccess(user.id, user.email || '', 'session_restored');
+
+          // Auto-sync on session restore
+          checkAndAutoSync().then(syncResult => {
+            console.log('Session restore auto-sync:', syncResult);
+          }).catch(err => {
+            console.error('Session restore auto-sync failed:', err);
+          });
         }
       }
       setIsLoading(false);
@@ -135,6 +143,13 @@ const App: React.FC = () => {
       setUserProfile(profile.profile);
       setIsAuthenticated(true);
       resetSessionTimer();
+
+      // Auto-sync: push localStorage to Supabase if cloud is empty, or pull from cloud
+      checkAndAutoSync().then(syncResult => {
+        console.log('Auto-sync result:', syncResult);
+      }).catch(err => {
+        console.error('Auto-sync failed:', err);
+      });
     } else {
       setLoginError(result.error || '로그인에 실패했습니다.');
     }

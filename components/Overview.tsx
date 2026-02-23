@@ -90,6 +90,10 @@ const Overview: React.FC = () => {
         purchaseItems = [...parts, ...materials];
       }
 
+      // Diagnostic logging for data sync verification
+      const rev2026 = salesItems.filter((r: any) => r.year === 2026).reduce((s: number, r: any) => s + (r.amount || 0), 0);
+      console.log(`📊 Overview loaded: ${salesItems.length} revenue rows, 2026 total: ${(rev2026/100000000).toFixed(1)}억, purchase: ${purchaseItems.length} rows`);
+
       setRawSalesData(salesItems);
       setRawPurchaseData(purchaseItems);
     };

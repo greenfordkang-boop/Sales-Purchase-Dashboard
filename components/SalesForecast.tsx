@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -19,6 +19,8 @@ import {
   ForecastParseResult,
 } from '../utils/salesForecastParser';
 import { downloadCSV } from '../utils/csvExport';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { forecastService } from '../services/supabaseService';
 
 // ============================================
 // Constants
@@ -93,6 +95,7 @@ const SalesForecast: React.FC = () => {
   });
 
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingFromSupabase, setIsLoadingFromSupabase] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string>('All');
   const [detailOpen, setDetailOpen] = useState(true);
   const [changeTableOpen, setChangeTableOpen] = useState(true);
@@ -106,6 +109,79 @@ const SalesForecast: React.FC = () => {
     customer: '', model: '', partNo: '', partName: '', stage: ''
   });
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+
+  // --- Supabase Load (다중 사용자 동기화) ---
+  useEffect(() => {
+    const loadFromSupabase = async () => {
+      if (!isSupabaseConfigured()) return;
+      setIsLoadingFromSupabase(true);
+
+      try {
+        // 1. Current items
+        try {
+          const items = await forecastService.getItems('current');
+          if (items && items.length > 0) {
+            setForecastItems(items);
+            localStorage.setItem(STORAGE_KEY_FORECAST, JSON.stringify(items));
+            console.log(`✅ Supabase에서 매출계획 데이터 로드: ${items.length}개`);
+          }
+        } catch (err) {
+          console.error('Supabase 매출계획 데이터 로드 실패:', err);
+        }
+
+        // 2. Current summary
+        try {
+          const sum = await forecastService.getSummary('current');
+          if (sum) {
+            setSummary(sum);
+            localStorage.setItem(STORAGE_KEY_FORECAST + '_summary', JSON.stringify(sum));
+            console.log('✅ Supabase에서 매출계획 요약 로드');
+          }
+        } catch (err) {
+          console.error('Supabase 매출계획 요약 로드 실패:', err);
+        }
+
+        // 3. Previous items (for diff)
+        try {
+          const prevItemsData = await forecastService.getItems('previous');
+          if (prevItemsData && prevItemsData.length > 0) {
+            setPrevItems(prevItemsData);
+            localStorage.setItem(STORAGE_KEY_PREV_FORECAST, JSON.stringify(prevItemsData));
+          }
+        } catch (err) {
+          console.error('Supabase 이전 매출계획 로드 실패:', err);
+        }
+
+        // 4. Previous summary
+        try {
+          const prevSum = await forecastService.getSummary('previous');
+          if (prevSum) {
+            setPrevSummary(prevSum);
+            localStorage.setItem(STORAGE_KEY_PREV_SUMMARY, JSON.stringify(prevSum));
+          }
+        } catch (err) {
+          console.error('Supabase 이전 요약 로드 실패:', err);
+        }
+
+        // 5. Upload history
+        try {
+          const uploadsData = await forecastService.getUploads();
+          if (uploadsData && uploadsData.length > 0) {
+            setUploads(uploadsData);
+            localStorage.setItem(STORAGE_KEY_UPLOADS, JSON.stringify(uploadsData));
+          }
+        } catch (err) {
+          console.error('Supabase 업로드 이력 로드 실패:', err);
+        }
+      } catch (err) {
+        console.error('Supabase 전체 로드 실패 - localStorage 유지:', err);
+      } finally {
+        setIsLoadingFromSupabase(false);
+      }
+    };
+
+    loadFromSupabase();
+  }, []);
 
   // --- File Upload Handler ---
   const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,19 +209,23 @@ const SalesForecast: React.FC = () => {
       if (forecastItems.length > 0) {
         setPrevItems(forecastItems);
         localStorage.setItem(STORAGE_KEY_PREV_FORECAST, JSON.stringify(forecastItems));
+        forecastService.saveItems(forecastItems, 'previous').catch(err => console.error('이전 데이터 Supabase 저장 실패:', err));
         if (summary) {
           setPrevSummary(summary);
           localStorage.setItem(STORAGE_KEY_PREV_SUMMARY, JSON.stringify(summary));
+          forecastService.saveSummary(summary, 'previous').catch(err => console.error('이전 요약 Supabase 저장 실패:', err));
         }
       }
 
       // Save items
       setForecastItems(result.items);
       localStorage.setItem(STORAGE_KEY_FORECAST, JSON.stringify(result.items));
+      forecastService.saveItems(result.items, 'current').catch(err => console.error('매출계획 Supabase 저장 실패:', err));
 
       // Save summary
       setSummary(result.summary);
       localStorage.setItem(STORAGE_KEY_FORECAST + '_summary', JSON.stringify(result.summary));
+      forecastService.saveSummary(result.summary, 'current').catch(err => console.error('요약 Supabase 저장 실패:', err));
 
       // Add upload history
       const newUpload: ForecastUpload = {
@@ -156,6 +236,7 @@ const SalesForecast: React.FC = () => {
       const updatedUploads = [newUpload, ...uploads];
       setUploads(updatedUploads);
       localStorage.setItem(STORAGE_KEY_UPLOADS, JSON.stringify(updatedUploads));
+      forecastService.saveUploads(updatedUploads).catch(err => console.error('업로드이력 Supabase 저장 실패:', err));
 
       alert(`${result.items.length}개 품목 데이터가 로드되었습니다.\n연간 예상매출: ${formatWon(result.summary.totalRevenue)}`);
     } catch (err) {
@@ -455,6 +536,8 @@ const SalesForecast: React.FC = () => {
     const updated = uploads.filter(u => u.id !== uploadId);
     setUploads(updated);
     localStorage.setItem(STORAGE_KEY_UPLOADS, JSON.stringify(updated));
+    forecastService.deleteUpload(uploadId).catch(err => console.error('업로드이력 삭제 실패:', err));
+    forecastService.saveUploads(updated).catch(err => console.error('업로드이력 동기화 실패:', err));
     setDeleteConfirmId(null);
   };
 
