@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import PurchaseSummaryView from './PurchaseSummaryView';
+import MaterialYieldView from './MaterialYieldView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
@@ -33,7 +34,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'price' | 'cr' | 'supplier' | 'summary'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'price' | 'cr' | 'supplier' | 'summary' | 'yield'>('inbound');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -476,6 +477,7 @@ const PurchaseView: React.FC = () => {
   const SUB_TABS = [
     { id: 'inbound', label: '구매현황(입고)' },
     { id: 'summary', label: '매입종합집계' },
+    { id: 'yield', label: '자재수율' },
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
     { id: 'supplier', label: '협력사 현황' },
@@ -790,6 +792,11 @@ const PurchaseView: React.FC = () => {
           2. PURCHASE SUMMARY TAB (매입종합집계)
          ================================================================================= */}
       {activeSubTab === 'summary' && <PurchaseSummaryView />}
+
+      {/* =================================================================================
+          2.5. MATERIAL YIELD TAB (자재수율)
+         ================================================================================= */}
+      {activeSubTab === 'yield' && <MaterialYieldView />}
 
       {/* =================================================================================
           3. PRICE TAB (Derived Data)

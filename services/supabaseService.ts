@@ -9,6 +9,7 @@ import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
 import { ForecastItem, ForecastSummary, ForecastUpload } from '../utils/salesForecastParser';
+import { BomRecord } from '../utils/bomDataParser';
 
 // ============================================
 // Helper Functions
@@ -1317,6 +1318,75 @@ export const purchaseSummaryService = {
 };
 
 // ============================================
+// BOM Data Service (자재수율용)
+// ============================================
+
+export const bomService = {
+  async getAll(): Promise<BomRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_bomData');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const pageSize = 1000;
+    let from = 0;
+    let allRows: any[] = [];
+
+    while (true) {
+      const { data, error } = await supabase!
+        .from('bom_data')
+        .select('*')
+        .order('parent_pn')
+        .range(from, from + pageSize - 1);
+
+      if (error) { handleError(error, 'bom getAll'); break; }
+      if (!data || data.length === 0) break;
+      allRows = allRows.concat(data);
+      if (data.length < pageSize) break;
+      from += pageSize;
+    }
+
+    return allRows.map((row: any) => ({
+      parentPn: row.parent_pn || '',
+      childPn: row.child_pn || '',
+      level: row.level || 1,
+      qty: Number(row.qty) || 1,
+      childName: row.child_name || '',
+      supplier: row.supplier || '',
+      partType: row.part_type || '',
+    }));
+  },
+
+  async saveAll(data: BomRecord[]): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+      return;
+    }
+
+    const { error: deleteError } = await supabase!
+      .from('bom_data')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) handleError(deleteError, 'bom delete');
+
+    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+
+    const rows = data.map(item => ({
+      parent_pn: item.parentPn,
+      child_pn: item.childPn,
+      level: item.level,
+      qty: item.qty,
+      child_name: item.childName,
+      supplier: item.supplier,
+      part_type: item.partType,
+    }));
+
+    await insertInBatches('bom_data', rows);
+  },
+};
+
+// ============================================
 // Utility: Check if Supabase has data & Auto-sync
 // ============================================
 
@@ -1343,7 +1413,7 @@ export const checkAndAutoSync = async (): Promise<{ action: 'synced_up' | 'synce
       'dashboard_salesData', 'dashboard_revenueData', 'dashboard_itemRevenueData',
       'dashboard_purchaseData', 'dashboard_inventoryData', 'dashboard_inventory_v2',
       'dashboard_crData', 'dashboard_rfqData', 'dashboard_supplierData',
-      'dashboard_forecastData'
+      'dashboard_forecastData', 'dashboard_bomData'
     ];
     const localHasData = localKeys.some(key => {
       const val = localStorage.getItem(key);
@@ -1425,6 +1495,10 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
   if (crData) await syncOne('cr', () => crService.saveAll(JSON.parse(crData)));
   if (rfqData) await syncOne('rfq', () => rfqService.saveAll(JSON.parse(rfqData)));
   if (supplierData) await syncOne('supplier', () => supplierService.saveAll(JSON.parse(supplierData)));
+
+  // BOM data
+  const bomData = localStorage.getItem('dashboard_bomData');
+  if (bomData) await syncOne('bom', () => bomService.saveAll(JSON.parse(bomData)));
 
   // Forecast data
   const forecastData = localStorage.getItem('dashboard_forecastData');
@@ -1508,6 +1582,10 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
   await loadOne('supplier', async () => {
     const data = await supplierService.getAll();
     localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+  });
+  await loadOne('bom', async () => {
+    const data = await bomService.getAll();
+    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
   });
 
   // Forecast data
