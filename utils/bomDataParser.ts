@@ -23,7 +23,7 @@ export interface YieldRow {
   inputQty: number;         // 투입수량
   yieldRate: number;        // 수율(%)
   diff: number;             // 차이(투입-표준)
-  status: 'normal' | 'over' | 'under' | 'noData';
+  status: 'normal' | 'over' | 'under' | 'noMatch' | 'otherPeriod' | 'zeroInput';
 }
 
 // ============================================

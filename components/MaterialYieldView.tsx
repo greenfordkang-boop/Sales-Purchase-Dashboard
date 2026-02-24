@@ -13,14 +13,18 @@ const STATUS_COLORS: Record<YieldRow['status'], string> = {
   normal: '#10b981',
   over: '#ef4444',
   under: '#f59e0b',
-  noData: '#94a3b8',
+  noMatch: '#94a3b8',
+  otherPeriod: '#8b5cf6',
+  zeroInput: '#64748b',
 };
 
 const STATUS_LABELS: Record<YieldRow['status'], string> = {
   normal: '정상',
   over: '과투입',
   under: '미달',
-  noData: '데이터없음',
+  noMatch: '미매칭',
+  otherPeriod: '기간외',
+  zeroInput: '무입고',
 };
 
 const MaterialYieldView: React.FC = () => {
@@ -176,13 +180,21 @@ const MaterialYieldView: React.FC = () => {
       inputByCode.set(code, (inputByCode.get(code) || 0) + (item.qty || 0));
     });
 
+    // 3-b) 구매입고 전체(기간 무관) — 미매칭 vs 기간외 판별용
+    const allInputCodes = new Set<string>();
+    purchaseData.forEach(item => {
+      const code = normalizePn(item.itemCode || '');
+      if (code) allInputCodes.add(code);
+    });
+
     // 4) 매칭하여 수율 산출 (정규화된 키로 매칭)
     const rows: YieldRow[] = [];
     for (const [childPn, accum] of childMap) {
-      const inputQty = inputByCode.get(normalizePn(childPn)) || 0;
+      const normalized = normalizePn(childPn);
+      const inputQty = inputByCode.get(normalized) || 0;
       const standardReq = accum.totalRequired;
       let yieldRate = 0;
-      let status: YieldRow['status'] = 'noData';
+      let status: YieldRow['status'] = 'noMatch';
 
       if (standardReq > 0 && inputQty > 0) {
         yieldRate = (inputQty / standardReq) * 100;
@@ -190,7 +202,17 @@ const MaterialYieldView: React.FC = () => {
         else if (yieldRate > 105) status = 'over';
         else status = 'under';
       } else if (inputQty === 0) {
-        status = 'noData';
+        if (allInputCodes.has(normalized)) {
+          // 구매입고에 코드 존재하지만 선택 기간에는 없음
+          status = 'otherPeriod';
+        } else {
+          // 구매입고 전체에서도 해당 코드 없음
+          status = 'noMatch';
+        }
+      }
+      // 매칭됐지만 입고수량이 0인 경우
+      if (inputByCode.has(normalized) && inputQty === 0) {
+        status = 'zeroInput';
       }
 
       rows.push({
@@ -238,21 +260,24 @@ const MaterialYieldView: React.FC = () => {
   }, [yieldRows, filterPn, filterName, filterSupplier, filterStatus, sortConfig]);
 
   // --- Summary Metrics ---
+  const isNoDataStatus = (s: YieldRow['status']) => s === 'noMatch' || s === 'otherPeriod' || s === 'zeroInput';
   const metrics = useMemo(() => {
     const total = yieldRows.length;
-    const avgYield = total > 0
-      ? yieldRows.filter(r => r.status !== 'noData').reduce((s, r) => s + r.yieldRate, 0) /
-        (yieldRows.filter(r => r.status !== 'noData').length || 1)
+    const withData = yieldRows.filter(r => !isNoDataStatus(r.status));
+    const avgYield = withData.length > 0
+      ? withData.reduce((s, r) => s + r.yieldRate, 0) / withData.length
       : 0;
     const overCount = yieldRows.filter(r => r.status === 'over').length;
-    const noDataCount = yieldRows.filter(r => r.status === 'noData').length;
-    return { total, avgYield, overCount, noDataCount };
+    const noMatchCount = yieldRows.filter(r => r.status === 'noMatch').length;
+    const otherPeriodCount = yieldRows.filter(r => r.status === 'otherPeriod').length;
+    const zeroInputCount = yieldRows.filter(r => r.status === 'zeroInput').length;
+    return { total, avgYield, overCount, noMatchCount, otherPeriodCount, zeroInputCount };
   }, [yieldRows]);
 
   // --- Chart Data ---
   const deviationChartData = useMemo(() => {
     return [...yieldRows]
-      .filter(r => r.status !== 'noData')
+      .filter(r => !isNoDataStatus(r.status))
       .sort((a, b) => Math.abs(b.yieldRate - 100) - Math.abs(a.yieldRate - 100))
       .slice(0, 15)
       .map(r => ({
@@ -377,7 +402,9 @@ const MaterialYieldView: React.FC = () => {
       normal: 'bg-emerald-100 text-emerald-700',
       over: 'bg-red-100 text-red-700',
       under: 'bg-amber-100 text-amber-700',
-      noData: 'bg-slate-100 text-slate-500',
+      noMatch: 'bg-slate-100 text-slate-500',
+      otherPeriod: 'bg-violet-100 text-violet-700',
+      zeroInput: 'bg-slate-200 text-slate-600',
     };
     return (
       <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${styles[status]}`}>
@@ -479,7 +506,12 @@ const MaterialYieldView: React.FC = () => {
           color={metrics.avgYield >= 95 && metrics.avgYield <= 105 ? 'emerald' : 'amber'}
         />
         <MetricCard label="과투입 자재" value={`${metrics.overCount}개`} subValue=">105% 투입" color="rose" />
-        <MetricCard label="미투입 자재" value={`${metrics.noDataCount}개`} subValue="투입수량 0 또는 미매칭" color="slate" />
+        <MetricCard
+          label="데이터없음 자재"
+          value={`${metrics.noMatchCount + metrics.otherPeriodCount + metrics.zeroInputCount}개`}
+          subValue={`미매칭 ${metrics.noMatchCount} / 기간외 ${metrics.otherPeriodCount} / 무입고 ${metrics.zeroInputCount}`}
+          color="slate"
+        />
       </div>
 
       {/* Charts */}
@@ -573,7 +605,9 @@ const MaterialYieldView: React.FC = () => {
               <option value="normal">정상 (95~105%)</option>
               <option value="over">과투입 (&gt;105%)</option>
               <option value="under">미달 (&lt;95%)</option>
-              <option value="noData">데이터없음</option>
+              <option value="noMatch">미매칭 (구매코드없음)</option>
+              <option value="otherPeriod">기간외 (다른월존재)</option>
+              <option value="zeroInput">무입고 (수량0)</option>
             </select>
           </div>
           <button
@@ -635,12 +669,13 @@ const MaterialYieldView: React.FC = () => {
                     <td className={`px-4 py-3 text-right font-mono font-bold ${
                       row.status === 'normal' ? 'text-emerald-600' :
                       row.status === 'over' ? 'text-red-600' :
-                      row.status === 'under' ? 'text-amber-600' : 'text-slate-400'
+                      row.status === 'under' ? 'text-amber-600' :
+                      row.status === 'otherPeriod' ? 'text-violet-500' : 'text-slate-400'
                     }`}>
-                      {row.status === 'noData' ? '-' : `${row.yieldRate}%`}
+                      {isNoDataStatus(row.status) ? '-' : `${row.yieldRate}%`}
                     </td>
                     <td className={`px-4 py-3 text-right font-mono ${row.diff > 0 ? 'text-red-500' : row.diff < 0 ? 'text-amber-500' : 'text-slate-400'}`}>
-                      {row.status === 'noData' ? '-' : row.diff > 0 ? `+${row.diff.toLocaleString()}` : row.diff.toLocaleString()}
+                      {isNoDataStatus(row.status) ? '-' : row.diff > 0 ? `+${row.diff.toLocaleString()}` : row.diff.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <StatusBadge status={row.status} />
