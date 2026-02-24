@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { BomRecord, YieldRow, parseBomCSV, parseBomExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
+import { BomRecord, YieldRow, PnMapping, parseBomCSV, parseBomExcel, parsePnMappingFromExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
 import { downloadCSV } from '../utils/csvExport';
@@ -30,6 +30,7 @@ const STATUS_LABELS: Record<YieldRow['status'], string> = {
 const MaterialYieldView: React.FC = () => {
   // --- State ---
   const [bomData, setBomData] = useState<BomRecord[]>([]);
+  const [pnMapping, setPnMapping] = useState<PnMapping[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>('All');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -39,11 +40,15 @@ const MaterialYieldView: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [tableOpen, setTableOpen] = useState(true);
 
-  // --- Load BOM from localStorage ---
+  // --- Load BOM + 품번 매핑 from localStorage ---
   useEffect(() => {
     const stored = localStorage.getItem('dashboard_bomData');
     if (stored) {
       try { setBomData(JSON.parse(stored)); } catch { /* ignore */ }
+    }
+    const storedMapping = localStorage.getItem('dashboard_pnMapping');
+    if (storedMapping) {
+      try { setPnMapping(JSON.parse(storedMapping)); } catch { /* ignore */ }
     }
   }, []);
 
@@ -112,6 +117,12 @@ const MaterialYieldView: React.FC = () => {
   const { yieldRows, bomMissingCount } = useMemo(() => {
     if (bomData.length === 0) return { yieldRows: [] as YieldRow[], bomMissingCount: 0 };
 
+    // 품번 매핑: 고객사P/N → 내부코드 (정규화된 키)
+    const custToInternal = new Map<string, string>();
+    pnMapping.forEach(m => {
+      custToInternal.set(normalizePn(m.customerPn), normalizePn(m.internalCode));
+    });
+
     // BOM relations를 정규화된 키로 빌드
     const rawRelations = buildBomRelations(bomData);
     const bomRelations = new Map<string, typeof bomData>();
@@ -120,6 +131,7 @@ const MaterialYieldView: React.FC = () => {
     }
 
     // 1) 매출 데이터를 partNo별로 집계 (연도/월 필터 적용)
+    //    매출 partNo(고객사P/N) → 내부코드 변환 시도
     const salesByPart = new Map<string, number>();
     itemRevenueData.forEach(row => {
       // 연도 필터
@@ -132,8 +144,11 @@ const MaterialYieldView: React.FC = () => {
         if (month && month !== selectedMonth) return;
       }
 
-      const pn = normalizePn(row.partNo || '');
-      if (!pn) return;
+      const rawPn = normalizePn(row.partNo || '');
+      if (!rawPn) return;
+
+      // 매핑 변환: 고객사P/N → 내부코드, 없으면 원본 사용
+      const pn = custToInternal.get(rawPn) || rawPn;
       salesByPart.set(pn, (salesByPart.get(pn) || 0) + (row.qty || 0));
     });
 
@@ -229,7 +244,7 @@ const MaterialYieldView: React.FC = () => {
     }
 
     return { yieldRows: rows, bomMissingCount: missingCount };
-  }, [bomData, itemRevenueData, purchaseData, selectedYear, selectedMonth]);
+  }, [bomData, pnMapping, itemRevenueData, purchaseData, selectedYear, selectedMonth]);
 
   // --- Filtered & Sorted rows ---
   const displayRows = useMemo(() => {
@@ -288,7 +303,7 @@ const MaterialYieldView: React.FC = () => {
   }, [yieldRows]);
 
   const statusPieData = useMemo(() => {
-    const counts: Record<string, number> = { normal: 0, over: 0, under: 0, noData: 0 };
+    const counts: Record<string, number> = { normal: 0, over: 0, under: 0, noMatch: 0, otherPeriod: 0, zeroInput: 0 };
     yieldRows.forEach(r => counts[r.status]++);
     return Object.entries(counts)
       .filter(([, v]) => v > 0)
@@ -355,6 +370,25 @@ const MaterialYieldView: React.FC = () => {
     }
 
     alert(`BOM 데이터 ${records.length}건이 업로드되었습니다.`);
+  };
+
+  const handleMappingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const buffer = await file.arrayBuffer();
+    const mappings = parsePnMappingFromExcel(buffer);
+
+    if (mappings.length === 0) {
+      alert('품번 매핑 파싱 실패: 품목코드, 고객사 P/N 컬럼을 확인해주세요.');
+      e.target.value = '';
+      return;
+    }
+
+    setPnMapping(mappings);
+    localStorage.setItem('dashboard_pnMapping', JSON.stringify(mappings));
+    alert(`품번 매핑 ${mappings.length}건이 업로드되었습니다. (고객사P/N → 내부코드)`);
+    e.target.value = '';
   };
 
   const handleSort = (key: string) => {
@@ -450,8 +484,9 @@ const MaterialYieldView: React.FC = () => {
         <div>
           <h2 className="text-xl font-black text-slate-800">자재수율 (Material Yield)</h2>
           <p className="text-xs text-slate-500 mt-1">
-            BOM {bomData.length}건 등록
-            {bomMissingCount > 0 && <span className="text-amber-500 ml-2">{bomMissingCount}개 제품 BOM 미등록</span>}
+            BOM {bomData.length}건
+            {pnMapping.length > 0 && <span className="text-indigo-500 ml-2">| 품번매핑 {pnMapping.length}건</span>}
+            {bomMissingCount > 0 && <span className="text-amber-500 ml-2">| {bomMissingCount}개 제품 BOM 미등록</span>}
           </p>
         </div>
 
@@ -492,6 +527,15 @@ const MaterialYieldView: React.FC = () => {
             </svg>
             BOM 재업로드
             <input type="file" accept=".csv,.xlsx,.xls" onChange={handleBomFileUpload} className="hidden" />
+          </label>
+
+          {/* 품번 매핑 업로드 */}
+          <label className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            {pnMapping.length > 0 ? '품번매핑 재업로드' : '품번매핑 업로드'}
+            <input type="file" accept=".xlsx,.xls" onChange={handleMappingFileUpload} className="hidden" />
           </label>
         </div>
       </div>

@@ -4,6 +4,13 @@ import * as XLSX from 'xlsx';
 // Types
 // ============================================
 
+/** 고객사 P/N ↔ 내부 품목코드 매핑 */
+export interface PnMapping {
+  customerPn: string;  // 고객사 P/N (매출 partNo에 해당)
+  internalCode: string; // 내부 품목코드 (BOM parentPn / 구매 itemCode에 해당)
+  partName: string;
+}
+
 export interface BomRecord {
   parentPn: string;   // 모품번
   childPn: string;    // 자품번
@@ -155,6 +162,58 @@ export const parseBomExcel = (buffer: ArrayBuffer): BomRecord[] => {
       partType: mapping.partType !== undefined ? String(cols[mapping.partType] || '').trim() : '',
     };
   }).filter((r): r is BomRecord => r !== null);
+};
+
+// ============================================
+// 품번 매핑 파서 (표준재료비 엑셀 → 고객사P/N ↔ 내부코드)
+// ============================================
+
+/**
+ * 표준재료비 엑셀의 '품목별재료비' 시트에서 품번 매핑 추출
+ * col3: 품목코드(내부), col4: 고객사 P/N, col5: 품목명
+ */
+export const parsePnMappingFromExcel = (buffer: ArrayBuffer): PnMapping[] => {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+
+  // '품목별재료비' 시트 찾기
+  const sheetName = workbook.SheetNames.find(n => n.includes('품목별재료비')) || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+  // 헤더 행 탐색: '품목코드' 포함된 행 찾기
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(10, rows.length); i++) {
+    const row = rows[i].map((c: any) => String(c).replace(/\r?\n/g, ' ').trim());
+    if (row.some((c: string) => /품목코드/.test(c))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  const headers = rows[headerIdx].map((c: any) => String(c).replace(/\r?\n/g, ' ').trim());
+  const codeIdx = headers.findIndex((h: string) => /품목코드/.test(h));
+  const custPnIdx = headers.findIndex((h: string) => /고객사.*P.?N/i.test(h));
+  const nameIdx = headers.findIndex((h: string) => /품목명/.test(h));
+
+  if (codeIdx === -1 || custPnIdx === -1) return [];
+
+  const results: PnMapping[] = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const internalCode = String(rows[i][codeIdx] || '').trim();
+    const customerPn = String(rows[i][custPnIdx] || '').trim();
+    if (!internalCode || !customerPn) continue;
+
+    results.push({
+      customerPn,
+      internalCode,
+      partName: nameIdx !== -1 ? String(rows[i][nameIdx] || '').trim() : '',
+    });
+  }
+
+  return results;
 };
 
 // ============================================
