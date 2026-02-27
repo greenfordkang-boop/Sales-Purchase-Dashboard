@@ -57,60 +57,43 @@ const BomMasterUploadView: React.FC = () => {
   const [filterIssueType, setFilterIssueType] = useState<string>('All');
   const [bomFilter, setBomFilter] = useState('');
 
-  // --- 초기 로드: localStorage에서 마스터 현황 로드 ---
+  // --- 초기 로드: Supabase 우선, localStorage 폴백 ---
   useEffect(() => {
-    const loadStatus = () => {
-      const status = { ...INITIAL_STATUS };
+    const loadAll = async () => {
       const ts = localStorage.getItem('dashboard_bomMaster_uploadTimestamp');
       const uploadDate = ts || '-';
 
-      const bomData = localStorage.getItem('dashboard_bomMasterData');
-      if (bomData) {
-        try { status.bom = { count: JSON.parse(bomData).length, lastUpload: uploadDate }; } catch { /* */ }
-      }
-      const pcData = localStorage.getItem('dashboard_productCodeMaster');
-      if (pcData) {
-        try { status.productCode = { count: JSON.parse(pcData).length, lastUpload: uploadDate }; } catch { /* */ }
-      }
-      const riData = localStorage.getItem('dashboard_referenceInfoMaster');
-      if (riData) {
-        try { status.referenceInfo = { count: JSON.parse(riData).length, lastUpload: uploadDate }; } catch { /* */ }
-      }
-      const eqData = localStorage.getItem('dashboard_equipmentMaster');
-      if (eqData) {
-        try { status.equipment = { count: JSON.parse(eqData).length, lastUpload: uploadDate }; } catch { /* */ }
-      }
-      const mcData = localStorage.getItem('dashboard_materialCodeMaster');
-      if (mcData) {
-        try { status.materialCode = { count: JSON.parse(mcData).length, lastUpload: uploadDate }; } catch { /* */ }
-      }
-      setUploadStatus(status);
-    };
+      // Supabase에서 로드 (localStorage 폴백)
+      const [bomData, pcData, riData, eqData, mcData, dqData] = await Promise.all([
+        bomMasterService.getAll(),
+        productCodeService.getAll(),
+        referenceInfoService.getAll(),
+        equipmentService.getAll(),
+        materialCodeService.getAll(),
+        dataQualityService.getAll(),
+      ]);
 
-    const loadQuality = () => {
-      const stored = localStorage.getItem('dashboard_dataQualityIssues');
-      if (stored) {
-        try { setQualityIssues(JSON.parse(stored)); } catch { /* */ }
-      }
-    };
+      setUploadStatus({
+        bom: { count: bomData.length, lastUpload: bomData.length > 0 ? uploadDate : '-' },
+        productCode: { count: pcData.length, lastUpload: pcData.length > 0 ? uploadDate : '-' },
+        referenceInfo: { count: riData.length, lastUpload: riData.length > 0 ? uploadDate : '-' },
+        equipment: { count: eqData.length, lastUpload: eqData.length > 0 ? uploadDate : '-' },
+        materialCode: { count: mcData.length, lastUpload: mcData.length > 0 ? uploadDate : '-' },
+      });
 
-    loadStatus();
-    loadQuality();
-    rebuildAssembledBom();
-  }, []);
+      if (dqData.length > 0) setQualityIssues(dqData);
 
-  // --- BOM정보 조립 ---
-  const rebuildAssembledBom = () => {
-    try {
-      const bomData: BomMasterRecord[] = JSON.parse(localStorage.getItem('dashboard_bomMasterData') || '[]');
-      const refInfo: ReferenceInfoRecord[] = JSON.parse(localStorage.getItem('dashboard_referenceInfoMaster') || '[]');
-      const matCodes: MaterialCodeRecord[] = JSON.parse(localStorage.getItem('dashboard_materialCodeMaster') || '[]');
+      // BOM정보 조립
       if (bomData.length > 0) {
-        const assembled = assembleBomInfo(bomData, refInfo, matCodes);
-        setAssembledBom(assembled);
+        try {
+          const assembled = assembleBomInfo(bomData, riData, mcData);
+          setAssembledBom(assembled);
+        } catch { /* ignore */ }
       }
-    } catch { /* ignore */ }
-  };
+    };
+
+    loadAll();
+  }, []);
 
   // --- Excel 업로드 핸들러 ---
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -152,7 +135,10 @@ const BomMasterUploadView: React.FC = () => {
       setQualityIssues(result.qualityIssues);
 
       // BOM정보 재조립
-      rebuildAssembledBom();
+      try {
+        const assembled = assembleBomInfo(result.bom, result.referenceInfo, result.materialCodes);
+        setAssembledBom(assembled);
+      } catch { /* ignore */ }
 
       // 크로스 컴포넌트 이벤트
       window.dispatchEvent(new CustomEvent('dashboard-data-updated', { detail: { type: 'bomMaster' } }));
