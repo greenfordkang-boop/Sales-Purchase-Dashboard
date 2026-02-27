@@ -133,8 +133,21 @@ const MRPView: React.FC = () => {
 
     if (sortConfig) {
       result = [...result].sort((a, b) => {
-        const aVal = (a as any)[sortConfig.key];
-        const bVal = (b as any)[sortConfig.key];
+        let aVal: any;
+        let bVal: any;
+        // 월별 컬럼 정렬 지원
+        const monthMatch = sortConfig.key.match(/^month_(\d+)$/);
+        if (monthMatch) {
+          const mi = parseInt(monthMatch[1], 10);
+          aVal = a.monthlyQty[mi] || 0;
+          bVal = b.monthlyQty[mi] || 0;
+        } else if (sortConfig.key === 'parentProducts') {
+          aVal = a.parentProducts.length;
+          bVal = b.parentProducts.length;
+        } else {
+          aVal = (a as any)[sortConfig.key];
+          bVal = (b as any)[sortConfig.key];
+        }
         if (typeof aVal === 'number' && typeof bVal === 'number') {
           return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
         }
@@ -200,18 +213,16 @@ const MRPView: React.FC = () => {
     <div className="space-y-4">
       {/* 메트릭 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard label="총 소요자재" value={summary.totalMaterials.toLocaleString()} suffix="종" />
+        <MetricCard label="총 소요자재" value={`${summary.totalMaterials.toLocaleString()}종`} />
         <MetricCard
-          title="BOM 매칭률"
-          value={`${(summary.bomMatchRate * 100).toFixed(1)}`}
-          suffix="%"
+          label="BOM 매칭률"
+          value={`${(summary.bomMatchRate * 100).toFixed(1)}%`}
         />
-        <MetricCard label="매칭 제품" value={summary.matchedProducts.toLocaleString()} suffix="건" />
-        <MetricCard label="미매칭" value={summary.unmatchedProducts.length.toLocaleString()} suffix="건" />
+        <MetricCard label="매칭 제품" value={`${summary.matchedProducts.toLocaleString()}건`} />
+        <MetricCard label="미매칭" value={`${summary.unmatchedProducts.length.toLocaleString()}건`} />
         <MetricCard
-          title="총 소요원가"
-          value={summary.totalCost > 0 ? (summary.totalCost / 100000000).toFixed(1) : '0'}
-          suffix="억원"
+          label="총 소요원가"
+          value={`${summary.totalCost > 0 ? (summary.totalCost / 100000000).toFixed(1) : '0'}억원`}
         />
       </div>
 
@@ -327,11 +338,16 @@ const MRPView: React.FC = () => {
                     { key: 'unitPrice', label: '단가', align: 'right' },
                     { key: 'totalCost', label: '총원가', align: 'right' },
                     { key: 'parentProducts', label: '관련제품', align: 'right' },
+                    ...Array.from({ length: 12 }, (_, i) => ({
+                      key: `month_${i}`,
+                      label: `${i + 1}월`,
+                      align: 'right' as const,
+                    })),
                   ].map(col => (
                     <th
                       key={col.key}
                       onClick={() => handleSort(col.key)}
-                      className={`px-3 py-2 text-gray-600 font-medium cursor-pointer hover:bg-gray-100 ${
+                      className={`px-3 py-2 text-gray-600 font-medium cursor-pointer hover:bg-gray-100 whitespace-nowrap ${
                         (col as any).align === 'right' ? 'text-right' : 'text-left'
                       }`}
                     >
@@ -368,6 +384,11 @@ const MRPView: React.FC = () => {
                       {m.totalCost > 0 ? (m.totalCost / 10000).toFixed(0) + '만' : '-'}
                     </td>
                     <td className="px-3 py-1.5 text-right text-gray-500">{m.parentProducts.length}</td>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <td key={i} className={`px-3 py-1.5 text-right font-mono ${m.monthlyQty[i] > 0 ? 'text-gray-700' : 'text-gray-300'}`}>
+                        {m.monthlyQty[i] > 0 ? m.monthlyQty[i].toLocaleString() : '-'}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
