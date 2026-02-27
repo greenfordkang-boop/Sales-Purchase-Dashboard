@@ -5,6 +5,7 @@ import PurchaseSummaryView from './PurchaseSummaryView';
 import MaterialYieldView from './MaterialYieldView';
 import StandardMaterialCostView from './StandardMaterialCostView';
 import BomMasterUploadView from './BomMasterUploadView';
+import BomExplosionView from './BomExplosionView';
 import MRPView from './MRPView';
 import CRView from './CRView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
@@ -52,7 +53,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'bomExplosion' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard'>('inbound');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -515,6 +516,7 @@ const PurchaseView: React.FC = () => {
     { id: 'inbound', label: '입고현황' },
     { id: 'summary', label: '매입종합집계' },
     { id: 'bomMaster', label: 'BOM 마스터' },
+    { id: 'bomExplosion', label: 'BOM 전개' },
     { id: 'mrp', label: '소요량(MRP)' },
     { id: 'yield', label: '자재수율' },
     { id: 'price', label: '단가현황' },
@@ -837,6 +839,11 @@ const PurchaseView: React.FC = () => {
           2.5. BOM MASTER TAB (BOM 마스터 업로드)
          ================================================================================= */}
       {activeSubTab === 'bomMaster' && <BomMasterUploadView />}
+
+      {/* =================================================================================
+          2.55. BOM EXPLOSION TAB (BOM 전개)
+         ================================================================================= */}
+      {activeSubTab === 'bomExplosion' && <BomExplosionView />}
 
       {/* =================================================================================
           2.6. MRP TAB (소요량 계획)
