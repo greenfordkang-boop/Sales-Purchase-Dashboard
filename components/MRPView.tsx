@@ -10,6 +10,7 @@ import { downloadCSV } from '../utils/csvExport';
 import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService } from '../services/supabaseService';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import fallbackPurchasePrices from '../data/purchasePrices.json';
+import fallbackStandardCosts from '../data/standardMaterialCost.json';
 
 // ============================================================
 // Constants
@@ -119,7 +120,7 @@ const MRPView: React.FC = () => {
         }
       }
 
-      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData);
+      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData, fallbackStandardCosts);
       setMrpResult(result);
     } catch (err) {
       console.error('MRP 계산 실패:', err);
@@ -249,6 +250,9 @@ const MRPView: React.FC = () => {
           value={`${(summary.bomMatchRate * 100).toFixed(1)}%`}
         />
         <MetricCard label="매칭 제품" value={`${summary.matchedProducts.toLocaleString()}건`} />
+        {summary.directCostProducts > 0 && (
+          <MetricCard label="표준재료비 적용" value={`${summary.directCostProducts}건`} />
+        )}
         <MetricCard label="미매칭" value={`${summary.unmatchedProducts.length.toLocaleString()}건`} />
         <MetricCard
           label="총 소요원가"

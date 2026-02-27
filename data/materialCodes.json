@@ -1,1 +1,2314 @@
-[{"materialCode":"HAT0261","materialName":"AUTO PC 경화제 [2Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"HAT0291","materialName":"AUTO 500(PC) 경화제 (BTX/F) [1.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"HAT0331","materialName":"AUTO FEEL 경화제(BTX/F) [3kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":20000},{"materialCode":"HBA0051","materialName":"POLY HARD BA-40(2.48)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":1},{"materialCode":"HBA0311","materialName":"POLY HARD MF-40","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":0.01},{"materialCode":"HCP0271","materialName":"CPH-75(HG)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"HCP0281","materialName":"HANSOL_CPH-M40 [2.25KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"HDB0011","materialName":"DB-224 경화제(BTX-FREE) [3.2Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":19600},{"materialCode":"HDB0021","materialName":"DB경화제(BTX-FREE) [1.62Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":19306},{"materialCode":"HDB0181","materialName":"DB-경화제 (BTX-FREE PC용)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":19306},{"materialCode":"HEC0251","materialName":"EC-H-250","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":27500},{"materialCode":"HHG0151","materialName":"HG BLACK(RET) 경화제 [6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16667},{"materialCode":"HHG0231","materialName":"하이그로시 경화제 (BTX/F)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":7500},{"materialCode":"HHG0281","materialName":"하이그로시 경화제 #KF (BTX/F) [6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":7500},{"materialCode":"HHX0081","materialName":"EC-H-600 [4KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":31000},{"materialCode":"HHX0091","materialName":"EC-H-800 [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13000},{"materialCode":"HHX0101","materialName":"EXH-264 [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12400},{"materialCode":"HHX0111","materialName":"H-300-50 K1 [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17800},{"materialCode":"HHX0121","materialName":"EC-H-760 [1.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"HHX0291","materialName":"EXH-K20-800 [4KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13000},{"materialCode":"HNC0131","materialName":"NC-37","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":1},{"materialCode":"HPC0141","materialName":"PC BLACK LASER 경화제 [1.2Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":60000},{"materialCode":"HPR0281","materialName":"프라톱 1500 경화제 (BTX/F) [3KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":20000},{"materialCode":"HPR0301","materialName":"프라톱 2000 경화제 (BTX/F) [1.5KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":30000},{"materialCode":"HPR0361","materialName":"프라톱 1500 경화제 (BTX/F)#3_[3KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":20000},{"materialCode":"HPR0371","materialName":"프라톱 1000 경화제 (BTX/F) [1.5kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":6666.67},{"materialCode":"HXX0061","materialName":"POLY HARD TX-F(2.48)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":1},{"materialCode":"HXX0241","materialName":"POLY HARD UN-50","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":1},{"materialCode":"PAT0801","materialName":"AUTO 500 BLACK FHV [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11700},{"materialCode":"PAT1131","materialName":"AUTO PC 1000 BLACK(G10) [14kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":9842.86},{"materialCode":"PAT1141","materialName":"AUTO FEEL(S) 4X (BTX/F) LASER [3kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13167},{"materialCode":"PAT1151","materialName":"AUTO PC 1000 BLACK [14kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":9843},{"materialCode":"PAT1191","materialName":"364","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10535.71},{"materialCode":"PAT1621","materialName":"AUTO PC 1000 BLACK(G20) [14kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":9842.86},{"materialCode":"PAT1811","materialName":"AUTO 500 실버 프라이머+[15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13533.33},{"materialCode":"PDP0891","materialName":"NOROOBEE_DP-2811 METAL PRIMER (SD1) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12800},{"materialCode":"PDR0011","materialName":"NOROOBEE_DR-214 CA (JA-CAR)-1(BN) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11203},{"materialCode":"PDR0021","materialName":"NOROOBEE_DR-214 CA (JA-CAR) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11203},{"materialCode":"PDR0031","materialName":"NOROOBEE_DR-214 CGS(DE-CAR,BTX-FREE) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12500},{"materialCode":"PDR0041","materialName":"NOROOBEE_DR-214 DDK(DE-CAR,BTX-FREE) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12500},{"materialCode":"PDR0051","materialName":"DR-214 WK(DE-CAR,BTX-FREE)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12500},{"materialCode":"PDR0061","materialName":"NOROOBEE_DR-224 WK (SK3-CAR, G6) [13.3Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15300},{"materialCode":"PDR0071","materialName":"NOROOBEE_DR-247 ASB (JA-CAR) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":26576},{"materialCode":"PDR0081","materialName":"NOROOBEE_DR-247 SSH (AD PE-CAR) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":38000},{"materialCode":"PDR0091","materialName":"NOROOBEE_DR-253 BN BLACK(JS) [10Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10244},{"materialCode":"PDR0101","materialName":"DR-253 B/N BLACK(S2)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10244},{"materialCode":"PDR0111","materialName":"DR-253 BN BLACK(S2)-1","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10244},{"materialCode":"PDR0121","materialName":"NOROOBEE_DR-253 H/G BLACK(S) BTX-FREE [16.2Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16078},{"materialCode":"PDR0131","materialName":"NOROOBEE_DR-253 H/G BLACK(S)(RET) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17200},{"materialCode":"PDR0141","materialName":"NOROOBEE_DR-810 CLEAR (개량, 신성) [12Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":21499},{"materialCode":"PDR0751","materialName":"NOROOBEE_DR-224 4X (CN7, CN7a-CAR) [3.6Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15300},{"materialCode":"PDR0841","materialName":"NOROOBEE_DR-247 NVC (DN8-CAR) [3.4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":46500},{"materialCode":"PDR0931","materialName":"DR-214 4X (BC3-CAR)(SW)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":21000},{"materialCode":"PDR1271","materialName":"DR-214_4X_ACE [12kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13390},{"materialCode":"PDR1311","materialName":"DR-224 CDD(ON-CAR) [3.2Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":14500},{"materialCode":"PDR1411","materialName":"DR-247 OFM (BL7-CAR) [3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":30000},{"materialCode":"PDR1511","materialName":"DR-247 QC1 [3.4kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":37000},{"materialCode":"PDR1541","materialName":"DR-253 B/N BLACK(FD:고광택) [12kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12000},{"materialCode":"PDR1601","materialName":"DR-247(A)_PN5","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":37000},{"materialCode":"PDR1611","materialName":"DR-224(H)_YGN","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15000},{"materialCode":"PDR1791","materialName":"DR-224(H) NNB(USB단자용, SD1) [12kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13200},{"materialCode":"PEC1261","materialName":"EC-GPX79-K17-31348-K1 [4kg] FE (XY)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":25000},{"materialCode":"PEC1551","materialName":"EC-GPX79-K17-31348-K7 TTM [4kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":25000},{"materialCode":"PEX1111","materialName":"EXE-K22-0005(WHITE) [16KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17500},{"materialCode":"PHA0971","materialName":"HANSOL_HAU-B2020-8 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12000},{"materialCode":"PHG0981","materialName":"HG BLACK FHL (BTX/F) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17733},{"materialCode":"PHG0991","materialName":"하이그로시크리어 FHV (BTX/F) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11300},{"materialCode":"PHT0151","materialName":"RESOTHANE-HT#200(TX-F) 4X","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12645},{"materialCode":"PHT0161","materialName":"RESOTHANE-HT#200(TX-F) CA(G9) [15.5Kg](악조)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12838},{"materialCode":"PHT0171","materialName":"RESOTHANE-HT#200(TX-F) PMP [4KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":30000},{"materialCode":"PHT0181","materialName":"HT#200(TX-F) TMT [3.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":32000},{"materialCode":"PHT0191","materialName":"RESOTHANE-HT#200(TX-F) TRY [15.5Kg](악조)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12774},{"materialCode":"PHT0201","materialName":"RESOTHANE-HT#200(TX-F) WK(G4) [15.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13096},{"materialCode":"PHT0211","materialName":"RESOTHANE-HT#200(TX-F) WK(G6) [15.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13161},{"materialCode":"PHT0221","materialName":"RESOTHANE-HT#200(TX-F) WK(G9) [15.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12258},{"materialCode":"PHT0231","materialName":"RESOTHANE-HT#300(TX-F) 4X [14.4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15625},{"materialCode":"PHT0241","materialName":"HT#300(TX-F)CDD H [14.4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":13548},{"materialCode":"PHT0251","materialName":"RESOTHANE-HT#600(TX-F) UAY(BASE) [3.6KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15833},{"materialCode":"PHT0261","materialName":"RESOTHANE-HT#200 WK(VG) [15.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10710},{"materialCode":"PHT0271","materialName":"RESOTHANE-HT#200 WK(SL)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10516},{"materialCode":"PHT0281","materialName":"RESOTHANE-HT#500 ASB","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":40000},{"materialCode":"PHT0291","materialName":"RESOTHANE-HT#500 PGB","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":34286},{"materialCode":"PHT0301","materialName":"RESOTHANE-HT#500(TX-F) PGB [3.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":34286},{"materialCode":"PHT0311","materialName":"RESOTHANE-HT#600 BLH","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16457},{"materialCode":"PHT0391","materialName":"하이카탄#200 4X [15.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11225},{"materialCode":"PHT0401","materialName":"하이카탄#200 CA","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11935},{"materialCode":"PHT0411","materialName":"하이카탄#200 VA(반광)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11097},{"materialCode":"PHT0591","materialName":"HT#200(TX-F) UMB [3.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12000},{"materialCode":"PHT0601","materialName":"HT#500(TX-F)SAQ [3.5KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"PHT0991","materialName":"RESOTHANE-HT#300(TX-F) YGN [3.2KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16531.25},{"materialCode":"PHT1001","materialName":"HT#300(TX-F) CAQ [14.4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16041},{"materialCode":"PHT1171","materialName":"RESOTHANE-HT#800(TX-F) M6G[3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":49444.44},{"materialCode":"PHT1201","materialName":"RESOTHANE-HT#300(TX-F) YPK[3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16531.25},{"materialCode":"PHT1211","materialName":"RESOTHANE-HT#300(TX-F) WK(G6_N) [14.4kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16736.11},{"materialCode":"PHT1571","materialName":"RESOTHANE-HT#300(TX-F) WK(G6) [14.4kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16319.44},{"materialCode":"PHT1631","materialName":"RESOTHANE-HT#200 WK(JD_G5)[15.5kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11161.29},{"materialCode":"PHU0951","materialName":"HANSOL_HUT-2020(CAQ) [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":23000},{"materialCode":"PNW0441","materialName":"NW-79-K13-31200 [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16700},{"materialCode":"PNW0451","materialName":"NW79-K30658-K1 [16Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10500},{"materialCode":"PNW0461","materialName":"NW79-K30658-K3 [16Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11000},{"materialCode":"PNW0621","materialName":"NW79-K30640 BLACK [16Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11300},{"materialCode":"PNW0961","materialName":"NW79-K21-30131 BLACK [4KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16400},{"materialCode":"PNX0431","materialName":"N781-K13-30430-K1","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":18500},{"materialCode":"PNX1001","materialName":"N781-K18-30838-K4 4XY BLACK B [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":20000},{"materialCode":"PPC0551","materialName":"PC BLACK(LASER) [14.8Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":14054.05},{"materialCode":"PPR1021","materialName":"프라톱 1500 PPJ (BTX/F) AN#S [3KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":26650},{"materialCode":"PPR1161","materialName":"프라톱 1500 4X (BTX/F) US4 [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10347},{"materialCode":"PPR1181","materialName":"프라톱 2000 LS5 [3.6KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":32638.89},{"materialCode":"PPR1391","materialName":"프라톱 1500 WK G6(BTX/F) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10347},{"materialCode":"PPR1441","materialName":"프라톱 1500 YPK(BTX/F) [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11020},{"materialCode":"PPR1451","materialName":"프라톱 1500 YGN(BTX/F)#SA [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11033},{"materialCode":"PPR1581","materialName":"프라톱 1500 RBQ(BTX/F) [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"PPR1601","materialName":"TX-F #30 PRIMER BLACK[15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12666.67},{"materialCode":"PPR1701","materialName":"프라톱 2000 WARM SILVER","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":32638.89},{"materialCode":"PPR1731","materialName":"프라톱 1000 SV PRIMER[3.0kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15000},{"materialCode":"PPR1821","materialName":"프라톱 2000 STAL VP2NG SILVER(BTX/F)[3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":34857.14},{"materialCode":"PPT1001","materialName":"AUTO PC 1000 WHITE (SBP)#S","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"PPT1011","materialName":"AUTO PC BLACK (V5)#S [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10000},{"materialCode":"PPX0421","materialName":"EC-P79-K19-30116 SRX-OS EV [16Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":18500},{"materialCode":"PPX0991","materialName":"EC-P79-K17-30763LE BLACK [16KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16800},{"materialCode":"PPX1011","materialName":"EC-P79-K20-30916LE-K4 4XY BLACK [4KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16800},{"materialCode":"PSP0321","materialName":"RESOTHANE-SPZ#600 PC BLACK","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11032},{"materialCode":"PSP0331","materialName":"RESOTHANE-SPZ#600 PIANO BLACK(BASE) [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17613},{"materialCode":"PSP0341","materialName":"RESOTHANE-SPZ#600(TX-F) FHV(PC/ABS) [16KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16875},{"materialCode":"PSP0351","materialName":"RESOTHANE-SPZ#800(TX-F) P/B(G2) [16.3Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10323},{"materialCode":"PSP0501","materialName":"RESOTHANE-SPZ#600 PC WHITE","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11677},{"materialCode":"PSP1021","materialName":"SPZ#800(TX-F) PC BLACK(G10) [16.3Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":11104},{"materialCode":"PSP1521","materialName":"SPZ#900(TX-F)SILVER PRIMER(W1) [3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":17500},{"materialCode":"PSP1531","materialName":"RESOTHANE-HT#900(TX-F) EG6 [3.6kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":41666.67},{"materialCode":"PST1121","materialName":"SPT20-K27970 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5400},{"materialCode":"PTA0361","materialName":"TAN TAN CLEAR 2G(AUTO_J)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":16800},{"materialCode":"PTA0371","materialName":"TAN TAN CLEAR UAY(AUTO) [12.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":15926},{"materialCode":"PTA0381","materialName":"TAN TAN CLEAR(AUTO) [13.5Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":10519},{"materialCode":"PUT1241","materialName":"UT678(A)-SILVER(MGM) [4L]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":34417.5},{"materialCode":"PWR0471","materialName":"WR-62-K14-31590-K2 [4Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":22300},{"materialCode":"RAB0021","materialName":"ABS_XR409H_8H616","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3284},{"materialCode":"RAB0141","materialName":"ABS_XR409H_9001","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3437},{"materialCode":"RAB0171","materialName":"ABS_MP220 NP_PL","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2585},{"materialCode":"RAB0191","materialName":"ABS_XR490_9001 BK","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2447},{"materialCode":"RAB0531","materialName":"ABS_MP220_HNP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2626},{"materialCode":"RAB0551","materialName":"ABS_XR440_9001","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3620},{"materialCode":"REX0741","materialName":"SANTOPRENE_EXXON MOBIL291-60B150","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":12300},{"materialCode":"RLX0461","materialName":"LEXAN 141-112(확산제 5g/kg)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4700},{"materialCode":"RLX0711","materialName":"LEXAN 141R_701_INFAC","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4700},{"materialCode":"RPA0471","materialName":"PC+ASA_WR7250HS_K24873","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5640},{"materialCode":"RPA0761","materialName":"PA6_1533GFU BK02(GF30%)_인펙일렉스","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3730},{"materialCode":"RPA0761","materialName":"PA6_1533GFU BK02(GF30%)_인펙일렉스","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3850},{"materialCode":"RPA0761","materialName":"PA6_1533GFU BK02(GF30%)_인펙일렉스","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3730},{"materialCode":"RPA0761","materialName":"PA6_1533GFU BK02(GF30%)_인펙일렉스","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3850},{"materialCode":"RPB0011","materialName":"PC+ABS_HR5007A_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4372},{"materialCode":"RPB0071","materialName":"PC+ABS_NS5000C_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4517},{"materialCode":"RPB0081","materialName":"PC+ABS_NS5000CR_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4661},{"materialCode":"RPB0091","materialName":"PC+ABS_NS5000CRT_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4878},{"materialCode":"RPB0381","materialName":"PC+ABS NATURAL MP5000AM","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4101},{"materialCode":"RPB0391","materialName":"PC+ABS_NS5000CR_E5309-S(YGN)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5348},{"materialCode":"RPB0431","materialName":"PC+ABS GP5008BFH_WHITE (W0262)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5600},{"materialCode":"RPB0611","materialName":"PC+ABS_GN5007FL_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5427},{"materialCode":"RPB0611","materialName":"PC+ABS_GN5007FL_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5043},{"materialCode":"RPB0611","materialName":"PC+ABS_GN5007FL_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5427},{"materialCode":"RPB0611","materialName":"PC+ABS_GN5007FL_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5043},{"materialCode":"RPB0661","materialName":"PC+ABS_PT5000_KA02","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4735},{"materialCode":"RPB0751","materialName":"PC+ABS_NS5000C_WJ08(WHITE)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4900},{"materialCode":"RPB0771","materialName":"PC+ABS_HAC8270_09103_인펙일렉스","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3750},{"materialCode":"RPC0031","materialName":"PC_YSC1004A_KPA1","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4824},{"materialCode":"RPC0041","materialName":"PC_TRIREX 3025U_WH EA3432ACP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4866},{"materialCode":"RPC0051","materialName":"PC_TRIREX 3025U_WH EA3432ABP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4866},{"materialCode":"RPC0061","materialName":"PC_GP1000M_KPA1","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4216},{"materialCode":"RPC0101","materialName":"PC_TRIREX 3022U_LH75 EA3232N0P","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5764},{"materialCode":"RPC0111","materialName":"PC_TRIREX 3022U_LH65 EA3232S0P","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5764},{"materialCode":"RPC0121","materialName":"PC_TRIREX SO1-3025LD_COOL-WH EA3432AZP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6020},{"materialCode":"RPC0131","materialName":"PC_TRIREX 3022IR_EP022IR00PA","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3841},{"materialCode":"RPC0151","materialName":"PC_YGP1000MU_E3385PP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4329},{"materialCode":"RPC0201","materialName":"PC_P1303AH 10_W0992T CL","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3409},{"materialCode":"RPC0211","materialName":"PC_YGP1000MU_K1148J CP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3409},{"materialCode":"RPC0221","materialName":"PC_STAREN TP-1020_LDW63","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6040},{"materialCode":"RPC0231","materialName":"PC_LT-1220_40636","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5580},{"materialCode":"RPC0241","materialName":"PC_LT-1220_40663","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5700},{"materialCode":"RPC0251","materialName":"PC_TRIREX 3025LD_SM 3438DP","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5497},{"materialCode":"RPC0261","materialName":"PC_TRIREX 3022U_LH85 3332H","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":7600},{"materialCode":"RPC0301","materialName":"PC_TRIREX SO1-3025LD_SM 3438DD","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5497},{"materialCode":"RPC0311","materialName":"PC_TRIREX 3025U_BK 3439D","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4866},{"materialCode":"RPC0321","materialName":"PC_TRIREX SO1-3025LD_SM 3438DW","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5497},{"materialCode":"RPC0331","materialName":"PC_GP1000MU_E3280J","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3409},{"materialCode":"RPC0351","materialName":"PC_TRIREX 3022U_LH50 EA3232X0P","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":7410},{"materialCode":"RPC0361","materialName":"PC_3022U BK 3339A","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5928},{"materialCode":"RPC0371","materialName":"PC_GP1000MU_KPA1","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4274},{"materialCode":"RPC0391","materialName":"PC+ABS GP5008BFH K0355","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5383},{"materialCode":"RPC0411","materialName":"PC_LT-1220_G02376","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6390},{"materialCode":"RPC0471","materialName":"PC_LT-1220_G02318","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6390},{"materialCode":"RPC0481","materialName":"PC_SMOG_SP8012_E4166J","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6793},{"materialCode":"RPC0491","materialName":"PC_GP1000ML_KPA1","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4216},{"materialCode":"RPC0541","materialName":"PC_TRIREX SO1-3025LD_SM 3438DW_MOBASE","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":4400},{"materialCode":"RPC0561","materialName":"PC_TP1020_W0439","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5750},{"materialCode":"RPC0581","materialName":"PC_GP1000LU_E2516T","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5700},{"materialCode":"RPC0591","materialName":"PC_TRIREX_3022L1_I2","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3900},{"materialCode":"RPC0601","materialName":"PC_TP1020_LDK18","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6450},{"materialCode":"RPC0621","materialName":"PC_TP1020_LDK57","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5750},{"materialCode":"RPC0651","materialName":"PC_IV1075C_W0479","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5950},{"materialCode":"RPC0681","materialName":"PC_TP1020U_LDG038","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5880},{"materialCode":"RPC0791","materialName":"PC_LNP™ ELCRIN™ EXL9134B_7R8D016(홈충전기)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":20500},{"materialCode":"RPC0811","materialName":"PC_GP1006FM_KPA1P","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5200},{"materialCode":"RPC0841","materialName":"PC_LUPOY SP1000MH_W2659J","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5900},{"materialCode":"RPC0881","materialName":"PC_YGN1002FC - KPA1(BLACK)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6050},{"materialCode":"RPC0891","materialName":"PC_YGN1002FC - W0262P(SILVER)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6350},{"materialCode":"RPC0901","materialName":"PC_LEXAN FR Resins_945_Sabic","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5700},{"materialCode":"RPM0181","materialName":"PMMA_IH830C_ID195","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5300},{"materialCode":"RPM0571","materialName":"PMMA IH830C-ID193","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5300},{"materialCode":"RPM0571","materialName":"PMMA IH830C-ID193","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5300},{"materialCode":"RPM0571","materialName":"PMMA IH830C-ID193","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5300},{"materialCode":"RPM0571","materialName":"PMMA IH830C-ID193","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":5300},{"materialCode":"RPM0821","materialName":"POM_F20-03_NAT(BLACK M/BATCH)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2500},{"materialCode":"RPP0281","materialName":"PP_HT340J_8004BK","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":1770},{"materialCode":"RPP0421","materialName":"PP-TD20-057_HT345_8001_(BLACK)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2327},{"materialCode":"RPP0501","materialName":"PP-TD20_MT42NNBN","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":2230},{"materialCode":"RPT0161","materialName":"PBT_XGP2156F_KA15P","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":6500},{"materialCode":"RPT0291","materialName":"PBT_B4300G6(GF30%)_BK","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":3750},{"materialCode":"RTE0401","materialName":"TPE_KEYFLEX BT 1028D","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":9600},{"materialCode":"RTE0411","materialName":"TPE_KEYPLEX BT_1030D","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":9000},{"materialCode":"RTE0801","materialName":"TPE_KRAIBURG TC6MLB_S340(SL_FL_VOLUME)","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":15500},{"materialCode":"RTP0271","materialName":"TPU_ESTANEⓡ S190A-43_KR","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":7500},{"materialCode":"RTP0681","materialName":"TPU_T470A_BK03_Lubrizol","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":13000},{"materialCode":"RTP0681","materialName":"TPU_T470A_BK03_Lubrizol","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":11000},{"materialCode":"RTP0681","materialName":"TPU_T470A_BK03_Lubrizol","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":13000},{"materialCode":"RTP0681","materialName":"TPU_T470A_BK03_Lubrizol","materialType":"RESIN","unit":"Kg","lossRate":0,"currentPrice":11000},{"materialCode":"TAT0091","materialName":"A/T#570 희석제","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3233},{"materialCode":"TAT0101","materialName":"A/T#570(TX-F) THINNER [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4266.67},{"materialCode":"TAT0111","materialName":"A/T#570-2 희석제 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4000},{"materialCode":"TAT0121","materialName":"A/T#670 희석제 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4667},{"materialCode":"TAT0131","materialName":"A/T#770 희석제 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4667},{"materialCode":"TAT0141","materialName":"A/T#800(TX-F) PC THINNER [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4600},{"materialCode":"TAT0151","materialName":"A/T#811(TX-F) THINNER [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4466.67},{"materialCode":"TAT2111","materialName":"A/T#1000 희석제","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3800},{"materialCode":"TAT2201","materialName":"A/T#570(TX-F) 지건희석제 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4466.67},{"materialCode":"TAT2211","materialName":"AUTO PC신나(2) [18L]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3444.44},{"materialCode":"TAT2221","materialName":"A/T#800(TX-F) PC THINNER(MILD) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4933.33},{"materialCode":"TAT2231","materialName":"A/T#570(TX-F) THINNER(MILD) [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4733.33},{"materialCode":"TAT2251","materialName":"A/T#800(TX-F) 희석제 [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5000},{"materialCode":"TAT2281","materialName":"A/T#900(TX-F) THINNER [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4866.67},{"materialCode":"TAT2291","materialName":"A/T#900 PC THINNER(MILD) [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4933.33},{"materialCode":"TDT2311","materialName":"DT-2020_희석제(속건)_[15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4600},{"materialCode":"THU2221","materialName":"HANSOL_HUS-300 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4200},{"materialCode":"THU2231","materialName":"HANSOL_HUS-100 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4666.67},{"materialCode":"TMR1011","materialName":"MR-Y46-1 (SS-전용세척제)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":1740},{"materialCode":"TMR1021","materialName":"MR-Y35-1 (지그박리제)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":2646},{"materialCode":"TST2241","materialName":"SPT20-K705 [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5950},{"materialCode":"TTH2261","materialName":"TH0210(M) 희석재","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4400},{"materialCode":"TTX0011","materialName":"NOROOBEE_T-725 (침식방지용) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX0021","materialName":"NOROOBEE_T-903(WS신나) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX0031","materialName":"NOROOBEE_T-911 신나(BTX-FREE) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX0041","materialName":"NOROOBEE_T-950 NPC T/COAT THINNER [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4600},{"materialCode":"TTX0051","materialName":"T-975 신나","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX2031","materialName":"T413","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX2171","materialName":"NOROOBEE_T-971 신나 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4800},{"materialCode":"TTX2181","materialName":"NOROOBEE_T-911 신나 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX2191","materialName":"T-905 신나 (개량) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4330},{"materialCode":"TTX2301","materialName":"T-905 희석제(LC용) [15kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4600},{"materialCode":"TXX0061","materialName":"303 희석제(#005)(AO1) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4733.33},{"materialCode":"TXX0071","materialName":"503 희석제","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":4333},{"materialCode":"TXX0161","materialName":"SPT19-K0068 NO.27913 THINNER [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5350},{"materialCode":"TXX0171","materialName":"27976 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5050},{"materialCode":"TXX0181","materialName":"27993 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5050},{"materialCode":"TXX0191","materialName":"29585 [15KG]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5500},{"materialCode":"TXX0201","materialName":"EC-K705 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5950},{"materialCode":"TXX0211","materialName":"K136 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":7250},{"materialCode":"TXX2021","materialName":"27913 [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5350},{"materialCode":"TXX2041","materialName":"신나 4712 (BTX/F) [18L]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3416.67},{"materialCode":"TXX2051","materialName":"신너 4713 (지건) BTX/F [18L]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3611.12},{"materialCode":"TXX2091","materialName":"신나 4713 (BTX/F) [18L]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":3611.12},{"materialCode":"TXX2161","materialName":"27970(KOR) [15Kg]","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":5510},{"materialCode":"PDR0651","materialName":"DR-253 B/N BLACK(FD:1.5)","materialType":"PAINT","unit":"Kg","lossRate":0,"currentPrice":12000}]
+[
+  {
+    "materialCode": "HAT0261",
+    "materialName": "AUTO PC 경화제 [2Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "HAT0291",
+    "materialName": "AUTO 500(PC) 경화제 (BTX/F) [1.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "HAT0331",
+    "materialName": "AUTO FEEL 경화제(BTX/F) [3kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20000
+  },
+  {
+    "materialCode": "HBA0051",
+    "materialName": "POLY HARD BA-40(2.48)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1
+  },
+  {
+    "materialCode": "HBA0311",
+    "materialName": "POLY HARD MF-40",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 0.01
+  },
+  {
+    "materialCode": "HCP0271",
+    "materialName": "CPH-75(HG)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "HCP0281",
+    "materialName": "HANSOL_CPH-M40 [2.25KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "HDB0011",
+    "materialName": "DB-224 경화제(BTX-FREE) [3.2Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 19600
+  },
+  {
+    "materialCode": "HDB0021",
+    "materialName": "DB경화제(BTX-FREE) [1.62Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 19306
+  },
+  {
+    "materialCode": "HDB0181",
+    "materialName": "DB-경화제 (BTX-FREE PC용)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 19306
+  },
+  {
+    "materialCode": "HEC0251",
+    "materialName": "EC-H-250",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 27500
+  },
+  {
+    "materialCode": "HHG0151",
+    "materialName": "HG BLACK(RET) 경화제 [6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16667
+  },
+  {
+    "materialCode": "HHG0231",
+    "materialName": "하이그로시 경화제 (BTX/F)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7500
+  },
+  {
+    "materialCode": "HHG0281",
+    "materialName": "하이그로시 경화제 #KF (BTX/F) [6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7500
+  },
+  {
+    "materialCode": "HHX0081",
+    "materialName": "EC-H-600 [4KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 31000
+  },
+  {
+    "materialCode": "HHX0091",
+    "materialName": "EC-H-800 [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13000
+  },
+  {
+    "materialCode": "HHX0101",
+    "materialName": "EXH-264 [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12400
+  },
+  {
+    "materialCode": "HHX0111",
+    "materialName": "H-300-50 K1 [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17800
+  },
+  {
+    "materialCode": "HHX0121",
+    "materialName": "EC-H-760 [1.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "HHX0291",
+    "materialName": "EXH-K20-800 [4KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13000
+  },
+  {
+    "materialCode": "HNC0131",
+    "materialName": "NC-37",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1
+  },
+  {
+    "materialCode": "HPC0141",
+    "materialName": "PC BLACK LASER 경화제 [1.2Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 60000
+  },
+  {
+    "materialCode": "HPR0281",
+    "materialName": "프라톱 1500 경화제 (BTX/F) [3KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20000
+  },
+  {
+    "materialCode": "HPR0301",
+    "materialName": "프라톱 2000 경화제 (BTX/F) [1.5KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 30000
+  },
+  {
+    "materialCode": "HPR0361",
+    "materialName": "프라톱 1500 경화제 (BTX/F)#3_[3KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20000
+  },
+  {
+    "materialCode": "HPR0371",
+    "materialName": "프라톱 1000 경화제 (BTX/F) [1.5kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6666.67
+  },
+  {
+    "materialCode": "HXX0061",
+    "materialName": "POLY HARD TX-F(2.48)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1
+  },
+  {
+    "materialCode": "HXX0241",
+    "materialName": "POLY HARD UN-50",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1
+  },
+  {
+    "materialCode": "PAT0801",
+    "materialName": "AUTO 500 BLACK FHV [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11700
+  },
+  {
+    "materialCode": "PAT1131",
+    "materialName": "AUTO PC 1000 BLACK(G10) [14kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 9842.86
+  },
+  {
+    "materialCode": "PAT1141",
+    "materialName": "AUTO FEEL(S) 4X (BTX/F) LASER [3kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13167
+  },
+  {
+    "materialCode": "PAT1151",
+    "materialName": "AUTO PC 1000 BLACK [14kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 9843
+  },
+  {
+    "materialCode": "PAT1191",
+    "materialName": "364",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10535.71
+  },
+  {
+    "materialCode": "PAT1621",
+    "materialName": "AUTO PC 1000 BLACK(G20) [14kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 9842.86
+  },
+  {
+    "materialCode": "PAT1811",
+    "materialName": "AUTO 500 실버 프라이머+[15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13533.33
+  },
+  {
+    "materialCode": "PDP0891",
+    "materialName": "NOROOBEE_DP-2811 METAL PRIMER (SD1) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12800
+  },
+  {
+    "materialCode": "PDR0011",
+    "materialName": "NOROOBEE_DR-214 CA (JA-CAR)-1(BN) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11203
+  },
+  {
+    "materialCode": "PDR0021",
+    "materialName": "NOROOBEE_DR-214 CA (JA-CAR) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11203
+  },
+  {
+    "materialCode": "PDR0031",
+    "materialName": "NOROOBEE_DR-214 CGS(DE-CAR,BTX-FREE) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12500
+  },
+  {
+    "materialCode": "PDR0041",
+    "materialName": "NOROOBEE_DR-214 DDK(DE-CAR,BTX-FREE) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12500
+  },
+  {
+    "materialCode": "PDR0051",
+    "materialName": "DR-214 WK(DE-CAR,BTX-FREE)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12500
+  },
+  {
+    "materialCode": "PDR0061",
+    "materialName": "NOROOBEE_DR-224 WK (SK3-CAR, G6) [13.3Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15300
+  },
+  {
+    "materialCode": "PDR0071",
+    "materialName": "NOROOBEE_DR-247 ASB (JA-CAR) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 26576
+  },
+  {
+    "materialCode": "PDR0081",
+    "materialName": "NOROOBEE_DR-247 SSH (AD PE-CAR) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 38000
+  },
+  {
+    "materialCode": "PDR0091",
+    "materialName": "NOROOBEE_DR-253 BN BLACK(JS) [10Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10244
+  },
+  {
+    "materialCode": "PDR0101",
+    "materialName": "DR-253 B/N BLACK(S2)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10244
+  },
+  {
+    "materialCode": "PDR0111",
+    "materialName": "DR-253 BN BLACK(S2)-1",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10244
+  },
+  {
+    "materialCode": "PDR0121",
+    "materialName": "NOROOBEE_DR-253 H/G BLACK(S) BTX-FREE [16.2Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16078
+  },
+  {
+    "materialCode": "PDR0131",
+    "materialName": "NOROOBEE_DR-253 H/G BLACK(S)(RET) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17200
+  },
+  {
+    "materialCode": "PDR0141",
+    "materialName": "NOROOBEE_DR-810 CLEAR (개량, 신성) [12Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 21499
+  },
+  {
+    "materialCode": "PDR0751",
+    "materialName": "NOROOBEE_DR-224 4X (CN7, CN7a-CAR) [3.6Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15300
+  },
+  {
+    "materialCode": "PDR0841",
+    "materialName": "NOROOBEE_DR-247 NVC (DN8-CAR) [3.4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 46500
+  },
+  {
+    "materialCode": "PDR0931",
+    "materialName": "DR-214 4X (BC3-CAR)(SW)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 21000
+  },
+  {
+    "materialCode": "PDR1271",
+    "materialName": "DR-214_4X_ACE [12kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13390
+  },
+  {
+    "materialCode": "PDR1311",
+    "materialName": "DR-224 CDD(ON-CAR) [3.2Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 14500
+  },
+  {
+    "materialCode": "PDR1411",
+    "materialName": "DR-247 OFM (BL7-CAR) [3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 30000
+  },
+  {
+    "materialCode": "PDR1511",
+    "materialName": "DR-247 QC1 [3.4kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 37000
+  },
+  {
+    "materialCode": "PDR1541",
+    "materialName": "DR-253 B/N BLACK(FD:고광택) [12kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12000
+  },
+  {
+    "materialCode": "PDR1601",
+    "materialName": "DR-247(A)_PN5",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 37000
+  },
+  {
+    "materialCode": "PDR1611",
+    "materialName": "DR-224(H)_YGN",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15000
+  },
+  {
+    "materialCode": "PDR1791",
+    "materialName": "DR-224(H) NNB(USB단자용, SD1) [12kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13200
+  },
+  {
+    "materialCode": "PEC1261",
+    "materialName": "EC-GPX79-K17-31348-K1 [4kg] FE (XY)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 25000
+  },
+  {
+    "materialCode": "PEC1551",
+    "materialName": "EC-GPX79-K17-31348-K7 TTM [4kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 25000
+  },
+  {
+    "materialCode": "PEX1111",
+    "materialName": "EXE-K22-0005(WHITE) [16KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17500
+  },
+  {
+    "materialCode": "PHA0971",
+    "materialName": "HANSOL_HAU-B2020-8 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12000
+  },
+  {
+    "materialCode": "PHG0981",
+    "materialName": "HG BLACK FHL (BTX/F) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17733
+  },
+  {
+    "materialCode": "PHG0991",
+    "materialName": "하이그로시크리어 FHV (BTX/F) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11300
+  },
+  {
+    "materialCode": "PHT0151",
+    "materialName": "RESOTHANE-HT#200(TX-F) 4X",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12645
+  },
+  {
+    "materialCode": "PHT0161",
+    "materialName": "RESOTHANE-HT#200(TX-F) CA(G9) [15.5Kg](악조)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12838
+  },
+  {
+    "materialCode": "PHT0171",
+    "materialName": "RESOTHANE-HT#200(TX-F) PMP [4KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 30000
+  },
+  {
+    "materialCode": "PHT0181",
+    "materialName": "HT#200(TX-F) TMT [3.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 32000
+  },
+  {
+    "materialCode": "PHT0191",
+    "materialName": "RESOTHANE-HT#200(TX-F) TRY [15.5Kg](악조)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12774
+  },
+  {
+    "materialCode": "PHT0201",
+    "materialName": "RESOTHANE-HT#200(TX-F) WK(G4) [15.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13096
+  },
+  {
+    "materialCode": "PHT0211",
+    "materialName": "RESOTHANE-HT#200(TX-F) WK(G6) [15.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13161
+  },
+  {
+    "materialCode": "PHT0221",
+    "materialName": "RESOTHANE-HT#200(TX-F) WK(G9) [15.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12258
+  },
+  {
+    "materialCode": "PHT0231",
+    "materialName": "RESOTHANE-HT#300(TX-F) 4X [14.4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15625
+  },
+  {
+    "materialCode": "PHT0241",
+    "materialName": "HT#300(TX-F)CDD H [14.4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13548
+  },
+  {
+    "materialCode": "PHT0251",
+    "materialName": "RESOTHANE-HT#600(TX-F) UAY(BASE) [3.6KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15833
+  },
+  {
+    "materialCode": "PHT0261",
+    "materialName": "RESOTHANE-HT#200 WK(VG) [15.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10710
+  },
+  {
+    "materialCode": "PHT0271",
+    "materialName": "RESOTHANE-HT#200 WK(SL)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10516
+  },
+  {
+    "materialCode": "PHT0281",
+    "materialName": "RESOTHANE-HT#500 ASB",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 40000
+  },
+  {
+    "materialCode": "PHT0291",
+    "materialName": "RESOTHANE-HT#500 PGB",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 34286
+  },
+  {
+    "materialCode": "PHT0301",
+    "materialName": "RESOTHANE-HT#500(TX-F) PGB [3.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 34286
+  },
+  {
+    "materialCode": "PHT0311",
+    "materialName": "RESOTHANE-HT#600 BLH",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16457
+  },
+  {
+    "materialCode": "PHT0391",
+    "materialName": "하이카탄#200 4X [15.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11225
+  },
+  {
+    "materialCode": "PHT0401",
+    "materialName": "하이카탄#200 CA",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11935
+  },
+  {
+    "materialCode": "PHT0411",
+    "materialName": "하이카탄#200 VA(반광)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11097
+  },
+  {
+    "materialCode": "PHT0591",
+    "materialName": "HT#200(TX-F) UMB [3.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12000
+  },
+  {
+    "materialCode": "PHT0601",
+    "materialName": "HT#500(TX-F)SAQ [3.5KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "PHT0991",
+    "materialName": "RESOTHANE-HT#300(TX-F) YGN [3.2KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16531.25
+  },
+  {
+    "materialCode": "PHT1001",
+    "materialName": "HT#300(TX-F) CAQ [14.4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16041
+  },
+  {
+    "materialCode": "PHT1171",
+    "materialName": "RESOTHANE-HT#800(TX-F) M6G[3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 49444.44
+  },
+  {
+    "materialCode": "PHT1201",
+    "materialName": "RESOTHANE-HT#300(TX-F) YPK[3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16531.25
+  },
+  {
+    "materialCode": "PHT1211",
+    "materialName": "RESOTHANE-HT#300(TX-F) WK(G6_N) [14.4kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16736.11
+  },
+  {
+    "materialCode": "PHT1571",
+    "materialName": "RESOTHANE-HT#300(TX-F) WK(G6) [14.4kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16319.44
+  },
+  {
+    "materialCode": "PHT1631",
+    "materialName": "RESOTHANE-HT#200 WK(JD_G5)[15.5kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11161.29
+  },
+  {
+    "materialCode": "PHU0951",
+    "materialName": "HANSOL_HUT-2020(CAQ) [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 23000
+  },
+  {
+    "materialCode": "PNW0441",
+    "materialName": "NW-79-K13-31200 [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16700
+  },
+  {
+    "materialCode": "PNW0451",
+    "materialName": "NW79-K30658-K1 [16Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10500
+  },
+  {
+    "materialCode": "PNW0461",
+    "materialName": "NW79-K30658-K3 [16Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11000
+  },
+  {
+    "materialCode": "PNW0621",
+    "materialName": "NW79-K30640 BLACK [16Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11300
+  },
+  {
+    "materialCode": "PNW0961",
+    "materialName": "NW79-K21-30131 BLACK [4KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16400
+  },
+  {
+    "materialCode": "PNX0431",
+    "materialName": "N781-K13-30430-K1",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 18500
+  },
+  {
+    "materialCode": "PNX1001",
+    "materialName": "N781-K18-30838-K4 4XY BLACK B [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20000
+  },
+  {
+    "materialCode": "PPC0551",
+    "materialName": "PC BLACK(LASER) [14.8Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 14054.05
+  },
+  {
+    "materialCode": "PPR1021",
+    "materialName": "프라톱 1500 PPJ (BTX/F) AN#S [3KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 26650
+  },
+  {
+    "materialCode": "PPR1161",
+    "materialName": "프라톱 1500 4X (BTX/F) US4 [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10347
+  },
+  {
+    "materialCode": "PPR1181",
+    "materialName": "프라톱 2000 LS5 [3.6KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 32638.89
+  },
+  {
+    "materialCode": "PPR1391",
+    "materialName": "프라톱 1500 WK G6(BTX/F) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10347
+  },
+  {
+    "materialCode": "PPR1441",
+    "materialName": "프라톱 1500 YPK(BTX/F) [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11020
+  },
+  {
+    "materialCode": "PPR1451",
+    "materialName": "프라톱 1500 YGN(BTX/F)#SA [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11033
+  },
+  {
+    "materialCode": "PPR1581",
+    "materialName": "프라톱 1500 RBQ(BTX/F) [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "PPR1601",
+    "materialName": "TX-F #30 PRIMER BLACK[15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12666.67
+  },
+  {
+    "materialCode": "PPR1701",
+    "materialName": "프라톱 2000 WARM SILVER",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 32638.89
+  },
+  {
+    "materialCode": "PPR1731",
+    "materialName": "프라톱 1000 SV PRIMER[3.0kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15000
+  },
+  {
+    "materialCode": "PPR1821",
+    "materialName": "프라톱 2000 STAL VP2NG SILVER(BTX/F)[3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 34857.14
+  },
+  {
+    "materialCode": "PPT1001",
+    "materialName": "AUTO PC 1000 WHITE (SBP)#S",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "PPT1011",
+    "materialName": "AUTO PC BLACK (V5)#S [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10000
+  },
+  {
+    "materialCode": "PPX0421",
+    "materialName": "EC-P79-K19-30116 SRX-OS EV [16Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 18500
+  },
+  {
+    "materialCode": "PPX0991",
+    "materialName": "EC-P79-K17-30763LE BLACK [16KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16800
+  },
+  {
+    "materialCode": "PPX1011",
+    "materialName": "EC-P79-K20-30916LE-K4 4XY BLACK [4KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16800
+  },
+  {
+    "materialCode": "PSP0321",
+    "materialName": "RESOTHANE-SPZ#600 PC BLACK",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11032
+  },
+  {
+    "materialCode": "PSP0331",
+    "materialName": "RESOTHANE-SPZ#600 PIANO BLACK(BASE) [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17613
+  },
+  {
+    "materialCode": "PSP0341",
+    "materialName": "RESOTHANE-SPZ#600(TX-F) FHV(PC/ABS) [16KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16875
+  },
+  {
+    "materialCode": "PSP0351",
+    "materialName": "RESOTHANE-SPZ#800(TX-F) P/B(G2) [16.3Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10323
+  },
+  {
+    "materialCode": "PSP0501",
+    "materialName": "RESOTHANE-SPZ#600 PC WHITE",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11677
+  },
+  {
+    "materialCode": "PSP1021",
+    "materialName": "SPZ#800(TX-F) PC BLACK(G10) [16.3Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11104
+  },
+  {
+    "materialCode": "PSP1521",
+    "materialName": "SPZ#900(TX-F)SILVER PRIMER(W1) [3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 17500
+  },
+  {
+    "materialCode": "PSP1531",
+    "materialName": "RESOTHANE-HT#900(TX-F) EG6 [3.6kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 41666.67
+  },
+  {
+    "materialCode": "PST1121",
+    "materialName": "SPT20-K27970 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5400
+  },
+  {
+    "materialCode": "PTA0361",
+    "materialName": "TAN TAN CLEAR 2G(AUTO_J)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16800
+  },
+  {
+    "materialCode": "PTA0371",
+    "materialName": "TAN TAN CLEAR UAY(AUTO) [12.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15926
+  },
+  {
+    "materialCode": "PTA0381",
+    "materialName": "TAN TAN CLEAR(AUTO) [13.5Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10519
+  },
+  {
+    "materialCode": "PUT1241",
+    "materialName": "UT678(A)-SILVER(MGM) [4L]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 34417.5
+  },
+  {
+    "materialCode": "PWR0471",
+    "materialName": "WR-62-K14-31590-K2 [4Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 22300
+  },
+  {
+    "materialCode": "RAB0021",
+    "materialName": "ABS_XR409H_8H616",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3284
+  },
+  {
+    "materialCode": "RAB0141",
+    "materialName": "ABS_XR409H_9001",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3437
+  },
+  {
+    "materialCode": "RAB0171",
+    "materialName": "ABS_MP220 NP_PL",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2585
+  },
+  {
+    "materialCode": "RAB0191",
+    "materialName": "ABS_XR490_9001 BK",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2447
+  },
+  {
+    "materialCode": "RAB0531",
+    "materialName": "ABS_MP220_HNP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2626
+  },
+  {
+    "materialCode": "RAB0551",
+    "materialName": "ABS_XR440_9001",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3620
+  },
+  {
+    "materialCode": "REX0741",
+    "materialName": "SANTOPRENE_EXXON MOBIL291-60B150",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12300
+  },
+  {
+    "materialCode": "RLX0461",
+    "materialName": "LEXAN 141-112(확산제 5g/kg)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4700
+  },
+  {
+    "materialCode": "RLX0711",
+    "materialName": "LEXAN 141R_701_INFAC",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4700
+  },
+  {
+    "materialCode": "RPA0471",
+    "materialName": "PC+ASA_WR7250HS_K24873",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5640
+  },
+  {
+    "materialCode": "RPA0761",
+    "materialName": "PA6_1533GFU BK02(GF30%)_인펙일렉스",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3730
+  },
+  {
+    "materialCode": "RPA0761",
+    "materialName": "PA6_1533GFU BK02(GF30%)_인펙일렉스",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3850
+  },
+  {
+    "materialCode": "RPA0761",
+    "materialName": "PA6_1533GFU BK02(GF30%)_인펙일렉스",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3730
+  },
+  {
+    "materialCode": "RPA0761",
+    "materialName": "PA6_1533GFU BK02(GF30%)_인펙일렉스",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3850
+  },
+  {
+    "materialCode": "RPB0011",
+    "materialName": "PC+ABS_HR5007A_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4372
+  },
+  {
+    "materialCode": "RPB0071",
+    "materialName": "PC+ABS_NS5000C_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4517
+  },
+  {
+    "materialCode": "RPB0081",
+    "materialName": "PC+ABS_NS5000CR_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4661
+  },
+  {
+    "materialCode": "RPB0091",
+    "materialName": "PC+ABS_NS5000CRT_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4878
+  },
+  {
+    "materialCode": "RPB0381",
+    "materialName": "PC+ABS NATURAL MP5000AM",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4101
+  },
+  {
+    "materialCode": "RPB0391",
+    "materialName": "PC+ABS_NS5000CR_E5309-S(YGN)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5348
+  },
+  {
+    "materialCode": "RPB0431",
+    "materialName": "PC+ABS GP5008BFH_WHITE (W0262)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5600
+  },
+  {
+    "materialCode": "RPB0611",
+    "materialName": "PC+ABS_GN5007FL_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5427
+  },
+  {
+    "materialCode": "RPB0611",
+    "materialName": "PC+ABS_GN5007FL_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5043
+  },
+  {
+    "materialCode": "RPB0611",
+    "materialName": "PC+ABS_GN5007FL_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5427
+  },
+  {
+    "materialCode": "RPB0611",
+    "materialName": "PC+ABS_GN5007FL_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5043
+  },
+  {
+    "materialCode": "RPB0661",
+    "materialName": "PC+ABS_PT5000_KA02",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4735
+  },
+  {
+    "materialCode": "RPB0751",
+    "materialName": "PC+ABS_NS5000C_WJ08(WHITE)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4900
+  },
+  {
+    "materialCode": "RPB0771",
+    "materialName": "PC+ABS_HAC8270_09103_인펙일렉스",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3750
+  },
+  {
+    "materialCode": "RPC0031",
+    "materialName": "PC_YSC1004A_KPA1",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4824
+  },
+  {
+    "materialCode": "RPC0041",
+    "materialName": "PC_TRIREX 3025U_WH EA3432ACP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4866
+  },
+  {
+    "materialCode": "RPC0051",
+    "materialName": "PC_TRIREX 3025U_WH EA3432ABP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4866
+  },
+  {
+    "materialCode": "RPC0061",
+    "materialName": "PC_GP1000M_KPA1",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4216
+  },
+  {
+    "materialCode": "RPC0101",
+    "materialName": "PC_TRIREX 3022U_LH75 EA3232N0P",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5764
+  },
+  {
+    "materialCode": "RPC0111",
+    "materialName": "PC_TRIREX 3022U_LH65 EA3232S0P",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5764
+  },
+  {
+    "materialCode": "RPC0121",
+    "materialName": "PC_TRIREX SO1-3025LD_COOL-WH EA3432AZP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6020
+  },
+  {
+    "materialCode": "RPC0131",
+    "materialName": "PC_TRIREX 3022IR_EP022IR00PA",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3841
+  },
+  {
+    "materialCode": "RPC0151",
+    "materialName": "PC_YGP1000MU_E3385PP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4329
+  },
+  {
+    "materialCode": "RPC0201",
+    "materialName": "PC_P1303AH 10_W0992T CL",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3409
+  },
+  {
+    "materialCode": "RPC0211",
+    "materialName": "PC_YGP1000MU_K1148J CP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3409
+  },
+  {
+    "materialCode": "RPC0221",
+    "materialName": "PC_STAREN TP-1020_LDW63",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6040
+  },
+  {
+    "materialCode": "RPC0231",
+    "materialName": "PC_LT-1220_40636",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5580
+  },
+  {
+    "materialCode": "RPC0241",
+    "materialName": "PC_LT-1220_40663",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5700
+  },
+  {
+    "materialCode": "RPC0251",
+    "materialName": "PC_TRIREX 3025LD_SM 3438DP",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5497
+  },
+  {
+    "materialCode": "RPC0261",
+    "materialName": "PC_TRIREX 3022U_LH85 3332H",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7600
+  },
+  {
+    "materialCode": "RPC0301",
+    "materialName": "PC_TRIREX SO1-3025LD_SM 3438DD",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5497
+  },
+  {
+    "materialCode": "RPC0311",
+    "materialName": "PC_TRIREX 3025U_BK 3439D",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4866
+  },
+  {
+    "materialCode": "RPC0321",
+    "materialName": "PC_TRIREX SO1-3025LD_SM 3438DW",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5497
+  },
+  {
+    "materialCode": "RPC0331",
+    "materialName": "PC_GP1000MU_E3280J",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3409
+  },
+  {
+    "materialCode": "RPC0351",
+    "materialName": "PC_TRIREX 3022U_LH50 EA3232X0P",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7410
+  },
+  {
+    "materialCode": "RPC0361",
+    "materialName": "PC_3022U BK 3339A",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5928
+  },
+  {
+    "materialCode": "RPC0371",
+    "materialName": "PC_GP1000MU_KPA1",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4274
+  },
+  {
+    "materialCode": "RPC0391",
+    "materialName": "PC+ABS GP5008BFH K0355",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5383
+  },
+  {
+    "materialCode": "RPC0411",
+    "materialName": "PC_LT-1220_G02376",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6390
+  },
+  {
+    "materialCode": "RPC0471",
+    "materialName": "PC_LT-1220_G02318",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6390
+  },
+  {
+    "materialCode": "RPC0481",
+    "materialName": "PC_SMOG_SP8012_E4166J",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6793
+  },
+  {
+    "materialCode": "RPC0491",
+    "materialName": "PC_GP1000ML_KPA1",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4216
+  },
+  {
+    "materialCode": "RPC0541",
+    "materialName": "PC_TRIREX SO1-3025LD_SM 3438DW_MOBASE",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4400
+  },
+  {
+    "materialCode": "RPC0561",
+    "materialName": "PC_TP1020_W0439",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5750
+  },
+  {
+    "materialCode": "RPC0581",
+    "materialName": "PC_GP1000LU_E2516T",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5700
+  },
+  {
+    "materialCode": "RPC0591",
+    "materialName": "PC_TRIREX_3022L1_I2",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3900
+  },
+  {
+    "materialCode": "RPC0601",
+    "materialName": "PC_TP1020_LDK18",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6450
+  },
+  {
+    "materialCode": "RPC0621",
+    "materialName": "PC_TP1020_LDK57",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5750
+  },
+  {
+    "materialCode": "RPC0651",
+    "materialName": "PC_IV1075C_W0479",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5950
+  },
+  {
+    "materialCode": "RPC0681",
+    "materialName": "PC_TP1020U_LDG038",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5880
+  },
+  {
+    "materialCode": "RPC0791",
+    "materialName": "PC_LNP™ ELCRIN™ EXL9134B_7R8D016(홈충전기)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20500
+  },
+  {
+    "materialCode": "RPC0811",
+    "materialName": "PC_GP1006FM_KPA1P",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5200
+  },
+  {
+    "materialCode": "RPC0841",
+    "materialName": "PC_LUPOY SP1000MH_W2659J",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5900
+  },
+  {
+    "materialCode": "RPC0881",
+    "materialName": "PC_YGN1002FC - KPA1(BLACK)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6050
+  },
+  {
+    "materialCode": "RPC0891",
+    "materialName": "PC_YGN1002FC - W0262P(SILVER)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6350
+  },
+  {
+    "materialCode": "RPC0901",
+    "materialName": "PC_LEXAN FR Resins_945_Sabic",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5700
+  },
+  {
+    "materialCode": "RPM0181",
+    "materialName": "PMMA_IH830C_ID195",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5300
+  },
+  {
+    "materialCode": "RPM0571",
+    "materialName": "PMMA IH830C-ID193",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5300
+  },
+  {
+    "materialCode": "RPM0571",
+    "materialName": "PMMA IH830C-ID193",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5300
+  },
+  {
+    "materialCode": "RPM0571",
+    "materialName": "PMMA IH830C-ID193",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5300
+  },
+  {
+    "materialCode": "RPM0571",
+    "materialName": "PMMA IH830C-ID193",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5300
+  },
+  {
+    "materialCode": "RPM0821",
+    "materialName": "POM_F20-03_NAT(BLACK M/BATCH)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2500
+  },
+  {
+    "materialCode": "RPP0281",
+    "materialName": "PP_HT340J_8004BK",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1770
+  },
+  {
+    "materialCode": "RPP0421",
+    "materialName": "PP-TD20-057_HT345_8001_(BLACK)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2327
+  },
+  {
+    "materialCode": "RPP0501",
+    "materialName": "PP-TD20_MT42NNBN",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2230
+  },
+  {
+    "materialCode": "RPT0161",
+    "materialName": "PBT_XGP2156F_KA15P",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 6500
+  },
+  {
+    "materialCode": "RPT0291",
+    "materialName": "PBT_B4300G6(GF30%)_BK",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3750
+  },
+  {
+    "materialCode": "RTE0401",
+    "materialName": "TPE_KEYFLEX BT 1028D",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 9600
+  },
+  {
+    "materialCode": "RTE0411",
+    "materialName": "TPE_KEYPLEX BT_1030D",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 9000
+  },
+  {
+    "materialCode": "RTE0801",
+    "materialName": "TPE_KRAIBURG TC6MLB_S340(SL_FL_VOLUME)",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15500
+  },
+  {
+    "materialCode": "RTP0271",
+    "materialName": "TPU_ESTANEⓡ S190A-43_KR",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7500
+  },
+  {
+    "materialCode": "RTP0681",
+    "materialName": "TPU_T470A_BK03_Lubrizol",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13000
+  },
+  {
+    "materialCode": "RTP0681",
+    "materialName": "TPU_T470A_BK03_Lubrizol",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11000
+  },
+  {
+    "materialCode": "RTP0681",
+    "materialName": "TPU_T470A_BK03_Lubrizol",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 13000
+  },
+  {
+    "materialCode": "RTP0681",
+    "materialName": "TPU_T470A_BK03_Lubrizol",
+    "materialType": "RESIN",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 11000
+  },
+  {
+    "materialCode": "TAT0091",
+    "materialName": "A/T#570 희석제",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3233
+  },
+  {
+    "materialCode": "TAT0101",
+    "materialName": "A/T#570(TX-F) THINNER [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4266.67
+  },
+  {
+    "materialCode": "TAT0111",
+    "materialName": "A/T#570-2 희석제 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4000
+  },
+  {
+    "materialCode": "TAT0121",
+    "materialName": "A/T#670 희석제 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4667
+  },
+  {
+    "materialCode": "TAT0131",
+    "materialName": "A/T#770 희석제 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4667
+  },
+  {
+    "materialCode": "TAT0141",
+    "materialName": "A/T#800(TX-F) PC THINNER [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4600
+  },
+  {
+    "materialCode": "TAT0151",
+    "materialName": "A/T#811(TX-F) THINNER [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4466.67
+  },
+  {
+    "materialCode": "TAT2111",
+    "materialName": "A/T#1000 희석제",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3800
+  },
+  {
+    "materialCode": "TAT2201",
+    "materialName": "A/T#570(TX-F) 지건희석제 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4466.67
+  },
+  {
+    "materialCode": "TAT2211",
+    "materialName": "AUTO PC신나(2) [18L]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3444.44
+  },
+  {
+    "materialCode": "TAT2221",
+    "materialName": "A/T#800(TX-F) PC THINNER(MILD) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4933.33
+  },
+  {
+    "materialCode": "TAT2231",
+    "materialName": "A/T#570(TX-F) THINNER(MILD) [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4733.33
+  },
+  {
+    "materialCode": "TAT2251",
+    "materialName": "A/T#800(TX-F) 희석제 [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5000
+  },
+  {
+    "materialCode": "TAT2281",
+    "materialName": "A/T#900(TX-F) THINNER [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4866.67
+  },
+  {
+    "materialCode": "TAT2291",
+    "materialName": "A/T#900 PC THINNER(MILD) [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4933.33
+  },
+  {
+    "materialCode": "TDT2311",
+    "materialName": "DT-2020_희석제(속건)_[15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4600
+  },
+  {
+    "materialCode": "THU2221",
+    "materialName": "HANSOL_HUS-300 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4200
+  },
+  {
+    "materialCode": "THU2231",
+    "materialName": "HANSOL_HUS-100 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4666.67
+  },
+  {
+    "materialCode": "TMR1011",
+    "materialName": "MR-Y46-1 (SS-전용세척제)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1740
+  },
+  {
+    "materialCode": "TMR1021",
+    "materialName": "MR-Y35-1 (지그박리제)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 2646
+  },
+  {
+    "materialCode": "TST2241",
+    "materialName": "SPT20-K705 [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5950
+  },
+  {
+    "materialCode": "TTH2261",
+    "materialName": "TH0210(M) 희석재",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4400
+  },
+  {
+    "materialCode": "TTX0011",
+    "materialName": "NOROOBEE_T-725 (침식방지용) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX0021",
+    "materialName": "NOROOBEE_T-903(WS신나) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX0031",
+    "materialName": "NOROOBEE_T-911 신나(BTX-FREE) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX0041",
+    "materialName": "NOROOBEE_T-950 NPC T/COAT THINNER [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4600
+  },
+  {
+    "materialCode": "TTX0051",
+    "materialName": "T-975 신나",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX2031",
+    "materialName": "T413",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX2171",
+    "materialName": "NOROOBEE_T-971 신나 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4800
+  },
+  {
+    "materialCode": "TTX2181",
+    "materialName": "NOROOBEE_T-911 신나 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX2191",
+    "materialName": "T-905 신나 (개량) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4330
+  },
+  {
+    "materialCode": "TTX2301",
+    "materialName": "T-905 희석제(LC용) [15kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4600
+  },
+  {
+    "materialCode": "TXX0061",
+    "materialName": "303 희석제(#005)(AO1) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4733.33
+  },
+  {
+    "materialCode": "TXX0071",
+    "materialName": "503 희석제",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 4333
+  },
+  {
+    "materialCode": "TXX0161",
+    "materialName": "SPT19-K0068 NO.27913 THINNER [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5350
+  },
+  {
+    "materialCode": "TXX0171",
+    "materialName": "27976 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5050
+  },
+  {
+    "materialCode": "TXX0181",
+    "materialName": "27993 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5050
+  },
+  {
+    "materialCode": "TXX0191",
+    "materialName": "29585 [15KG]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5500
+  },
+  {
+    "materialCode": "TXX0201",
+    "materialName": "EC-K705 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5950
+  },
+  {
+    "materialCode": "TXX0211",
+    "materialName": "K136 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 7250
+  },
+  {
+    "materialCode": "TXX2021",
+    "materialName": "27913 [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5350
+  },
+  {
+    "materialCode": "TXX2041",
+    "materialName": "신나 4712 (BTX/F) [18L]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3416.67
+  },
+  {
+    "materialCode": "TXX2051",
+    "materialName": "신너 4713 (지건) BTX/F [18L]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3611.12
+  },
+  {
+    "materialCode": "TXX2091",
+    "materialName": "신나 4713 (BTX/F) [18L]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 3611.12
+  },
+  {
+    "materialCode": "TXX2161",
+    "materialName": "27970(KOR) [15Kg]",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 5510
+  },
+  {
+    "materialCode": "PDR0651",
+    "materialName": "DR-253 B/N BLACK(FD:1.5)",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 12000
+  },
+  {
+    "materialCode": "XHT0211",
+    "materialName": "XHT0211",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15
+  },
+  {
+    "materialCode": "SPT1001",
+    "materialName": "SPT1001",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "SNW0451",
+    "materialName": "SNW0451",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "SHT0201",
+    "materialName": "SHT0201",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 16
+  },
+  {
+    "materialCode": "PHT0232",
+    "materialName": "PHT0232",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 25
+  },
+  {
+    "materialCode": "PHG0561",
+    "materialName": "PHG0561",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "PAT1221",
+    "materialName": "PAT1221",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "PHG1231",
+    "materialName": "PHG1231",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 50
+  },
+  {
+    "materialCode": "SNW1348",
+    "materialName": "SNW1348",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "SHT0391",
+    "materialName": "SHT0391",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 20
+  },
+  {
+    "materialCode": "XDP0891",
+    "materialName": "XDP0891",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "SHT0231",
+    "materialName": "SHT0231",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 15
+  },
+  {
+    "materialCode": "SDR0141",
+    "materialName": "SDR0141",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 25.301204819277107
+  },
+  {
+    "materialCode": "PPM1501",
+    "materialName": "PPM1501",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "PDR1591",
+    "materialName": "PDR1591",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "SDR0131",
+    "materialName": "SDR0131",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "XNW0451",
+    "materialName": "XNW0451",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 10
+  },
+  {
+    "materialCode": "XHT0232",
+    "materialName": "XHT0232",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 25
+  },
+  {
+    "materialCode": "PDR1751",
+    "materialName": "PDR1751",
+    "materialType": "PAINT",
+    "unit": "Kg",
+    "lossRate": 0,
+    "currentPrice": 1
+  }
+]

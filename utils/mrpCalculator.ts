@@ -19,6 +19,14 @@ export interface MRPMaterialRow {
   monthlyQty: number[];        // 월별 소요량 (12)
 }
 
+export interface StandardMaterialCostEntry {
+  productCode: string;
+  customerPn: string;
+  productName: string;
+  processType: string;
+  eaCost: number;
+}
+
 export interface MRPResult {
   materials: MRPMaterialRow[];
   byMonth: { month: string; totalQty: number; totalCost: number }[];
@@ -30,6 +38,7 @@ export interface MRPResult {
     unmatchedProducts: string[];
     fuzzyMatchedProducts: string[];
     matchedProducts: number;
+    directCostProducts: number;   // 표준재료비 직접 적용 제품 수
   };
 }
 
@@ -111,6 +120,7 @@ export function calculateMRP(
   refInfo: ReferenceInfoRecord[],
   materialCodes: MaterialCodeRecord[],
   purchaseData?: PurchaseMonthlySummary[],
+  standardCosts?: StandardMaterialCostEntry[],
 ): MRPResult {
   // 1. Forecast 수량 맵 구축
   const forecastQtyMap = buildForecastQtyMap(forecastData);
@@ -182,7 +192,19 @@ export function calculateMRP(
     unitPrice: number;
   }>();
 
+  // 6-1. 표준재료비 맵 (제품코드 → EA당 재료비)
+  const stdCostMap = new Map<string, StandardMaterialCostEntry>();
+  if (standardCosts) {
+    for (const sc of standardCosts) {
+      if (sc.eaCost > 0) {
+        stdCostMap.set(normalizePn(sc.productCode), sc);
+        if (sc.customerPn) stdCostMap.set(normalizePn(sc.customerPn), sc);
+      }
+    }
+  }
+
   let matchedProducts = 0;
+  let directCostProducts = 0;
   const unmatchedProducts: string[] = [];
 
   // BOM parent 접두사 인덱스 구축 (퍼지 매칭용)
@@ -224,6 +246,35 @@ export function calculateMRP(
     }
 
     if (!bomRelations.has(bomParent)) {
+      // BOM 미매칭 → 표준재료비 직접 적용 시도
+      const stdEntry = stdCostMap.get(forecastPn)
+        || stdCostMap.get(custToInternal.get(forecastPn) || '')
+        || stdCostMap.get(internalToCust.get(forecastPn) || '');
+      if (stdEntry) {
+        directCostProducts++;
+        // 제품 자체를 하나의 자재로 등록 (EA당 재료비)
+        const key = normalizePn(stdEntry.productCode);
+        for (let m = 0; m < 12; m++) {
+          const qty = monthlyQty[m] || 0;
+          if (qty <= 0) continue;
+          const existing = materialAgg.get(key);
+          if (existing) {
+            existing.monthlyQty[m] += qty;
+            existing.parents.add(forecastPn);
+          } else {
+            const mq = new Array(12).fill(0);
+            mq[m] = qty;
+            materialAgg.set(key, {
+              name: stdEntry.productName || stdEntry.productCode,
+              type: stdEntry.processType || '구매',
+              monthlyQty: mq,
+              parents: new Set([forecastPn]),
+              unitPrice: stdEntry.eaCost,
+            });
+          }
+        }
+        continue;
+      }
       unmatchedProducts.push(forecastPn);
       continue;
     }
@@ -432,10 +483,11 @@ export function calculateMRP(
       totalMaterials: materials.length,
       totalRequiredQty,
       totalCost,
-      bomMatchRate: totalForecastProducts > 0 ? matchedProducts / totalForecastProducts : 0,
+      bomMatchRate: totalForecastProducts > 0 ? (matchedProducts + directCostProducts) / totalForecastProducts : 0,
       unmatchedProducts: unmatchedProducts.slice(0, 100),
       fuzzyMatchedProducts: fuzzyMatched,
-      matchedProducts,
+      matchedProducts: matchedProducts + directCostProducts,
+      directCostProducts,
     },
   };
 }
