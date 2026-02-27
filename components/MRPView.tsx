@@ -203,11 +203,12 @@ const MRPView: React.FC = () => {
 
   const handleDownload = () => {
     if (!filteredMaterials.length) return;
-    const headers = ['자재코드', '자재명', '유형', '총소요량', '단가', '총원가', '관련제품수', ...Array.from({ length: 12 }, (_, i) => `${i + 1}월`)];
+    const headers = ['자재코드', '자재명', '유형', '구입처', '총소요량', '단가', '총원가', '관련제품수', ...Array.from({ length: 12 }, (_, i) => `${i + 1}월`)];
     const rows = filteredMaterials.map(m => [
       m.materialCode,
       m.materialName,
       m.materialType,
+      m.supplier || '',
       m.requiredQty,
       m.unitPrice,
       m.totalCost,
@@ -215,6 +216,25 @@ const MRPView: React.FC = () => {
       ...m.monthlyQty,
     ]);
     downloadCSV(`MRP_소요량_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows.map(r => r.map(String)));
+  };
+
+  const handleNoPriceExport = () => {
+    if (!mrpResult) return;
+    const noPriceItems = mrpResult.materials.filter(m => m.unitPrice <= 0);
+    if (noPriceItems.length === 0) return;
+    const headers = ['파트넘버', '부품명', '자재유형', '구입처', '단위', '총소요량', '관련제품'];
+    const rows = noPriceItems
+      .sort((a, b) => b.requiredQty - a.requiredQty)
+      .map(m => [
+        m.materialCode,
+        m.materialName,
+        m.materialType,
+        m.supplier || '',
+        m.unit || '',
+        String(m.requiredQty),
+        m.parentProducts.join('; '),
+      ]);
+    downloadCSV(`MRP_단가미등록_자재_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
   };
 
   // No data state
@@ -349,6 +369,14 @@ const MRPView: React.FC = () => {
           >
             Excel 내보내기
           </button>
+          {mrpResult && summary.noPriceMaterials > 0 && (
+            <button
+              onClick={handleNoPriceExport}
+              className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+            >
+              단가없음 리스트 ({summary.noPriceMaterials}건)
+            </button>
+          )}
         </div>
       </div>
 
@@ -374,6 +402,7 @@ const MRPView: React.FC = () => {
                     { key: 'materialName', label: '자재명' },
                     { key: 'materialType', label: '유형' },
                     { key: 'unit', label: '단위' },
+                    { key: 'supplier', label: '구입처' },
                     { key: 'requiredQty', label: '총소요량', align: 'right' },
                     { key: 'unitPrice', label: '단가(₩)', align: 'right' },
                     { key: 'totalCost', label: '총원가(₩)', align: 'right' },
@@ -417,6 +446,7 @@ const MRPView: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-gray-500 text-center">{m.unit || '-'}</td>
+                    <td className="px-3 py-1.5 text-gray-500 max-w-24 truncate">{m.supplier || '-'}</td>
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {m.requiredQty.toLocaleString()}
                       {m.unit && <span className="text-[10px] text-gray-400 ml-0.5">{m.unit}</span>}

@@ -17,6 +17,7 @@ export interface MRPMaterialRow {
   totalCost: number;           // 소요량 × 단가
   parentProducts: string[];    // 관련 모제품 리스트
   monthlyQty: number[];        // 월별 소요량 (12)
+  supplier: string;            // 협력업체/구입처
 }
 
 export interface StandardMaterialCostEntry {
@@ -192,6 +193,7 @@ export function calculateMRP(
     monthlyQty: number[];
     parents: Set<string>;
     unitPrice: number;
+    supplier: string;
   }>();
 
   // 6-1. 표준재료비 맵 (제품코드 → EA당 재료비)
@@ -272,6 +274,7 @@ export function calculateMRP(
               monthlyQty: mq,
               parents: new Set([forecastPn]),
               unitPrice: stdEntry.eaCost,
+              supplier: '',
             });
           }
         }
@@ -326,6 +329,7 @@ export function calculateMRP(
             monthlyQty: mq,
             parents: new Set([forecastPn]),
             unitPrice: initPrice,
+            supplier: leaf.supplier || '',
           });
         }
       }
@@ -484,6 +488,7 @@ export function calculateMRP(
       totalCost: totalQty * unitPrice,
       parentProducts: Array.from(agg.parents),
       monthlyQty: agg.monthlyQty,
+      supplier: agg.supplier,
     });
   }
 
