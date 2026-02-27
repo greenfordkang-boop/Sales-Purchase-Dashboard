@@ -39,6 +39,14 @@ export interface MRPResult {
 const normalizePn = (pn: string): string =>
   pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
+/** 이름 매칭용 정규화 (괄호, 특수문자 모두 제거) */
+const normalizeForName = (name: string): string =>
+  name.trim().toUpperCase().replace(/[\s\-_\.\/\(\)\[\]\+#,]+/g, '');
+
+/** 수지 타입 접두사 제거 (PC_, ABS_, PC+ABS_ 등) */
+const stripResinPrefix = (name: string): string =>
+  name.replace(/^(PC\+?ABS|PC|ABS|PP|PE|TPE|TPU|PA\d*|PBT|POM|PMMA|LEXAN|SAN|PPS|ASA|RUBBER)[_\s+]+/i, '').trim();
+
 /**
  * 매출계획에서 제품별 월별 수량 맵 구축
  * key: normalizedPN, value: [q1, q2, ... q12]
@@ -109,13 +117,25 @@ export function calculateMRP(
   // 2. P/N 매핑
   const { custToInternal, internalToCust } = buildPnMappingLookup(productCodes, refInfo);
 
-  // 3. BOM 전개 준비
+  // 3. BOM 전개 준비 (중복 parent-child 쌍 제거)
   const normalizedBom: BomRecord[] = bomRecords.map(b => ({
     ...b,
     parentPn: normalizePn(b.parentPn),
     childPn: normalizePn(b.childPn),
   }));
-  const bomRelations = buildBomRelations(normalizedBom);
+  const dedupedBom: BomRecord[] = [];
+  const seenPairs = new Set<string>();
+  for (const b of normalizedBom) {
+    const pairKey = `${b.parentPn}|${b.childPn}`;
+    if (!seenPairs.has(pairKey)) {
+      seenPairs.add(pairKey);
+      dedupedBom.push(b);
+    }
+  }
+  if (normalizedBom.length !== dedupedBom.length) {
+    console.log(`[MRP] BOM 중복 제거: ${normalizedBom.length} → ${dedupedBom.length}건 (${normalizedBom.length - dedupedBom.length}건 중복)`);
+  }
+  const bomRelations = buildBomRelations(dedupedBom);
 
   // 4. 재질코드 맵 (이름/유형/단위)
   const priceMap = new Map<string, number>();
@@ -234,10 +254,6 @@ export function calculateMRP(
   }
 
   // 7. 결과 구성
-  // 디버그: 가격 매칭 현황
-  let priceMatchCount = 0;
-  let refInfoMatchCount = 0;
-  let rawCodeMatchCount = 0;
   const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
   const materials: MRPMaterialRow[] = [];
   for (const [code, agg] of materialAgg.entries()) {
@@ -259,7 +275,7 @@ export function calculateMRP(
     }
     if (!unit) unit = DEFAULT_UNITS[agg.type] || 'EA';
 
-    // 단가 조회: 1) 재질코드 직접 2) rawMaterialCode 경유 3) 매입단가 4) 0
+    // 단가 조회: 1) 재질코드 직접 2) rawMaterialCode 경유 3) BOM 품명→재질코드 매칭
     let unitPrice = priceMap.get(code) || 0;
     if (unitPrice <= 0) {
       for (const rawCode of rawCodes) {
@@ -267,7 +283,31 @@ export function calculateMRP(
         if (p && p > 0) { unitPrice = p; break; }
       }
     }
-    // 매입단가 폴백
+    // 재질코드: BOM 품명으로 매칭 (재질코드가 매입 도번일 때)
+    if (unitPrice <= 0 && priceMap.size > 0) {
+      const nameKey = normalizePn(agg.name);
+      if (nameKey && nameKey !== code) {
+        const p = priceMap.get(nameKey);
+        if (p && p > 0) unitPrice = p;
+      }
+      // 접두사 제거 후 재시도
+      if (unitPrice <= 0) {
+        const stripped = stripResinPrefix(agg.name);
+        const strippedKey = normalizeForName(stripped);
+        if (strippedKey.length >= 6) {
+          for (const [pk, pv] of priceMap.entries()) {
+            const pkNorm = normalizeForName(pk);
+            if (pkNorm === strippedKey ||
+                (strippedKey.length >= 8 && pkNorm.startsWith(strippedKey.slice(0, 12))) ||
+                (pkNorm.length >= 8 && strippedKey.startsWith(pkNorm.slice(0, 12)))) {
+              unitPrice = pv;
+              break;
+            }
+          }
+        }
+      }
+    }
+    // 매입단가 폴백: 1) 코드 직접 매칭
     if (unitPrice <= 0) {
       const pp = purchasePriceMap.get(code);
       if (pp && pp.price > 0) {
@@ -275,11 +315,50 @@ export function calculateMRP(
         if (!unit || unit === DEFAULT_UNITS[agg.type]) unit = pp.unit || unit;
       }
     }
-    // rawMaterialCode로 매입단가 조회
+    // 매입단가 폴백: 2) rawMaterialCode로 매칭
     if (unitPrice <= 0) {
       for (const rawCode of rawCodes) {
         const pp = purchasePriceMap.get(normalizePn(rawCode));
         if (pp && pp.price > 0) { unitPrice = pp.price; break; }
+      }
+    }
+    // 매입단가 폴백: 3) BOM 품명 → 매입 도번 정확 매칭
+    if (unitPrice <= 0) {
+      const nameKey = normalizePn(agg.name);
+      if (nameKey && nameKey !== code) {
+        const pp = purchasePriceMap.get(nameKey);
+        if (pp && pp.price > 0) {
+          unitPrice = pp.price;
+          if (!unit || unit === DEFAULT_UNITS[agg.type]) unit = pp.unit || unit;
+        }
+      }
+    }
+    // 매입단가 폴백: 4) rawMaterialCode의 재질명 → 매입 도번 매칭
+    if (unitPrice <= 0 && rawCodes.length > 0) {
+      for (const rawCode of rawCodes) {
+        const rawName = nameMap.get(normalizePn(rawCode));
+        if (rawName) {
+          const pp = purchasePriceMap.get(normalizePn(rawName));
+          if (pp && pp.price > 0) { unitPrice = pp.price; break; }
+        }
+      }
+    }
+    // 매입단가 폴백: 5) 접두사 제거 + 유연한 이름 매칭 (RESIN/PAINT)
+    if (unitPrice <= 0 && agg.name && agg.name !== code) {
+      const stripped = stripResinPrefix(agg.name);
+      const strippedKey = normalizeForName(stripped);
+      if (strippedKey.length >= 6) {
+        for (const [pk, pv] of purchasePriceMap.entries()) {
+          const pkName = normalizeForName(pk);
+          // 접두사 제거 후 일치 또는 한쪽이 다른쪽으로 시작
+          if (pkName === strippedKey ||
+              (strippedKey.length >= 8 && pkName.startsWith(strippedKey.slice(0, 12))) ||
+              (pkName.length >= 8 && strippedKey.startsWith(pkName.slice(0, 12)))) {
+            unitPrice = pv.price;
+            if (!unit || unit === DEFAULT_UNITS[agg.type]) unit = pv.unit || unit;
+            break;
+          }
+        }
       }
     }
 
