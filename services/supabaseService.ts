@@ -1882,51 +1882,57 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
 
 export const forecastService = {
   async getItems(version: 'current' | 'previous' = 'current'): Promise<ForecastItem[]> {
+    const key = version === 'current' ? 'dashboard_forecastData' : 'dashboard_forecastData_prev';
+
     if (!isSupabaseConfigured()) {
-      const key = version === 'current' ? 'dashboard_forecastData' : 'dashboard_forecastData_prev';
       const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     }
 
-    const pageSize = 1000;
-    let from = 0;
-    let allRows: any[] = [];
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      let allRows: any[] = [];
 
-    while (true) {
-      const { data, error } = await supabase!
-        .from('forecast_data')
-        .select('*')
-        .eq('version', version)
-        .order('no')
-        .range(from, from + pageSize - 1);
+      while (true) {
+        const { data, error } = await supabase!
+          .from('forecast_data')
+          .select('*')
+          .eq('version', version)
+          .order('no')
+          .range(from, from + pageSize - 1);
 
-      if (error) { handleError(error, 'forecast getItems'); break; }
-      if (!data || data.length === 0) break;
-      allRows = allRows.concat(data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      const items = allRows.map((row: any) => ({
+        no: row.no || 0,
+        customer: row.customer || '',
+        model: row.model || '',
+        stage: row.stage || '',
+        partNo: row.part_no || '',
+        newPartNo: row.new_part_no || '',
+        type: row.type || '',
+        unitPrice: Number(row.unit_price) || 0,
+        category: row.category || '',
+        partName: row.part_name || '',
+        monthlyQty: row.monthly_qty || [],
+        totalQty: Number(row.total_qty) || 0,
+        monthlyRevenue: row.monthly_revenue || [],
+        totalRevenue: Number(row.total_revenue) || 0,
+      }));
+
+      const total = items.reduce((s, i) => s + i.totalRevenue, 0);
+      console.log(`📊 forecast ${version} loaded: ${items.length}개, 총매출: ${(total/1e8).toFixed(1)}억`);
+      return items;
+    } catch {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
     }
-
-    const items = allRows.map((row: any) => ({
-      no: row.no || 0,
-      customer: row.customer || '',
-      model: row.model || '',
-      stage: row.stage || '',
-      partNo: row.part_no || '',
-      newPartNo: row.new_part_no || '',
-      type: row.type || '',
-      unitPrice: Number(row.unit_price) || 0,
-      category: row.category || '',
-      partName: row.part_name || '',
-      monthlyQty: row.monthly_qty || [],
-      totalQty: Number(row.total_qty) || 0,
-      monthlyRevenue: row.monthly_revenue || [],
-      totalRevenue: Number(row.total_revenue) || 0,
-    }));
-
-    const total = items.reduce((s, i) => s + i.totalRevenue, 0);
-    console.log(`📊 forecast ${version} loaded: ${items.length}개, 총매출: ${(total/1e8).toFixed(1)}억`);
-    return items;
   },
 
   async saveItems(data: ForecastItem[], version: 'current' | 'previous' = 'current'): Promise<void> {
@@ -2137,16 +2143,21 @@ export const bomMasterService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('bom_master', 'parent_pn');
-    return data.map((row: any) => ({
-      parentPn: row.parent_pn || '',
-      childPn: row.child_pn || '',
-      level: row.level || 1,
-      qty: Number(row.qty) || 1,
-      childName: row.child_name || '',
-      partType: row.part_type || '',
-      supplier: row.supplier || '',
-    }));
+    try {
+      const data = await fetchAllRows('bom_master', 'parent_pn');
+      return data.map((row: any) => ({
+        parentPn: row.parent_pn || '',
+        childPn: row.child_pn || '',
+        level: row.level || 1,
+        qty: Number(row.qty) || 1,
+        childName: row.child_name || '',
+        partType: row.part_type || '',
+        supplier: row.supplier || '',
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_bomMasterData');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(records: BomMasterRecord[]): Promise<void> {
@@ -2185,14 +2196,19 @@ export const productCodeService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('product_code_master', 'product_code');
-    return data.map((row: any) => ({
-      productCode: row.product_code || '',
-      customerPn: row.customer_pn || '',
-      productName: row.product_name || '',
-      customer: row.customer || '',
-      model: row.model || '',
-    }));
+    try {
+      const data = await fetchAllRows('product_code_master', 'product_code');
+      return data.map((row: any) => ({
+        productCode: row.product_code || '',
+        customerPn: row.customer_pn || '',
+        productName: row.product_name || '',
+        customer: row.customer || '',
+        model: row.model || '',
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_productCodeMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(records: ProductCodeRecord[]): Promise<void> {
@@ -2229,25 +2245,30 @@ export const referenceInfoService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('reference_info_master', 'item_code');
-    return data.map((row: any) => ({
-      itemCode: row.item_code || '',
-      customerPn: row.customer_pn || '',
-      itemName: row.item_name || '',
-      supplyType: row.supply_type || '',
-      processType: row.process_type || '',
-      netWeight: Number(row.net_weight) || 0,
-      runnerWeight: Number(row.runner_weight) || 0,
-      cavity: Number(row.cavity) || 1,
-      lossRate: Number(row.loss_rate) || 0,
-      paintQty1: Number(row.paint_qty_1) || 0,
-      paintQty2: Number(row.paint_qty_2) || 0,
-      paintQty3: Number(row.paint_qty_3) || 0,
-      rawMaterialCode1: row.raw_material_code_1 || '',
-      rawMaterialCode2: row.raw_material_code_2 || '',
-      rawMaterialCode3: row.raw_material_code_3 || '',
-      rawMaterialCode4: row.raw_material_code_4 || '',
-    }));
+    try {
+      const data = await fetchAllRows('reference_info_master', 'item_code');
+      return data.map((row: any) => ({
+        itemCode: row.item_code || '',
+        customerPn: row.customer_pn || '',
+        itemName: row.item_name || '',
+        supplyType: row.supply_type || '',
+        processType: row.process_type || '',
+        netWeight: Number(row.net_weight) || 0,
+        runnerWeight: Number(row.runner_weight) || 0,
+        cavity: Number(row.cavity) || 1,
+        lossRate: Number(row.loss_rate) || 0,
+        paintQty1: Number(row.paint_qty_1) || 0,
+        paintQty2: Number(row.paint_qty_2) || 0,
+        paintQty3: Number(row.paint_qty_3) || 0,
+        rawMaterialCode1: row.raw_material_code_1 || '',
+        rawMaterialCode2: row.raw_material_code_2 || '',
+        rawMaterialCode3: row.raw_material_code_3 || '',
+        rawMaterialCode4: row.raw_material_code_4 || '',
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_referenceInfoMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
@@ -2335,15 +2356,20 @@ export const materialCodeService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('material_code_master', 'material_code');
-    return data.map((row: any) => ({
-      materialCode: row.material_code || '',
-      materialName: row.material_name || '',
-      materialType: row.material_type || '',
-      unit: row.unit || '',
-      lossRate: Number(row.loss_rate) || 0,
-      currentPrice: Number(row.current_price) || 0,
-    }));
+    try {
+      const data = await fetchAllRows('material_code_master', 'material_code');
+      return data.map((row: any) => ({
+        materialCode: row.material_code || '',
+        materialName: row.material_name || '',
+        materialType: row.material_type || '',
+        unit: row.unit || '',
+        lossRate: Number(row.loss_rate) || 0,
+        currentPrice: Number(row.current_price) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_materialCodeMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(records: MaterialCodeRecord[]): Promise<void> {

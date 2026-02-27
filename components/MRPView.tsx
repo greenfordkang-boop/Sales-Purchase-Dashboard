@@ -7,6 +7,7 @@ import { ForecastItem } from '../utils/salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
 import { downloadCSV } from '../utils/csvExport';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService } from '../services/supabaseService';
 
 // ============================================================
 // Constants
@@ -48,43 +49,31 @@ const MRPView: React.FC = () => {
     return () => window.removeEventListener('dashboard-data-updated', handleUpdate);
   }, [dataSource]);
 
-  const calculateMRPData = () => {
+  const calculateMRPData = async () => {
     setIsCalculating(true);
     try {
-      // Forecast 데이터 로드
-      const forecastRaw = localStorage.getItem('dashboard_forecastData');
-      const forecastData: ForecastItem[] = forecastRaw ? JSON.parse(forecastRaw) : [];
+      // 서비스를 통해 데이터 로드 (Supabase → localStorage 폴백)
+      const [forecastData, masterRecords, productCodes, refInfo, materialCodes] = await Promise.all([
+        forecastService.getItems('current'),
+        bomMasterService.getAll(),
+        productCodeService.getAll(),
+        referenceInfoService.getAll(),
+        materialCodeService.getAll(),
+      ]);
 
-      // BOM 데이터: bom_master 우선 → 기존 bom_data 폴백
-      let bomRecords: BomRecord[] = [];
-      const bomMasterRaw = localStorage.getItem('dashboard_bomMasterData');
-      if (bomMasterRaw) {
-        const masterRecords: BomMasterRecord[] = JSON.parse(bomMasterRaw);
-        bomRecords = masterRecords.map(r => ({
-          parentPn: r.parentPn,
-          childPn: r.childPn,
-          level: r.level,
-          qty: r.qty,
-          childName: r.childName,
-          supplier: r.supplier,
-          partType: r.partType,
-        }));
-      } else {
-        const bomRaw = localStorage.getItem('dashboard_bomData');
-        bomRecords = bomRaw ? JSON.parse(bomRaw) : [];
-      }
-
-      // 마스터 데이터 로드
-      const pcRaw = localStorage.getItem('dashboard_productCodeMaster');
-      const productCodes: ProductCodeRecord[] = pcRaw ? JSON.parse(pcRaw) : [];
-
-      const riRaw = localStorage.getItem('dashboard_referenceInfoMaster');
-      const refInfo: ReferenceInfoRecord[] = riRaw ? JSON.parse(riRaw) : [];
-
-      const mcRaw = localStorage.getItem('dashboard_materialCodeMaster');
-      const materialCodes: MaterialCodeRecord[] = mcRaw ? JSON.parse(mcRaw) : [];
+      // BomMasterRecord → BomRecord 변환
+      const bomRecords: BomRecord[] = masterRecords.map(r => ({
+        parentPn: r.parentPn,
+        childPn: r.childPn,
+        level: r.level,
+        qty: r.qty,
+        childName: r.childName,
+        supplier: r.supplier,
+        partType: r.partType,
+      }));
 
       if (forecastData.length === 0 || bomRecords.length === 0) {
+        console.warn(`MRP 데이터 부족: forecast=${forecastData.length}, bom=${bomRecords.length}`);
         setMrpResult(null);
         return;
       }
