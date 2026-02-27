@@ -140,12 +140,12 @@ const EQUIPMENT_HEADERS: Record<string, RegExp> = {
 };
 
 const MATERIAL_CODE_HEADERS: Record<string, RegExp> = {
-  materialCode: /재질코드|material.*code|코드/i,
-  materialName: /재질명|material.*name|품명|명칭/i,
-  materialType: /재질구분|material.*type|유형|구분/i,
-  unit: /단위|unit/i,
-  lossRate: /loss.*율|loss.*rate|로스율/i,
-  currentPrice: /현재단가|current.*price|단가|가격/i,
+  materialCode: /^재질코드$|material.*code/i,
+  materialName: /^재질명$|material.*name/i,
+  materialType: /^재질분류$|^재질구분$|material.*type/i,
+  unit: /^단위$|^unit$/i,
+  lossRate: /loss.*율|loss.*rate|^로스율/i,
+  currentPrice: /현재단가|current.*price|^단가$|^가격$/i,
 };
 
 // ============================================
