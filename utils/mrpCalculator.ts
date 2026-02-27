@@ -133,9 +133,6 @@ export function calculateMRP(
       dedupedBom.push(b);
     }
   }
-  if (normalizedBom.length !== dedupedBom.length) {
-    console.log(`[MRP] BOM 중복 제거: ${normalizedBom.length} → ${dedupedBom.length}건 (${normalizedBom.length - dedupedBom.length}건 중복)`);
-  }
   const bomRelations = buildBomRelations(dedupedBom);
 
   // 4. 재질코드 맵 (이름/유형/단위)
@@ -167,7 +164,6 @@ export function calculateMRP(
         });
       }
     }
-    console.log(`[MRP] 매입단가 맵: ${purchasePriceMap.size}개 (매입 원본: ${purchaseData.length}건)`);
   }
 
   // 5. 기준정보에서 자재유형 분류 보조 맵
@@ -277,13 +273,6 @@ export function calculateMRP(
     }
   }
 
-  // 퍼지 매칭 결과 로그
-  if (fuzzyMatched.length > 0) {
-    console.log(`[MRP] 퍼지 매칭: ${fuzzyMatched.length}건\n  ${fuzzyMatched.join('\n  ')}`);
-  }
-  if (unmatchedProducts.length > 0) {
-    console.log(`[MRP] BOM 미매칭: ${unmatchedProducts.length}건 (Forecast ${forecastQtyMap.size}개 중)`);
-  }
 
   // 7. 결과 구성
   const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
@@ -421,10 +410,6 @@ export function calculateMRP(
       monthlyQty: agg.monthlyQty,
     });
   }
-
-  // 디버그: 가격 매칭 결과
-  const pricedCount = materials.filter(m => m.unitPrice > 0).length;
-  console.log(`[MRP] 가격 매칭: ${pricedCount}/${materials.length}건 (재질코드: ${priceMap.size}, 매입단가: ${purchasePriceMap.size})`);
 
   // 정렬: 총 소요량 내림차순
   materials.sort((a, b) => b.requiredQty - a.requiredQty);

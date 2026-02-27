@@ -102,12 +102,10 @@ const MRPView: React.FC = () => {
           }
         }
         mergedMaterialCodes = merged;
-        console.log(`[MRP] 재질단가 보강: 서비스 ${materialCodes.length}개 + 내장 ${fallbackMaterialCodes.length}개 → ${merged.length}개 (단가 ${merged.filter(m => m.currentPrice > 0).length}개)`);
       }
 
       // 구매단가 보강: 내장 구매단가를 purchaseData에 병합
       const existingPartNos = new Set(purchaseData.map(p => p.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '')));
-      let addedPurchase = 0;
       const mergedPurchaseData = [...purchaseData];
       for (const fp of fallbackPurchasePrices) {
         const key = fp.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
@@ -118,11 +116,7 @@ const MRPView: React.FC = () => {
             amount: 0, location: '', costType: '', purchaseType: '구매', materialType: '', process: '', customer: '',
           } as any);
           existingPartNos.add(key);
-          addedPurchase++;
         }
-      }
-      if (addedPurchase > 0) {
-        console.log(`[MRP] 구매단가 보강: 기존 ${purchaseData.length}건 + 내장 ${addedPurchase}건 → ${mergedPurchaseData.length}건`);
       }
 
       const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData);
