@@ -24,6 +24,19 @@ import {
 // Helper Functions
 // ============================================
 
+// 테이블 미존재 시 반복 404 방지용 캐시
+const _missingTables = new Set<string>();
+
+const isTableMissing = (table: string) => _missingTables.has(table);
+
+const checkTableError = (error: any, table: string): boolean => {
+  // 404 = 테이블 미존재, 42P01 = relation does not exist
+  const status = error?.code === '42P01' || error?.message?.includes('relation') ||
+    (typeof error?.status === 'number' && error.status === 404);
+  if (status) _missingTables.add(table);
+  return status;
+};
+
 const handleError = (error: any, operation: string) => {
   console.error(`Supabase ${operation} error:`, error);
   throw error;
@@ -44,7 +57,7 @@ const shouldRetryBatch = (error: any) => {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
-  if (rows.length === 0) return;
+  if (rows.length === 0 || isTableMissing(table)) return;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
     let lastError: any = null;
@@ -107,6 +120,8 @@ const fetchAllRows = async (
   orderOpts?: { ascending?: boolean },
   extraOrder?: { column: string; ascending?: boolean }
 ): Promise<any[]> => {
+  if (isTableMissing(table)) return [];
+
   const pageSize = 1000;
   let from = 0;
   let allRows: any[] = [];
@@ -123,7 +138,11 @@ const fetchAllRows = async (
     }
 
     const { data, error } = await query;
-    if (error) { handleError(error, `${table} fetchAll`); break; }
+    if (error) {
+      if (checkTableError(error, table)) return [];
+      handleError(error, `${table} fetchAll`);
+      break;
+    }
     if (!data || data.length === 0) break;
     allRows = allRows.concat(data);
     if (data.length < pageSize) break;
@@ -1124,19 +1143,18 @@ export const purchaseItemMasterService = {
   },
 
   async saveAll(data: PurchaseItemMaster[]): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
-      return;
-    }
+    localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
+    if (!isSupabaseConfigured() || isTableMissing('purchase_item_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('purchase_item_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) handleError(deleteError, 'purchaseItemMaster delete');
-
-    localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
+    if (deleteError) {
+      if (checkTableError(deleteError, 'purchase_item_master')) return;
+      handleError(deleteError, 'purchaseItemMaster delete');
+    }
 
     const rows = data.map(item => ({
       part_no: item.partNo,
@@ -1185,12 +1203,16 @@ export const purchaseItemMasterService = {
 // Purchase Monthly Summary Service (매입종합집계)
 // ============================================
 
+function getPurchaseSummaryFromLocal(year?: number): PurchaseMonthlySummary[] {
+  const stored = localStorage.getItem('dashboard_purchaseSummary');
+  const all: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+  return year ? all.filter(d => d.year === year) : all;
+}
+
 export const purchaseSummaryService = {
   async getAll(year?: number): Promise<PurchaseMonthlySummary[]> {
-    if (!isSupabaseConfigured()) {
-      const stored = localStorage.getItem('dashboard_purchaseSummary');
-      const all: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
-      return year ? all.filter(d => d.year === year) : all;
+    if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) {
+      return getPurchaseSummaryFromLocal(year);
     }
 
     try {
@@ -1239,22 +1261,19 @@ export const purchaseSummaryService = {
         closingMonth: row.closing_month || '',
       }));
     } catch {
-      // Table may not exist – fall back to localStorage
-      const stored = localStorage.getItem('dashboard_purchaseSummary');
-      const all: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
-      return year ? all.filter(d => d.year === year) : all;
+      _missingTables.add('purchase_monthly_summary');
+      return getPurchaseSummaryFromLocal(year);
     }
   },
 
   async saveByYearMonth(data: PurchaseMonthlySummary[], year: number, month: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      const stored = localStorage.getItem('dashboard_purchaseSummary');
-      const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
-      const filtered = existing.filter(d => !(d.year === year && d.month === month));
-      const merged = [...filtered, ...data];
-      localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(merged));
-      return;
-    }
+    // localStorage 항상 업데이트
+    const stored = localStorage.getItem('dashboard_purchaseSummary');
+    const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+    const filtered = existing.filter(d => !(d.year === year && d.month === month));
+    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify([...filtered, ...data]));
+
+    if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
     // 해당 년월 데이터 삭제
     const { error: deleteError } = await supabase!
@@ -1263,7 +1282,10 @@ export const purchaseSummaryService = {
       .eq('year', year)
       .eq('month', month);
 
-    if (deleteError) console.error('purchaseSummary delete error:', deleteError);
+    if (deleteError) {
+      _missingTables.add('purchase_monthly_summary');
+      return;
+    }
 
     const rows = data.map(item => ({
       year: item.year,
@@ -1288,30 +1310,22 @@ export const purchaseSummaryService = {
     }));
 
     await insertInBatches('purchase_monthly_summary', rows);
-
-    // localStorage도 업데이트
-    const stored = localStorage.getItem('dashboard_purchaseSummary');
-    const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
-    const filtered = existing.filter(d => !(d.year === year && d.month === month));
-    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify([...filtered, ...data]));
-
-    console.log(`✅ Purchase summary ${year}년 ${month} saved: ${rows.length} rows`);
   },
 
   async saveAll(data: PurchaseMonthlySummary[]): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
-      return;
-    }
+    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
+
+    if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
     const { error: deleteError } = await supabase!
       .from('purchase_monthly_summary')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) handleError(deleteError, 'purchaseSummary delete');
-
-    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
+    if (deleteError) {
+      _missingTables.add('purchase_monthly_summary');
+      return;
+    }
 
     const rows = data.map(item => ({
       year: item.year,
@@ -1345,54 +1359,41 @@ export const purchaseSummaryService = {
 
 export const bomService = {
   async getAll(): Promise<BomRecord[]> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('bom_data')) {
       const stored = localStorage.getItem('dashboard_bomData');
       return stored ? JSON.parse(stored) : [];
     }
 
-    const pageSize = 1000;
-    let from = 0;
-    let allRows: any[] = [];
-
-    while (true) {
-      const { data, error } = await supabase!
-        .from('bom_data')
-        .select('*')
-        .order('parent_pn')
-        .range(from, from + pageSize - 1);
-
-      if (error) { handleError(error, 'bom getAll'); break; }
-      if (!data || data.length === 0) break;
-      allRows = allRows.concat(data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+    try {
+      const data = await fetchAllRows('bom_data', 'parent_pn');
+      return data.map((row: any) => ({
+        parentPn: row.parent_pn || '',
+        childPn: row.child_pn || '',
+        level: row.level || 1,
+        qty: Number(row.qty) || 1,
+        childName: row.child_name || '',
+        supplier: row.supplier || '',
+        partType: row.part_type || '',
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_bomData');
+      return stored ? JSON.parse(stored) : [];
     }
-
-    return allRows.map((row: any) => ({
-      parentPn: row.parent_pn || '',
-      childPn: row.child_pn || '',
-      level: row.level || 1,
-      qty: Number(row.qty) || 1,
-      childName: row.child_name || '',
-      supplier: row.supplier || '',
-      partType: row.part_type || '',
-    }));
   },
 
   async saveAll(data: BomRecord[]): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_bomData', JSON.stringify(data));
-      return;
-    }
+    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+    if (!isSupabaseConfigured() || isTableMissing('bom_data')) return;
 
     const { error: deleteError } = await supabase!
       .from('bom_data')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) handleError(deleteError, 'bom delete');
-
-    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+    if (deleteError) {
+      if (checkTableError(deleteError, 'bom_data')) return;
+      handleError(deleteError, 'bom delete');
+    }
 
     const rows = data.map(item => ({
       parent_pn: item.parentPn,
@@ -1432,7 +1433,7 @@ export interface CRKpiData {
 
 export const ciKpiService = {
   async get(): Promise<CRKpiData | null> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('ci_kpi_settings')) {
       const stored = localStorage.getItem('dashboard_crKpiData');
       return stored ? JSON.parse(stored) : null;
     }
@@ -1445,7 +1446,7 @@ export const ciKpiService = {
 
     if (error) {
       if (error.code === 'PGRST116') return null;
-      console.error('ci_kpi_settings get error:', error);
+      checkTableError(error, 'ci_kpi_settings');
       return null;
     }
 
@@ -1462,14 +1463,16 @@ export const ciKpiService = {
 
   async save(data: CRKpiData): Promise<void> {
     localStorage.setItem('dashboard_crKpiData', JSON.stringify(data));
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('ci_kpi_settings')) return;
 
     const { error: deleteError } = await supabase!
       .from('ci_kpi_settings')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) console.error('ci_kpi_settings delete error:', deleteError);
+    if (deleteError) {
+      if (checkTableError(deleteError, 'ci_kpi_settings')) return;
+    }
 
     const row: CIKpiRow = {
       prev_year_ci: data.prevYearCI,
@@ -1484,7 +1487,7 @@ export const ciKpiService = {
       .from('ci_kpi_settings')
       .insert(row);
 
-    if (error) console.error('ci_kpi_settings insert error:', error);
+    if (error) checkTableError(error, 'ci_kpi_settings');
     else console.log('✅ CI KPI settings saved');
   }
 };
@@ -1495,11 +1498,12 @@ export const ciKpiService = {
 
 export const ciDetailService = {
   async getAll(): Promise<Record<number, CIDetailItem[]>> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('ci_details')) {
       const stored = localStorage.getItem('dashboard_ciDetails');
       return stored ? JSON.parse(stored) : {};
     }
 
+    try {
     const data = await fetchAllRows('ci_details', 'month');
     if (!data || data.length === 0) return {};
 
@@ -1522,18 +1526,24 @@ export const ciDetailService = {
       });
     });
     return byMonth;
+    } catch {
+      const stored = localStorage.getItem('dashboard_ciDetails');
+      return stored ? JSON.parse(stored) : {};
+    }
   },
 
   async saveAll(data: Record<number, CIDetailItem[]>): Promise<void> {
     localStorage.setItem('dashboard_ciDetails', JSON.stringify(data));
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('ci_details')) return;
 
     const { error: deleteError } = await supabase!
       .from('ci_details')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) console.error('ci_details delete error:', deleteError);
+    if (deleteError) {
+      if (checkTableError(deleteError, 'ci_details')) return;
+    }
 
     const rows: any[] = [];
     for (const [monthStr, items] of Object.entries(data) as [string, CIDetailItem[]][]) {
@@ -1581,34 +1591,41 @@ export interface CIUploadRecord {
 
 export const ciUploadService = {
   async getAll(): Promise<CIUploadRecord[]> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('ci_uploads')) {
       const stored = localStorage.getItem('dashboard_ciUploads');
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('ci_uploads', 'month');
-    return data?.map((row: any) => ({
-      id: row.id,
-      month: row.month,
-      year: row.year,
-      fileName: row.file_name || '',
-      uploadDate: row.upload_date || '',
-      totalCIAmount: Number(row.total_ci_amount) || 0,
-      totalQuantity: Number(row.total_quantity) || 0,
-      itemCount: row.item_count || 0,
-    })) || [];
+    try {
+      const data = await fetchAllRows('ci_uploads', 'month');
+      return data?.map((row: any) => ({
+        id: row.id,
+        month: row.month,
+        year: row.year,
+        fileName: row.file_name || '',
+        uploadDate: row.upload_date || '',
+        totalCIAmount: Number(row.total_ci_amount) || 0,
+        totalQuantity: Number(row.total_quantity) || 0,
+        itemCount: row.item_count || 0,
+      })) || [];
+    } catch {
+      const stored = localStorage.getItem('dashboard_ciUploads');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(data: CIUploadRecord[]): Promise<void> {
     localStorage.setItem('dashboard_ciUploads', JSON.stringify(data));
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('ci_uploads')) return;
 
     const { error: deleteError } = await supabase!
       .from('ci_uploads')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (deleteError) console.error('ci_uploads delete error:', deleteError);
+    if (deleteError) {
+      if (checkTableError(deleteError, 'ci_uploads')) return;
+    }
 
     const rows = data.map(item => ({
       month: item.month,
@@ -2061,7 +2078,7 @@ export const forecastService = {
   },
 
   async getUploads(): Promise<ForecastUpload[]> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('forecast_uploads')) {
       const stored = localStorage.getItem('dashboard_forecastUploads');
       return stored ? JSON.parse(stored) : [];
     }
@@ -2072,7 +2089,7 @@ export const forecastService = {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('forecast_uploads get error:', error);
+      checkTableError(error, 'forecast_uploads');
       return [];
     }
 
@@ -2162,13 +2179,13 @@ export const bomMasterService = {
 
   async saveAll(records: BomMasterRecord[]): Promise<void> {
     try { localStorage.setItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('bom_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('bom_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('bom_master delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'bom_master')) return;
 
     const rows = records.map(r => ({
       parent_pn: r.parentPn,
@@ -2213,13 +2230,13 @@ export const productCodeService = {
 
   async saveAll(records: ProductCodeRecord[]): Promise<void> {
     try { localStorage.setItem('dashboard_productCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productCode, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('product_code_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('product_code_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('product_code_master delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'product_code_master')) return;
 
     const rows = records.map(r => ({
       product_code: r.productCode,
@@ -2273,13 +2290,13 @@ export const referenceInfoService = {
 
   async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
     try { localStorage.setItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('reference_info_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('reference_info_master delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'reference_info_master')) return;
 
     const rows = records.map(r => ({
       item_code: r.itemCode,
@@ -2311,28 +2328,33 @@ export const referenceInfoService = {
 
 export const equipmentService = {
   async getAll(): Promise<EquipmentRecord[]> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('equipment_master')) {
       const stored = localStorage.getItem('dashboard_equipmentMaster');
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('equipment_master', 'equipment_code');
-    return data.map((row: any) => ({
-      equipmentCode: row.equipment_code || '',
-      equipmentName: row.equipment_name || '',
-      tonnage: Number(row.tonnage) || 0,
-    }));
+    try {
+      const data = await fetchAllRows('equipment_master', 'equipment_code');
+      return data.map((row: any) => ({
+        equipmentCode: row.equipment_code || '',
+        equipmentName: row.equipment_name || '',
+        tonnage: Number(row.tonnage) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_equipmentMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(records: EquipmentRecord[]): Promise<void> {
     try { localStorage.setItem('dashboard_equipmentMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for equipment, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('equipment_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('equipment_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('equipment_master delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'equipment_master')) return;
 
     const rows = records.map(r => ({
       equipment_code: r.equipmentCode,
@@ -2374,13 +2396,13 @@ export const materialCodeService = {
 
   async saveAll(records: MaterialCodeRecord[]): Promise<void> {
     try { localStorage.setItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('material_code_master')) return;
 
     const { error: deleteError } = await supabase!
       .from('material_code_master')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('material_code_master delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'material_code_master')) return;
 
     const rows = records.map(r => ({
       material_code: r.materialCode,
@@ -2402,32 +2424,37 @@ export const materialCodeService = {
 
 export const dataQualityService = {
   async getAll(): Promise<DataQualityIssue[]> {
-    if (!isSupabaseConfigured()) {
+    if (!isSupabaseConfigured() || isTableMissing('data_quality_issues')) {
       const stored = localStorage.getItem('dashboard_dataQualityIssues');
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('data_quality_issues', 'issue_type');
-    return data.map((row: any) => ({
-      issueType: row.issue_type || '',
-      itemCode: row.item_code || '',
-      itemName: row.item_name || '',
-      fieldName: row.field_name || '',
-      severity: row.severity || 'warning',
-      description: row.description || '',
-      resolved: row.resolved || false,
-    }));
+    try {
+      const data = await fetchAllRows('data_quality_issues', 'issue_type');
+      return data.map((row: any) => ({
+        issueType: row.issue_type || '',
+        itemCode: row.item_code || '',
+        itemName: row.item_name || '',
+        fieldName: row.field_name || '',
+        severity: row.severity || 'warning',
+        description: row.description || '',
+        resolved: row.resolved || false,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_dataQualityIssues');
+      return stored ? JSON.parse(stored) : [];
+    }
   },
 
   async saveAll(issues: DataQualityIssue[]): Promise<void> {
     try { localStorage.setItem('dashboard_dataQualityIssues', JSON.stringify(issues)); } catch { console.warn('localStorage quota exceeded for dataQuality, skipping local cache'); }
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured() || isTableMissing('data_quality_issues')) return;
 
     const { error: deleteError } = await supabase!
       .from('data_quality_issues')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError) console.error('data_quality_issues delete error:', deleteError);
+    if (deleteError && checkTableError(deleteError, 'data_quality_issues')) return;
 
     const rows = issues.map(i => ({
       issue_type: i.issueType,
