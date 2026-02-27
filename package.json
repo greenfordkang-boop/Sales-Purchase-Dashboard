@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.91.1",
+    "pdfjs-dist": "^5.4.624",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "recharts": "^3.7.0",

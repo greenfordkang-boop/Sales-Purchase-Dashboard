@@ -3,6 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import PurchaseSummaryView from './PurchaseSummaryView';
 import MaterialYieldView from './MaterialYieldView';
+import StandardMaterialCostView from './StandardMaterialCostView';
+import BomMasterUploadView from './BomMasterUploadView';
+import MRPView from './MRPView';
+import CRView from './CRView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
@@ -21,7 +25,21 @@ const PurchaseView: React.FC = () => {
     try {
       const stored = localStorage.getItem('dashboard_purchaseData');
       if (stored) {
-        return JSON.parse(stored);
+        const parsed: PurchaseItem[] = JSON.parse(stored);
+        // 초기 내장 데이터 파싱하여 개수 비교
+        const freshParts = parsePartsCSV(INITIAL_PARTS_CSV);
+        const freshMaterials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
+        const freshCount = freshParts.length + freshMaterials.length;
+        // 마이그레이션: customerPn 없거나, 내장 데이터가 더 많으면 재파싱
+        const needsMigration = (parsed.length > 0 && parsed[0].customerPn === undefined)
+          || (parsed.length < freshCount);
+        if (needsMigration) {
+          console.log(`[구매데이터 마이그레이션] 재파싱합니다. (기존: ${parsed.length}건, 내장: ${freshCount}건)`);
+          const fresh = [...freshParts, ...freshMaterials];
+          localStorage.setItem('dashboard_purchaseData', JSON.stringify(fresh));
+          return fresh;
+        }
+        return parsed;
       }
       const parts = parsePartsCSV(INITIAL_PARTS_CSV);
       const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
@@ -34,7 +52,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'price' | 'cr' | 'supplier' | 'summary' | 'yield'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard'>('inbound');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -68,9 +86,27 @@ const PurchaseView: React.FC = () => {
       try {
         const supabaseData = await purchaseService.getAll();
         if (supabaseData && supabaseData.length > 0) {
-          setPurchaseData(supabaseData);
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(supabaseData));
-          console.log(`✅ Supabase에서 구매 데이터 로드: ${supabaseData.length}개`);
+          // 내장 데이터(2월 추가분)를 Supabase 데이터에 병합
+          const freshParts = parsePartsCSV(INITIAL_PARTS_CSV);
+          const freshMaterials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
+          const freshData = [...freshParts, ...freshMaterials];
+          
+          // Supabase에 없는 월의 데이터만 내장 데이터에서 추가
+          const supabaseMonths = new Set(supabaseData.map(d => `${d.year}-${d.month}`));
+          const freshMonths = new Set(freshData.map(d => `${d.year}-${d.month}`));
+          const missingMonths = [...freshMonths].filter(m => !supabaseMonths.has(m));
+          
+          if (missingMonths.length > 0) {
+            const missingData = freshData.filter(d => missingMonths.includes(`${d.year}-${d.month}`));
+            const merged = [...supabaseData, ...missingData];
+            setPurchaseData(merged);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+            console.log(`✅ Supabase ${supabaseData.length}건 + 내장 ${missingData.length}건(누락월: ${missingMonths.join(', ')}) = ${merged.length}건`);
+          } else {
+            setPurchaseData(supabaseData);
+            localStorage.setItem('dashboard_purchaseData', JSON.stringify(supabaseData));
+            console.log(`✅ Supabase에서 구매 데이터 로드: ${supabaseData.length}개`);
+          }
         } else {
           console.log('ℹ️ Supabase 구매 데이터 없음 - localStorage 유지');
         }
@@ -86,6 +122,7 @@ const PurchaseView: React.FC = () => {
   useEffect(() => {
     if (purchaseData.length > 0) {
       localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
+      window.dispatchEvent(new Event('dashboard-data-updated'));
     }
 
     // Update available years based on data
@@ -475,12 +512,15 @@ const PurchaseView: React.FC = () => {
   const PIE_COLORS = ['#6366f1', '#f43f5e']; 
 
   const SUB_TABS = [
-    { id: 'inbound', label: '구매현황(입고)' },
+    { id: 'inbound', label: '입고현황' },
     { id: 'summary', label: '매입종합집계' },
+    { id: 'bomMaster', label: 'BOM 마스터' },
+    { id: 'mrp', label: '소요량(MRP)' },
     { id: 'yield', label: '자재수율' },
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
-    { id: 'supplier', label: '협력사 현황' },
+    { id: 'supplier', label: '협력사현황' },
+    { id: 'standard', label: '표준재료비' },
   ];
 
   // Helper component for table headers
@@ -794,7 +834,17 @@ const PurchaseView: React.FC = () => {
       {activeSubTab === 'summary' && <PurchaseSummaryView />}
 
       {/* =================================================================================
-          2.5. MATERIAL YIELD TAB (자재수율)
+          2.5. BOM MASTER TAB (BOM 마스터 업로드)
+         ================================================================================= */}
+      {activeSubTab === 'bomMaster' && <BomMasterUploadView />}
+
+      {/* =================================================================================
+          2.6. MRP TAB (소요량 계획)
+         ================================================================================= */}
+      {activeSubTab === 'mrp' && <MRPView />}
+
+      {/* =================================================================================
+          3. MATERIAL YIELD TAB (자재수율)
          ================================================================================= */}
       {activeSubTab === 'yield' && <MaterialYieldView />}
 
@@ -854,22 +904,9 @@ const PurchaseView: React.FC = () => {
       )}
 
       {/* =================================================================================
-          4. CR TAB (Placeholder)
+          4. CR TAB
          ================================================================================= */}
-      {activeSubTab === 'cr' && (
-         <div className="bg-white p-20 rounded-3xl border border-slate-200 text-center shadow-sm">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-            </div>
-            <h3 className="text-xl font-black text-slate-800 mb-2">CR (Cost Reduction) 현황</h3>
-            <p className="text-slate-500 max-w-md mx-auto">
-                원가 절감 활동 분석 모듈을 준비 중입니다.<br/>
-                목표 대비 실적 관리 및 절감 요인 분석 기능을 제공할 예정입니다.
-            </p>
-         </div>
-      )}
+      {activeSubTab === 'cr' && <CRView />}
 
       {/* =================================================================================
           5. SUPPLIER TAB (Derived Data)
@@ -925,6 +962,11 @@ const PurchaseView: React.FC = () => {
              </div>
           </div>
       )}
+
+      {/* =================================================================================
+          7. STANDARD MATERIAL COST TAB (표준재료비)
+         ================================================================================= */}
+      {activeSubTab === 'standard' && <StandardMaterialCostView />}
     </div>
   );
 };

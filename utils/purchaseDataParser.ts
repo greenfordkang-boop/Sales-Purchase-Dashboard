@@ -8,6 +8,7 @@ export interface PurchaseItem {
   type: string; // '부품', '원재료', '도장', '사출' etc.
   category: 'Parts' | 'Material'; // High level category for filtering
   itemCode: string;
+  customerPn?: string; // 고객사 P/N (부품 CSV col6)
   itemName: string;
   spec?: string;
   unit: string;
@@ -80,6 +81,7 @@ export const parsePartsCSV = (csvContent: string): PurchaseItem[] => {
       type: cols[10] || '부품', // 자재유형 column
       category: 'Parts',
       itemCode: cols[5],
+      customerPn: cols[6] || '',
       itemName: cols[7],
       spec: cols[8],
       unit: cols[9],

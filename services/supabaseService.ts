@@ -10,6 +10,15 @@ import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
 import { ForecastItem, ForecastSummary, ForecastUpload } from '../utils/salesForecastParser';
 import { BomRecord } from '../utils/bomDataParser';
+import { CIDetailItem } from '../utils/ciDataParser';
+import {
+  BomMasterRecord,
+  ProductCodeRecord,
+  ReferenceInfoRecord,
+  EquipmentRecord,
+  MaterialCodeRecord,
+  DataQualityIssue,
+} from '../utils/bomMasterParser';
 
 // ============================================
 // Helper Functions
@@ -1387,6 +1396,225 @@ export const bomService = {
 };
 
 // ============================================
+// CI KPI Settings Service
+// ============================================
+
+interface CIKpiRow {
+  prev_year_ci: number;
+  prev_year_ci_ratio: number;
+  target_ci: number;
+  target_ci_ratio: number;
+  monthly_ci_target: number[];
+  monthly_ci_actual: number[];
+}
+
+export interface CRKpiData {
+  prevYearCI: number;
+  prevYearCIRatio: number;
+  targetCI: number;
+  targetCIRatio: number;
+  monthlyCITarget: number[];
+  monthlyCIActual: number[];
+}
+
+export const ciKpiService = {
+  async get(): Promise<CRKpiData | null> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_crKpiData');
+      return stored ? JSON.parse(stored) : null;
+    }
+
+    const { data, error } = await supabase!
+      .from('ci_kpi_settings')
+      .select('*')
+      .limit(1)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      console.error('ci_kpi_settings get error:', error);
+      return null;
+    }
+
+    if (!data) return null;
+    return {
+      prevYearCI: Number(data.prev_year_ci) || 0,
+      prevYearCIRatio: Number(data.prev_year_ci_ratio) || 0,
+      targetCI: Number(data.target_ci) || 0,
+      targetCIRatio: Number(data.target_ci_ratio) || 0,
+      monthlyCITarget: Array.isArray(data.monthly_ci_target) ? data.monthly_ci_target : [],
+      monthlyCIActual: Array.isArray(data.monthly_ci_actual) ? data.monthly_ci_actual : [],
+    };
+  },
+
+  async save(data: CRKpiData): Promise<void> {
+    localStorage.setItem('dashboard_crKpiData', JSON.stringify(data));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('ci_kpi_settings')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) console.error('ci_kpi_settings delete error:', deleteError);
+
+    const row: CIKpiRow = {
+      prev_year_ci: data.prevYearCI,
+      prev_year_ci_ratio: data.prevYearCIRatio,
+      target_ci: data.targetCI,
+      target_ci_ratio: data.targetCIRatio,
+      monthly_ci_target: Array.isArray(data.monthlyCITarget) ? data.monthlyCITarget : [],
+      monthly_ci_actual: Array.isArray(data.monthlyCIActual) ? data.monthlyCIActual : [],
+    };
+
+    const { error } = await supabase!
+      .from('ci_kpi_settings')
+      .insert(row);
+
+    if (error) console.error('ci_kpi_settings insert error:', error);
+    else console.log('✅ CI KPI settings saved');
+  }
+};
+
+// ============================================
+// CI Details Service
+// ============================================
+
+export const ciDetailService = {
+  async getAll(): Promise<Record<number, CIDetailItem[]>> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_ciDetails');
+      return stored ? JSON.parse(stored) : {};
+    }
+
+    const data = await fetchAllRows('ci_details', 'month');
+    if (!data || data.length === 0) return {};
+
+    const byMonth: Record<number, CIDetailItem[]> = {};
+    data.forEach((row: any) => {
+      const m = row.month;
+      if (!byMonth[m]) byMonth[m] = [];
+      byMonth[m].push({
+        customer: row.customer || '',
+        productionSite: row.production_site || '',
+        vehicleModel: row.vehicle_model || '',
+        partCode: row.part_code || '',
+        partNumber: row.part_number || '',
+        partName: row.part_name || '',
+        category: row.category || '',
+        basePrice: Number(row.base_price) || 0,
+        currentPrice: Number(row.current_price) || 0,
+        quantity: Number(row.quantity) || 0,
+        ciAmount: Number(row.ci_amount) || 0,
+      });
+    });
+    return byMonth;
+  },
+
+  async saveAll(data: Record<number, CIDetailItem[]>): Promise<void> {
+    localStorage.setItem('dashboard_ciDetails', JSON.stringify(data));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('ci_details')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) console.error('ci_details delete error:', deleteError);
+
+    const rows: any[] = [];
+    for (const [monthStr, items] of Object.entries(data) as [string, CIDetailItem[]][]) {
+      const month = parseInt(monthStr);
+      for (const item of (items || [])) {
+        rows.push({
+          month,
+          year: new Date().getFullYear(),
+          customer: item.customer,
+          production_site: item.productionSite,
+          vehicle_model: item.vehicleModel,
+          part_code: item.partCode,
+          part_number: item.partNumber,
+          part_name: item.partName,
+          category: item.category,
+          base_price: item.basePrice,
+          current_price: item.currentPrice,
+          quantity: item.quantity,
+          ci_amount: item.ciAmount,
+        });
+      }
+    }
+
+    if (rows.length > 0) {
+      await insertInBatches('ci_details', rows);
+      console.log(`✅ CI details saved: ${rows.length} items`);
+    }
+  }
+};
+
+// ============================================
+// CI Uploads Service
+// ============================================
+
+export interface CIUploadRecord {
+  id: string;
+  month: number;
+  year: number;
+  fileName: string;
+  uploadDate: string;
+  totalCIAmount: number;
+  totalQuantity: number;
+  itemCount: number;
+}
+
+export const ciUploadService = {
+  async getAll(): Promise<CIUploadRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_ciUploads');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('ci_uploads', 'month');
+    return data?.map((row: any) => ({
+      id: row.id,
+      month: row.month,
+      year: row.year,
+      fileName: row.file_name || '',
+      uploadDate: row.upload_date || '',
+      totalCIAmount: Number(row.total_ci_amount) || 0,
+      totalQuantity: Number(row.total_quantity) || 0,
+      itemCount: row.item_count || 0,
+    })) || [];
+  },
+
+  async saveAll(data: CIUploadRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_ciUploads', JSON.stringify(data));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('ci_uploads')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteError) console.error('ci_uploads delete error:', deleteError);
+
+    const rows = data.map(item => ({
+      month: item.month,
+      year: item.year,
+      file_name: item.fileName,
+      upload_date: item.uploadDate,
+      total_ci_amount: item.totalCIAmount,
+      total_quantity: item.totalQuantity,
+      item_count: item.itemCount,
+    }));
+
+    if (rows.length > 0) {
+      await insertInBatches('ci_uploads', rows);
+      console.log(`✅ CI uploads saved: ${rows.length} records`);
+    }
+  }
+};
+
+// ============================================
 // Utility: Check if Supabase has data & Auto-sync
 // ============================================
 
@@ -1513,6 +1741,15 @@ export const syncAllDataToSupabase = async (): Promise<{ success: boolean; messa
   if (forecastPrevSummaryData) await syncOne('forecastPrevSummary', () => forecastService.saveSummary(JSON.parse(forecastPrevSummaryData), 'previous'));
   if (forecastUploadsData) await syncOne('forecastUploads', () => forecastService.saveUploads(JSON.parse(forecastUploadsData)));
 
+  // CI data
+  const ciKpiData = localStorage.getItem('dashboard_crKpiData');
+  const ciDetailsData = localStorage.getItem('dashboard_ciDetails');
+  const ciUploadsData = localStorage.getItem('dashboard_ciUploads');
+
+  if (ciKpiData) await syncOne('ciKpi', () => ciKpiService.save(JSON.parse(ciKpiData)));
+  if (ciDetailsData) await syncOne('ciDetails', () => ciDetailService.saveAll(JSON.parse(ciDetailsData)));
+  if (ciUploadsData) await syncOne('ciUploads', () => ciUploadService.saveAll(JSON.parse(ciUploadsData)));
+
   if (errors.length === 0) {
     return { success: true, message: `동기화 완료! (${syncedCount}개 항목)` };
   }
@@ -1604,6 +1841,20 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
   await loadOne('forecastUploads', async () => {
     const data = await forecastService.getUploads();
     localStorage.setItem('dashboard_forecastUploads', JSON.stringify(data));
+  });
+
+  // CI data
+  await loadOne('ciKpi', async () => {
+    const data = await ciKpiService.get();
+    if (data) localStorage.setItem('dashboard_crKpiData', JSON.stringify(data));
+  });
+  await loadOne('ciDetails', async () => {
+    const data = await ciDetailService.getAll();
+    if (data && Object.keys(data).length > 0) localStorage.setItem('dashboard_ciDetails', JSON.stringify(data));
+  });
+  await loadOne('ciUploads', async () => {
+    const data = await ciUploadService.getAll();
+    if (data.length > 0) localStorage.setItem('dashboard_ciUploads', JSON.stringify(data));
   });
 
   if (errors.length === 0) {
@@ -1860,4 +2111,296 @@ export const forecastService = {
 
     if (error) console.error('forecast_uploads delete error:', error);
   }
+};
+
+// ============================================
+// BOM Master Service (BOM 마스터 - 파란색 탭)
+// ============================================
+
+export const bomMasterService = {
+  async getAll(): Promise<BomMasterRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_bomMasterData');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('bom_master', 'parent_pn');
+    return data.map((row: any) => ({
+      parentPn: row.parent_pn || '',
+      childPn: row.child_pn || '',
+      level: row.level || 1,
+      qty: Number(row.qty) || 1,
+      childName: row.child_name || '',
+      partType: row.part_type || '',
+      supplier: row.supplier || '',
+    }));
+  },
+
+  async saveAll(records: BomMasterRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_bomMasterData', JSON.stringify(records));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('bom_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('bom_master delete error:', deleteError);
+
+    const rows = records.map(r => ({
+      parent_pn: r.parentPn,
+      child_pn: r.childPn,
+      level: r.level,
+      qty: r.qty,
+      child_name: r.childName,
+      part_type: r.partType,
+      supplier: r.supplier,
+    }));
+
+    await insertInBatches('bom_master', rows);
+    console.log(`✅ bom_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Product Code Master Service (제품코드)
+// ============================================
+
+export const productCodeService = {
+  async getAll(): Promise<ProductCodeRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_productCodeMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('product_code_master', 'product_code');
+    return data.map((row: any) => ({
+      productCode: row.product_code || '',
+      customerPn: row.customer_pn || '',
+      productName: row.product_name || '',
+      customer: row.customer || '',
+      model: row.model || '',
+    }));
+  },
+
+  async saveAll(records: ProductCodeRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_productCodeMaster', JSON.stringify(records));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('product_code_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('product_code_master delete error:', deleteError);
+
+    const rows = records.map(r => ({
+      product_code: r.productCode,
+      customer_pn: r.customerPn,
+      product_name: r.productName,
+      customer: r.customer,
+      model: r.model,
+    }));
+
+    await insertInBatches('product_code_master', rows);
+    console.log(`✅ product_code_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Reference Info Master Service (기준정보)
+// ============================================
+
+export const referenceInfoService = {
+  async getAll(): Promise<ReferenceInfoRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_referenceInfoMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('reference_info_master', 'item_code');
+    return data.map((row: any) => ({
+      itemCode: row.item_code || '',
+      customerPn: row.customer_pn || '',
+      itemName: row.item_name || '',
+      supplyType: row.supply_type || '',
+      processType: row.process_type || '',
+      netWeight: Number(row.net_weight) || 0,
+      runnerWeight: Number(row.runner_weight) || 0,
+      cavity: Number(row.cavity) || 1,
+      lossRate: Number(row.loss_rate) || 0,
+      paintQty1: Number(row.paint_qty_1) || 0,
+      paintQty2: Number(row.paint_qty_2) || 0,
+      paintQty3: Number(row.paint_qty_3) || 0,
+      rawMaterialCode1: row.raw_material_code_1 || '',
+      rawMaterialCode2: row.raw_material_code_2 || '',
+      rawMaterialCode3: row.raw_material_code_3 || '',
+      rawMaterialCode4: row.raw_material_code_4 || '',
+    }));
+  },
+
+  async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_referenceInfoMaster', JSON.stringify(records));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('reference_info_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('reference_info_master delete error:', deleteError);
+
+    const rows = records.map(r => ({
+      item_code: r.itemCode,
+      customer_pn: r.customerPn,
+      item_name: r.itemName,
+      supply_type: r.supplyType,
+      process_type: r.processType,
+      net_weight: r.netWeight,
+      runner_weight: r.runnerWeight,
+      cavity: r.cavity,
+      loss_rate: r.lossRate,
+      paint_qty_1: r.paintQty1,
+      paint_qty_2: r.paintQty2,
+      paint_qty_3: r.paintQty3,
+      raw_material_code_1: r.rawMaterialCode1,
+      raw_material_code_2: r.rawMaterialCode2,
+      raw_material_code_3: r.rawMaterialCode3,
+      raw_material_code_4: r.rawMaterialCode4,
+    }));
+
+    await insertInBatches('reference_info_master', rows);
+    console.log(`✅ reference_info_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Equipment Master Service (설비코드)
+// ============================================
+
+export const equipmentService = {
+  async getAll(): Promise<EquipmentRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_equipmentMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('equipment_master', 'equipment_code');
+    return data.map((row: any) => ({
+      equipmentCode: row.equipment_code || '',
+      equipmentName: row.equipment_name || '',
+      tonnage: Number(row.tonnage) || 0,
+    }));
+  },
+
+  async saveAll(records: EquipmentRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_equipmentMaster', JSON.stringify(records));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('equipment_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('equipment_master delete error:', deleteError);
+
+    const rows = records.map(r => ({
+      equipment_code: r.equipmentCode,
+      equipment_name: r.equipmentName,
+      tonnage: r.tonnage,
+    }));
+
+    await insertInBatches('equipment_master', rows);
+    console.log(`✅ equipment_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Material Code Master Service (재질코드)
+// ============================================
+
+export const materialCodeService = {
+  async getAll(): Promise<MaterialCodeRecord[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_materialCodeMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('material_code_master', 'material_code');
+    return data.map((row: any) => ({
+      materialCode: row.material_code || '',
+      materialName: row.material_name || '',
+      materialType: row.material_type || '',
+      unit: row.unit || '',
+      lossRate: Number(row.loss_rate) || 0,
+      currentPrice: Number(row.current_price) || 0,
+    }));
+  },
+
+  async saveAll(records: MaterialCodeRecord[]): Promise<void> {
+    localStorage.setItem('dashboard_materialCodeMaster', JSON.stringify(records));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('material_code_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('material_code_master delete error:', deleteError);
+
+    const rows = records.map(r => ({
+      material_code: r.materialCode,
+      material_name: r.materialName,
+      material_type: r.materialType,
+      unit: r.unit,
+      loss_rate: r.lossRate,
+      current_price: r.currentPrice,
+    }));
+
+    await insertInBatches('material_code_master', rows);
+    console.log(`✅ material_code_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Data Quality Issues Service (데이터 품질)
+// ============================================
+
+export const dataQualityService = {
+  async getAll(): Promise<DataQualityIssue[]> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_dataQualityIssues');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    const data = await fetchAllRows('data_quality_issues', 'issue_type');
+    return data.map((row: any) => ({
+      issueType: row.issue_type || '',
+      itemCode: row.item_code || '',
+      itemName: row.item_name || '',
+      fieldName: row.field_name || '',
+      severity: row.severity || 'warning',
+      description: row.description || '',
+      resolved: row.resolved || false,
+    }));
+  },
+
+  async saveAll(issues: DataQualityIssue[]): Promise<void> {
+    localStorage.setItem('dashboard_dataQualityIssues', JSON.stringify(issues));
+    if (!isSupabaseConfigured()) return;
+
+    const { error: deleteError } = await supabase!
+      .from('data_quality_issues')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError) console.error('data_quality_issues delete error:', deleteError);
+
+    const rows = issues.map(i => ({
+      issue_type: i.issueType,
+      item_code: i.itemCode,
+      item_name: i.itemName,
+      field_name: i.fieldName,
+      severity: i.severity,
+      description: i.description,
+      resolved: i.resolved,
+    }));
+
+    await insertInBatches('data_quality_issues', rows);
+    console.log(`✅ data_quality_issues saved: ${rows.length} rows`);
+  },
 };

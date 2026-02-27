@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { BomRecord, YieldRow, PnMapping, parseBomCSV, parseBomExcel, parsePnMappingFromExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
+import { BomRecord, YieldRow, PnMapping, parseBomCSV, parseBomExcel, parsePnMappingFromExcel, parseMaterialMasterExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { bomService } from '../services/supabaseService';
+import { bomService, itemRevenueService, purchaseService } from '../services/supabaseService';
 
 const STATUS_COLORS: Record<YieldRow['status'], string> = {
   normal: '#10b981',
@@ -16,6 +16,7 @@ const STATUS_COLORS: Record<YieldRow['status'], string> = {
   noMatch: '#94a3b8',
   otherPeriod: '#8b5cf6',
   zeroInput: '#64748b',
+  rawMatch: '#3b82f6',
 };
 
 const STATUS_LABELS: Record<YieldRow['status'], string> = {
@@ -25,6 +26,7 @@ const STATUS_LABELS: Record<YieldRow['status'], string> = {
   noMatch: '미매칭',
   otherPeriod: '기간외',
   zeroInput: '무입고',
+  rawMatch: '원재료',
 };
 
 const MaterialYieldView: React.FC = () => {
@@ -40,48 +42,145 @@ const MaterialYieldView: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('All');
   const [tableOpen, setTableOpen] = useState(true);
 
-  // --- Load BOM + 품번 매핑 from localStorage ---
+  // --- Load BOM + 품번 매핑: bom_master 우선 → 기존 bom_data 폴백 ---
   useEffect(() => {
-    const stored = localStorage.getItem('dashboard_bomData');
-    if (stored) {
-      try { setBomData(JSON.parse(stored)); } catch { /* ignore */ }
+    const g = window as any;
+    if (!g.__dashboardCache) g.__dashboardCache = {};
+    const getStored = (key: string) => localStorage.getItem(key) || sessionStorage.getItem(key);
+
+    // BOM 마스터 우선 로드
+    const bomMasterRaw = getStored('dashboard_bomMasterData');
+    if (bomMasterRaw) {
+      try {
+        const masterRecords = JSON.parse(bomMasterRaw);
+        // BomMasterRecord → BomRecord 변환
+        const converted: BomRecord[] = masterRecords.map((r: any) => ({
+          parentPn: r.parentPn, childPn: r.childPn, level: r.level,
+          qty: r.qty, childName: r.childName, supplier: r.supplier, partType: r.partType,
+        }));
+        setBomData(converted);
+        g.__dashboardCache.bomData = converted;
+      } catch { /* ignore */ }
+    } else {
+      const storedBom = getStored('dashboard_bomData');
+      if (storedBom) {
+        try {
+          const parsed = JSON.parse(storedBom);
+          setBomData(parsed);
+          g.__dashboardCache.bomData = parsed;
+        } catch { /* ignore */ }
+      }
     }
-    const storedMapping = localStorage.getItem('dashboard_pnMapping');
-    if (storedMapping) {
-      try { setPnMapping(JSON.parse(storedMapping)); } catch { /* ignore */ }
+
+    // 품번 매핑: 기준정보 마스터에서 자동 생성 or 기존 pnMapping 폴백
+    const refInfoRaw = getStored('dashboard_referenceInfoMaster');
+    if (refInfoRaw) {
+      try {
+        const refInfo = JSON.parse(refInfoRaw);
+        const autoMapping: PnMapping[] = refInfo
+          .filter((ri: any) => ri.itemCode && ri.customerPn)
+          .map((ri: any) => ({
+            customerPn: ri.customerPn,
+            internalCode: ri.itemCode,
+            partName: ri.itemName || '',
+            rawMaterialCode1: ri.rawMaterialCode1 || undefined,
+            rawMaterialCode2: ri.rawMaterialCode2 || undefined,
+            supplyType: ri.supplyType || undefined,
+            processType: ri.processType || undefined,
+          }));
+        if (autoMapping.length > 0) {
+          setPnMapping(autoMapping);
+          g.__dashboardCache.pnMapping = autoMapping;
+        }
+      } catch { /* ignore */ }
     }
+    if (pnMapping.length === 0) {
+      const storedMapping = getStored('dashboard_pnMapping');
+      if (storedMapping) {
+        try {
+          const parsed = JSON.parse(storedMapping);
+          setPnMapping(parsed);
+          g.__dashboardCache.pnMapping = parsed;
+        } catch { /* ignore */ }
+      }
+    }
+
+    // dashboard-data-updated 이벤트 리스너 (BOM 마스터 업로드 시 자동 갱신)
+    const handleMasterUpdate = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.type === 'bomMaster') {
+        // 재로드
+        const raw = localStorage.getItem('dashboard_bomMasterData');
+        if (raw) {
+          try {
+            const records = JSON.parse(raw);
+            const conv: BomRecord[] = records.map((r: any) => ({
+              parentPn: r.parentPn, childPn: r.childPn, level: r.level,
+              qty: r.qty, childName: r.childName, supplier: r.supplier, partType: r.partType,
+            }));
+            setBomData(conv);
+          } catch { /* */ }
+        }
+      }
+    };
+    window.addEventListener('dashboard-data-updated', handleMasterUpdate);
+    return () => window.removeEventListener('dashboard-data-updated', handleMasterUpdate);
   }, []);
 
-  // --- Smart Supabase Load ---
+  // --- Smart Supabase Load (폴백) ---
   useEffect(() => {
     const loadFromSupabase = async () => {
       if (!isSupabaseConfigured()) return;
+      // bom_master가 이미 로드되었으면 스킵
+      if (bomData.length > 0) return;
       try {
         const data = await bomService.getAll();
         if (data && data.length > 0) {
           setBomData(data);
-          localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+          const g = window as any;
+          if (!g.__dashboardCache) g.__dashboardCache = {};
+          g.__dashboardCache.bomData = data;
+          try { localStorage.setItem('dashboard_bomData', JSON.stringify(data)); } catch { /* quota */ }
         }
       } catch (err) {
         console.error('BOM Supabase 로드 실패:', err);
       }
     };
     loadFromSupabase();
-  }, []);
+  }, [bomData.length]);
 
-  // --- Load Sales & Purchase from localStorage ---
-  const itemRevenueData = useMemo<ItemRevenueRow[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_itemRevenueData');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  }, []);
+  // --- Load Sales & Purchase (서비스에서 직접 로드) ---
+  const [itemRevenueData, setItemRevenueData] = useState<ItemRevenueRow[]>([]);
+  const [purchaseData, setPurchaseDataLocal] = useState<PurchaseItem[]>([]);
 
-  const purchaseData = useMemo<PurchaseItem[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_purchaseData');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const revData = await itemRevenueService.getAll();
+        setItemRevenueData(revData);
+        console.log(`[자재수율] 매출 데이터: ${revData.length}건`);
+      } catch (err) {
+        console.error('[자재수율] 매출 데이터 로드 실패:', err);
+      }
+      try {
+        const purData = await purchaseService.getAll();
+        setPurchaseDataLocal(purData);
+        console.log(`[자재수율] 구매 데이터: ${purData.length}건`);
+      } catch (err) {
+        console.error('[자재수율] 구매 데이터 로드 실패:', err);
+      }
+    };
+
+    loadData();
+
+    // 다른 컴포넌트에서 데이터 업데이트 시 재로드
+    const onUpdate = () => setTimeout(() => loadData(), 500);
+    window.addEventListener('storage', onUpdate);
+    window.addEventListener('dashboard-data-updated', onUpdate);
+    return () => {
+      window.removeEventListener('storage', onUpdate);
+      window.removeEventListener('dashboard-data-updated', onUpdate);
+    };
   }, []);
 
   // --- Available Years ---
@@ -114,13 +213,41 @@ const MaterialYieldView: React.FC = () => {
     pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
   // --- 수율 계산 (핵심 로직) ---
-  const { yieldRows, bomMissingCount } = useMemo(() => {
-    if (bomData.length === 0) return { yieldRows: [] as YieldRow[], bomMissingCount: 0 };
+  const { yieldRows, bomMissingCount, debugInfo } = useMemo(() => {
+    if (bomData.length === 0) return { yieldRows: [] as YieldRow[], bomMissingCount: 0, debugInfo: null };
 
-    // 품번 매핑: 고객사P/N → 내부코드 (정규화된 키)
+    // 품번 매핑: 양방향 + 다중값 (정규화된 키)
     const custToInternal = new Map<string, string>();
+    const internalToCust = new Map<string, string>();
+    // 다중값 브릿지: 하나의 고객사P/N에 여러 내부코드 가능
+    const custToInternals = new Map<string, Set<string>>();
+    const internalToCusts = new Map<string, Set<string>>();
+    // 원재료코드 매핑: 품목코드 → 원재료코드1/2
+    const itemToRawMaterial = new Map<string, string[]>();
+    // 품명 조회 맵: 정규화된 코드 → partName (BOM childName 빈 경우 fallback용)
+    const partNameLookup = new Map<string, string>();
     pnMapping.forEach(m => {
-      custToInternal.set(normalizePn(m.customerPn), normalizePn(m.internalCode));
+      const cust = normalizePn(m.customerPn);
+      const internal = normalizePn(m.internalCode);
+      if (cust) {
+        custToInternal.set(cust, internal);
+        internalToCust.set(internal, cust);
+        // 다중값
+        if (!custToInternals.has(cust)) custToInternals.set(cust, new Set());
+        custToInternals.get(cust)!.add(internal);
+        if (!internalToCusts.has(internal)) internalToCusts.set(internal, new Set());
+        internalToCusts.get(internal)!.add(cust);
+      }
+      // 품명 조회 맵 구축 (내부코드, 고객사P/N 양쪽 키)
+      if (m.partName) {
+        if (internal) partNameLookup.set(internal, m.partName);
+        if (cust) partNameLookup.set(cust, m.partName);
+      }
+      // 원재료코드 매핑 구축
+      const rawCodes: string[] = [];
+      if (m.rawMaterialCode1) rawCodes.push(normalizePn(m.rawMaterialCode1));
+      if (m.rawMaterialCode2) rawCodes.push(normalizePn(m.rawMaterialCode2));
+      if (rawCodes.length > 0) itemToRawMaterial.set(internal, rawCodes);
     });
 
     // BOM relations를 정규화된 키로 빌드
@@ -170,13 +297,19 @@ const MaterialYieldView: React.FC = () => {
       const leaves = expandBomToLeaves(partNo, salesQty, bomRelations);
       for (const leaf of leaves) {
         const normalizedChild = normalizePn(leaf.childPn);
+        // 품명: partNameLookup(개별 품명) 우선, BOM childName(모품목명일 수 있음) fallback
+        const resolvedName = partNameLookup.get(normalizedChild) || leaf.childName || '';
         const existing = childMap.get(normalizedChild);
         if (existing) {
           existing.totalRequired += leaf.totalRequired;
           existing.parentProducts.add(partNo);
+          // 기존 이름이 비어있고 새로 찾은 이름이 있으면 갱신
+          if (!existing.childName && resolvedName) {
+            existing.childName = resolvedName;
+          }
         } else {
           childMap.set(normalizedChild, {
-            childName: leaf.childName,
+            childName: resolvedName,
             supplier: leaf.supplier,
             totalRequired: leaf.totalRequired,
             parentProducts: new Set([partNo]),
@@ -186,6 +319,7 @@ const MaterialYieldView: React.FC = () => {
     }
 
     // 3) 구매입고를 itemCode별로 집계 (연도/월 필터 적용, 정규화)
+    //    + 양방향 매핑 + 구매 고객사P/N 직접 등록
     const inputByCode = new Map<string, number>();
     purchaseData.forEach(item => {
       if (item.year !== selectedYear) return;
@@ -193,41 +327,190 @@ const MaterialYieldView: React.FC = () => {
       const code = normalizePn(item.itemCode || '');
       if (!code) return;
       inputByCode.set(code, (inputByCode.get(code) || 0) + (item.qty || 0));
+      // 내부코드 → 고객사P/N 역매핑 키 등록
+      const custPn = internalToCust.get(code);
+      if (custPn) {
+        inputByCode.set(custPn, (inputByCode.get(custPn) || 0) + (item.qty || 0));
+      }
+      // 구매 CSV의 고객사P/N(col6) 직접 등록
+      const rawCustPn = normalizePn(item.customerPn || '');
+      if (rawCustPn && rawCustPn !== code) {
+        inputByCode.set(rawCustPn, (inputByCode.get(rawCustPn) || 0) + (item.qty || 0));
+      }
     });
 
     // 3-b) 구매입고 전체(기간 무관) — 미매칭 vs 기간외 판별용
+    //    역매핑 + 구매 고객사P/N 포함
     const allInputCodes = new Set<string>();
     purchaseData.forEach(item => {
       const code = normalizePn(item.itemCode || '');
-      if (code) allInputCodes.add(code);
+      if (code) {
+        allInputCodes.add(code);
+        const custPn = internalToCust.get(code);
+        if (custPn) allInputCodes.add(custPn);
+      }
+      // 구매 CSV의 고객사P/N 직접 추가
+      const rawCustPn = normalizePn(item.customerPn || '');
+      if (rawCustPn) allInputCodes.add(rawCustPn);
     });
 
-    // 4) 매칭하여 수율 산출 (정규화된 키로 매칭)
+    // 4) 매칭하여 수율 산출 (다중 매칭 전략)
     const rows: YieldRow[] = [];
+    let directMatchCount = 0;
+    let mappedMatchCount = 0;
+    let noMatchSamples: string[] = [];
+
     for (const [childPn, accum] of childMap) {
       const normalized = normalizePn(childPn);
-      const inputQty = inputByCode.get(normalized) || 0;
+      let inputQty = 0;
+      let matched = false;
+
+      // 전략 1: 직접 매칭 (childPn == itemCode)
+      if (inputByCode.has(normalized)) {
+        inputQty = inputByCode.get(normalized) || 0;
+        matched = true;
+        directMatchCount++;
+      }
+
+      // 전략 2: childPn이 고객사P/N → 내부코드로 변환하여 재시도
+      if (!matched) {
+        const asInternal = custToInternal.get(normalized);
+        if (asInternal && inputByCode.has(asInternal)) {
+          inputQty = inputByCode.get(asInternal) || 0;
+          matched = true;
+          mappedMatchCount++;
+        }
+      }
+
+      // 전략 3: childPn이 내부코드 → 고객사P/N으로 변환하여 재시도
+      if (!matched) {
+        const asCust = internalToCust.get(normalized);
+        if (asCust && inputByCode.has(asCust)) {
+          inputQty = inputByCode.get(asCust) || 0;
+          matched = true;
+          mappedMatchCount++;
+        }
+      }
+
+      // 전략 4: 고객사P/N 브릿지 (다중값)
+      // childPn → 고객사P/N(들) → 해당 P/N의 모든 내부코드 → 구매 데이터 검색
+      if (!matched) {
+        // childPn이 내부코드인 경우: 내부코드 → 고객사P/N(들) → 다른 내부코드들
+        const custPns = internalToCusts.get(normalized);
+        if (custPns) {
+          for (const cp of custPns) {
+            const allInternals = custToInternals.get(cp);
+            if (allInternals) {
+              for (const ic of allInternals) {
+                if (ic !== normalized && inputByCode.has(ic)) {
+                  inputQty = inputByCode.get(ic) || 0;
+                  matched = true;
+                  mappedMatchCount++;
+                  break;
+                }
+              }
+            }
+            if (matched) break;
+          }
+        }
+        // childPn이 고객사P/N인 경우: 고객사P/N → 모든 내부코드
+        if (!matched) {
+          const allInternals = custToInternals.get(normalized);
+          if (allInternals) {
+            for (const ic of allInternals) {
+              if (inputByCode.has(ic)) {
+                inputQty = inputByCode.get(ic) || 0;
+                matched = true;
+                mappedMatchCount++;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // 전략 5: 원재료코드 브릿지 (공급관계 확인만, 수율 계산 불가)
+      let rawMatched = false;
+      if (!matched) {
+        const rawCodes = itemToRawMaterial.get(normalized);
+        if (rawCodes) {
+          for (const rc of rawCodes) {
+            if (inputByCode.has(rc)) {
+              rawMatched = true;
+              mappedMatchCount++;
+              break;
+            }
+          }
+        }
+      }
+
       const standardReq = accum.totalRequired;
       let yieldRate = 0;
       let status: YieldRow['status'] = 'noMatch';
 
-      if (standardReq > 0 && inputQty > 0) {
+      if (rawMatched && !matched) {
+        // 전략 5: 원재료코드 매칭 (공급관계는 확인됐으나 부품별 수율 계산 불가)
+        status = 'rawMatch';
+      } else if (standardReq > 0 && inputQty > 0) {
         yieldRate = (inputQty / standardReq) * 100;
         if (yieldRate >= 95 && yieldRate <= 105) status = 'normal';
         else if (yieldRate > 105) status = 'over';
         else status = 'under';
       } else if (inputQty === 0) {
-        if (allInputCodes.has(normalized)) {
-          // 구매입고에 코드 존재하지만 선택 기간에는 없음
-          status = 'otherPeriod';
+        // matched but qty=0 처리
+        if (matched) {
+          status = 'zeroInput';
         } else {
-          // 구매입고 전체에서도 해당 코드 없음
-          status = 'noMatch';
+          // allInputCodes에서도 다중 매칭 시도 (전략 1~4 동일)
+          let foundInAll = allInputCodes.has(normalized);
+          if (!foundInAll) {
+            const asInternal = custToInternal.get(normalized);
+            if (asInternal && allInputCodes.has(asInternal)) foundInAll = true;
+          }
+          if (!foundInAll) {
+            const asCust = internalToCust.get(normalized);
+            if (asCust && allInputCodes.has(asCust)) foundInAll = true;
+          }
+          // 브릿지: 고객사P/N 경유 다중 내부코드 검색
+          if (!foundInAll) {
+            const custPns = internalToCusts.get(normalized);
+            if (custPns) {
+              for (const cp of custPns) {
+                const allInternals = custToInternals.get(cp);
+                if (allInternals) {
+                  for (const ic of allInternals) {
+                    if (allInputCodes.has(ic)) { foundInAll = true; break; }
+                  }
+                }
+                if (foundInAll) break;
+              }
+            }
+          }
+          if (!foundInAll) {
+            const allInternals = custToInternals.get(normalized);
+            if (allInternals) {
+              for (const ic of allInternals) {
+                if (allInputCodes.has(ic)) { foundInAll = true; break; }
+              }
+            }
+          }
+          // 원재료코드 브릿지로 기간외 판별
+          if (!foundInAll) {
+            const rawCodes = itemToRawMaterial.get(normalized);
+            if (rawCodes) {
+              for (const rc of rawCodes) {
+                if (allInputCodes.has(rc)) { foundInAll = true; break; }
+              }
+            }
+          }
+
+          if (foundInAll) {
+            status = 'otherPeriod';
+          } else {
+            status = 'noMatch';
+            if (noMatchSamples.length < 20) noMatchSamples.push(normalized);
+          }
         }
-      }
-      // 매칭됐지만 입고수량이 0인 경우
-      if (inputByCode.has(normalized) && inputQty === 0) {
-        status = 'zeroInput';
       }
 
       rows.push({
@@ -243,7 +526,33 @@ const MaterialYieldView: React.FC = () => {
       });
     }
 
-    return { yieldRows: rows, bomMissingCount: missingCount };
+    // 진단 정보
+    const purchaseSamples = Array.from(new Set(
+      purchaseData.slice(0, 50).map(p => normalizePn(p.itemCode || '')).filter(Boolean)
+    )).slice(0, 20);
+
+    // 다중값 매핑 통계
+    const uniqueCustPns = custToInternals.size;
+    const multiMappedCust = Array.from(custToInternals.values()).filter(s => s.size > 1).length;
+
+    const debug = {
+      totalLeafMaterials: childMap.size,
+      directMatchCount,
+      rawMaterialMappingCount: itemToRawMaterial.size,
+      mappedMatchCount,
+      rawMatchCount: rows.filter(r => r.status === 'rawMatch').length,
+      noMatchCount: rows.filter(r => r.status === 'noMatch').length,
+      otherPeriodCount: rows.filter(r => r.status === 'otherPeriod').length,
+      noMatchSamples,
+      purchaseSamples,
+      mappingSize: pnMapping.length,
+      uniqueCustPns,
+      multiMappedCust,
+      childInMapping: Array.from(childMap.keys()).filter(k => custToInternal.has(k) || internalToCust.has(k)).length,
+    };
+    console.log('[자재수율 진단]', debug);
+
+    return { yieldRows: rows, bomMissingCount: missingCount, debugInfo: debug };
   }, [bomData, pnMapping, itemRevenueData, purchaseData, selectedYear, selectedMonth]);
 
   // --- Filtered & Sorted rows ---
@@ -275,7 +584,7 @@ const MaterialYieldView: React.FC = () => {
   }, [yieldRows, filterPn, filterName, filterSupplier, filterStatus, sortConfig]);
 
   // --- Summary Metrics ---
-  const isNoDataStatus = (s: YieldRow['status']) => s === 'noMatch' || s === 'otherPeriod' || s === 'zeroInput';
+  const isNoDataStatus = (s: YieldRow['status']) => s === 'noMatch' || s === 'otherPeriod' || s === 'zeroInput' || s === 'rawMatch';
   const metrics = useMemo(() => {
     const total = yieldRows.length;
     const withData = yieldRows.filter(r => !isNoDataStatus(r.status));
@@ -286,7 +595,8 @@ const MaterialYieldView: React.FC = () => {
     const noMatchCount = yieldRows.filter(r => r.status === 'noMatch').length;
     const otherPeriodCount = yieldRows.filter(r => r.status === 'otherPeriod').length;
     const zeroInputCount = yieldRows.filter(r => r.status === 'zeroInput').length;
-    return { total, avgYield, overCount, noMatchCount, otherPeriodCount, zeroInputCount };
+    const rawMatchCount = yieldRows.filter(r => r.status === 'rawMatch').length;
+    return { total, avgYield, overCount, noMatchCount, otherPeriodCount, zeroInputCount, rawMatchCount };
   }, [yieldRows]);
 
   // --- Chart Data ---
@@ -303,7 +613,7 @@ const MaterialYieldView: React.FC = () => {
   }, [yieldRows]);
 
   const statusPieData = useMemo(() => {
-    const counts: Record<string, number> = { normal: 0, over: 0, under: 0, noMatch: 0, otherPeriod: 0, zeroInput: 0 };
+    const counts: Record<string, number> = { normal: 0, over: 0, under: 0, noMatch: 0, otherPeriod: 0, zeroInput: 0, rawMatch: 0 };
     yieldRows.forEach(r => counts[r.status]++);
     return Object.entries(counts)
       .filter(([, v]) => v > 0)
@@ -358,7 +668,34 @@ const MaterialYieldView: React.FC = () => {
 
   const saveBomData = async (records: BomRecord[]) => {
     setBomData(records);
-    localStorage.setItem('dashboard_bomData', JSON.stringify(records));
+    // 글로벌 캐시에 항상 저장 (localStorage 실패해도 다른 탭에서 접근 가능)
+    const g = window as any;
+    if (!g.__dashboardCache) g.__dashboardCache = {};
+    g.__dashboardCache.bomData = records;
+    // BOM 필수 필드만 저장 (용량 절약)
+    const compactBom = records.map(r => ({
+      parentPn: r.parentPn, childPn: r.childPn, level: r.level, qty: r.qty,
+      childName: r.childName, supplier: r.supplier, partType: r.partType,
+    }));
+    const bomJson = JSON.stringify(compactBom);
+    try {
+      localStorage.setItem('dashboard_bomData', bomJson);
+    } catch {
+      console.warn('BOM localStorage 저장 실패, 용량 확보 시도');
+      try {
+        localStorage.removeItem('dashboard_standardMaterial');
+        localStorage.removeItem('dashboard_forecastData_prev');
+        localStorage.removeItem('dashboard_forecastData_prev_summary');
+        localStorage.setItem('dashboard_bomData', bomJson);
+      } catch (e2) {
+        console.error('BOM localStorage 최종 실패, sessionStorage 사용:', e2);
+        try { sessionStorage.setItem('dashboard_bomData', bomJson); } catch { /* */ }
+      }
+    }
+    // CustomEvent로 데이터 직접 전달 (localStorage 실패해도 동작)
+    window.dispatchEvent(new CustomEvent('dashboard-data-updated', {
+      detail: { key: 'dashboard_bomData', data: records }
+    }));
 
     if (isSupabaseConfigured()) {
       try {
@@ -377,7 +714,14 @@ const MaterialYieldView: React.FC = () => {
     if (!file) return;
 
     const buffer = await file.arrayBuffer();
-    const mappings = parsePnMappingFromExcel(buffer);
+    // 1차: 표준재료비 형식 시도
+    let mappings = parsePnMappingFromExcel(buffer);
+    let source = '표준재료비';
+    // 2차: 자재마스터 통합 형식 시도
+    if (mappings.length === 0) {
+      mappings = parseMaterialMasterExcel(buffer);
+      source = '자재마스터';
+    }
 
     if (mappings.length === 0) {
       alert('품번 매핑 파싱 실패: 품목코드, 고객사 P/N 컬럼을 확인해주세요.');
@@ -385,9 +729,38 @@ const MaterialYieldView: React.FC = () => {
       return;
     }
 
+    // 기존 매핑과 병합 (새 데이터 우선)
+    if (pnMapping.length > 0) {
+      const existingMap = new Map<string, PnMapping>(pnMapping.map(m => [m.internalCode, m]));
+      mappings.forEach(m => existingMap.set(m.internalCode, m));
+      mappings = Array.from(existingMap.values());
+    }
+
     setPnMapping(mappings);
-    localStorage.setItem('dashboard_pnMapping', JSON.stringify(mappings));
-    alert(`품번 매핑 ${mappings.length}건이 업로드되었습니다. (고객사P/N → 내부코드)`);
+    // 글로벌 캐시에 항상 저장
+    const g = window as any;
+    if (!g.__dashboardCache) g.__dashboardCache = {};
+    g.__dashboardCache.pnMapping = mappings;
+    // localStorage 용량 절약: 필수 필드만 저장
+    const compactMappings = mappings.map(m => ({
+      customerPn: m.customerPn,
+      internalCode: m.internalCode,
+      partName: '',
+      ...(m.rawMaterialCode1 ? { rawMaterialCode1: m.rawMaterialCode1 } : {}),
+      ...(m.rawMaterialCode2 ? { rawMaterialCode2: m.rawMaterialCode2 } : {}),
+    }));
+    const mappingJson = JSON.stringify(compactMappings);
+    try {
+      localStorage.setItem('dashboard_pnMapping', mappingJson);
+    } catch {
+      console.warn('품번매핑 localStorage 저장 실패, sessionStorage 시도');
+      try { sessionStorage.setItem('dashboard_pnMapping', mappingJson); } catch { /* */ }
+    }
+    window.dispatchEvent(new CustomEvent('dashboard-data-updated', {
+      detail: { key: 'dashboard_pnMapping', data: mappings }
+    }));
+    const rawMatCount = mappings.filter(m => m.rawMaterialCode1).length;
+    alert(`품번 매핑 ${mappings.length}건 업로드 (${source})${rawMatCount > 0 ? ` / 원재료코드 ${rawMatCount}건` : ''}`);
     e.target.value = '';
   };
 
@@ -439,6 +812,7 @@ const MaterialYieldView: React.FC = () => {
       noMatch: 'bg-slate-100 text-slate-500',
       otherPeriod: 'bg-violet-100 text-violet-700',
       zeroInput: 'bg-slate-200 text-slate-600',
+      rawMatch: 'bg-blue-100 text-blue-700',
     };
     return (
       <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${styles[status]}`}>
@@ -552,11 +926,46 @@ const MaterialYieldView: React.FC = () => {
         <MetricCard label="과투입 자재" value={`${metrics.overCount}개`} subValue=">105% 투입" color="rose" />
         <MetricCard
           label="데이터없음 자재"
-          value={`${metrics.noMatchCount + metrics.otherPeriodCount + metrics.zeroInputCount}개`}
-          subValue={`미매칭 ${metrics.noMatchCount} / 기간외 ${metrics.otherPeriodCount} / 무입고 ${metrics.zeroInputCount}`}
+          value={`${metrics.noMatchCount + metrics.rawMatchCount + metrics.otherPeriodCount + metrics.zeroInputCount}개`}
+          subValue={`미매칭 ${metrics.noMatchCount} / 원재료 ${metrics.rawMatchCount} / 기간외 ${metrics.otherPeriodCount} / 무입고 ${metrics.zeroInputCount}`}
           color="slate"
         />
       </div>
+
+      {/* 매칭 진단 패널 (미매칭 존재 시) */}
+      {debugInfo && debugInfo.noMatchCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+          <details>
+            <summary className="text-sm font-bold text-amber-800 cursor-pointer">
+              매칭 진단 (미매칭 {debugInfo.noMatchCount}건 분석)
+            </summary>
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div>
+                <p className="font-bold text-amber-700 mb-1">매칭 통계:</p>
+                <ul className="space-y-1 text-amber-900">
+                  <li>총 leaf 자재: {debugInfo.totalLeafMaterials}건</li>
+                  <li>직접 매칭: {debugInfo.directMatchCount}건</li>
+                  <li>매핑 변환 매칭: {debugInfo.mappedMatchCount}건</li>
+                  <li>미매칭: {debugInfo.noMatchCount}건</li>
+                  <li>기간외: {debugInfo.otherPeriodCount}건</li>
+                  <li>품번매핑 내 존재: {debugInfo.childInMapping}/{debugInfo.totalLeafMaterials}건</li>
+                  <li>고유 고객사P/N: {debugInfo.uniqueCustPns}건 (다중코드: {debugInfo.multiMappedCust}건)</li>
+                </ul>
+              </div>
+              <div>
+                <p className="font-bold text-amber-700 mb-1">미매칭 BOM childPn 샘플:</p>
+                <div className="font-mono text-[10px] text-amber-800 bg-amber-100 rounded p-2 max-h-[120px] overflow-y-auto">
+                  {debugInfo.noMatchSamples.map((s: string, i: number) => <div key={i}>{s}</div>)}
+                </div>
+                <p className="font-bold text-amber-700 mb-1 mt-2">구매 itemCode 샘플:</p>
+                <div className="font-mono text-[10px] text-amber-800 bg-amber-100 rounded p-2 max-h-[120px] overflow-y-auto">
+                  {debugInfo.purchaseSamples.map((s: string, i: number) => <div key={i}>{s}</div>)}
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
 
       {/* Charts */}
       <div className="flex flex-col lg:flex-row gap-6">
@@ -650,6 +1059,7 @@ const MaterialYieldView: React.FC = () => {
               <option value="over">과투입 (&gt;105%)</option>
               <option value="under">미달 (&lt;95%)</option>
               <option value="noMatch">미매칭 (구매코드없음)</option>
+              <option value="rawMatch">원재료 (원재료매칭)</option>
               <option value="otherPeriod">기간외 (다른월존재)</option>
               <option value="zeroInput">무입고 (수량0)</option>
             </select>
@@ -702,7 +1112,12 @@ const MaterialYieldView: React.FC = () => {
                 {displayRows.map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-mono font-medium text-slate-800">{row.childPn}</td>
-                    <td className="px-4 py-3 text-slate-600 truncate max-w-[180px]" title={row.childName}>{row.childName}</td>
+                    <td className="px-4 py-3 truncate max-w-[180px]" title={row.childName || row.childPn}>
+                      {row.childName
+                        ? <span className="text-slate-600">{row.childName}</span>
+                        : <span className="text-slate-300 italic text-[10px]">({row.childPn})</span>
+                      }
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{row.supplier}</td>
                     <td className="px-4 py-3 text-slate-500 text-[10px] truncate max-w-[120px]" title={row.parentProducts.join(', ')}>
                       {row.parentProducts.slice(0, 3).join(', ')}

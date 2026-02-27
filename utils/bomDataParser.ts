@@ -9,6 +9,14 @@ export interface PnMapping {
   customerPn: string;  // 고객사 P/N (매출 partNo에 해당)
   internalCode: string; // 내부 품목코드 (BOM parentPn / 구매 itemCode에 해당)
   partName: string;
+  rawMaterialCode1?: string; // 원재료코드1
+  rawMaterialCode2?: string; // 원재료코드2
+  supplyType?: string;        // 조달구분: '자작' | '외주' | '구매'
+  processType?: string;       // 품목유형: '사출' | '조립' | '도장'
+  purchaseUnitPrice?: number; // 구매단가
+  materialCost?: number;      // 재료비 (총 자재비 단가)
+  injectionCost?: number;     // 사출재료비 단가 (RESIN)
+  paintCost?: number;         // 도장재료비 단가 (PAINT)
 }
 
 export interface BomRecord {
@@ -30,7 +38,7 @@ export interface YieldRow {
   inputQty: number;         // 투입수량
   yieldRate: number;        // 수율(%)
   diff: number;             // 차이(투입-표준)
-  status: 'normal' | 'over' | 'under' | 'noMatch' | 'otherPeriod' | 'zeroInput';
+  status: 'normal' | 'over' | 'under' | 'noMatch' | 'otherPeriod' | 'zeroInput' | 'rawMatch';
 }
 
 // ============================================
@@ -217,6 +225,90 @@ export const parsePnMappingFromExcel = (buffer: ArrayBuffer): PnMapping[] => {
 };
 
 // ============================================
+// 자재마스터 통합 파서 (품목 마스터 시트)
+// ============================================
+
+/**
+ * 자재마스터 엑셀의 '품목 마스터' 시트에서 품번 매핑 추출
+ * 품목코드(A), 고객사P/N(B), 품목명(C), 원재료코드1(M), 원재료코드2(N)
+ */
+export const parseMaterialMasterExcel = (buffer: ArrayBuffer): PnMapping[] => {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+
+  // '품목 마스터' 시트 찾기
+  const sheetName = workbook.SheetNames.find(n => /품목.*마스터/i.test(n)) || workbook.SheetNames[1] || workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (rows.length < 2) return [];
+
+  // 헤더 행 탐색
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const row = rows[i].map((c: any) => String(c).replace(/\r?\n/g, ' ').trim());
+    if (row.some((c: string) => /품목코드/.test(c))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  const headers = rows[headerIdx].map((c: any) => String(c).replace(/\r?\n/g, ' ').trim());
+  const codeIdx = headers.findIndex((h: string) => /^품목코드$/.test(h));
+  const custPnIdx = headers.findIndex((h: string) => /고객사.*P.?N/i.test(h));
+  const nameIdx = headers.findIndex((h: string) => /품목명/.test(h));
+  const rawCode1Idx = headers.findIndex((h: string) => /원재료코드1/.test(h));
+  const rawCode2Idx = headers.findIndex((h: string) => /원재료코드2/.test(h));
+  const supplyTypeIdx = headers.findIndex((h: string) => /조달구분/.test(h));
+  const processTypeIdx = headers.findIndex((h: string) => /품목유형/.test(h));
+  const purchasePriceIdx = headers.findIndex((h: string) => /구매단가/.test(h));
+  const materialCostIdx = headers.findIndex((h: string) => /^재료비$/.test(h));
+  const injectionCostIdx = headers.findIndex((h: string) => /사출.*재료비|사출비/i.test(h));
+  const paintCostIdx = headers.findIndex((h: string) => /도장.*재료비|도장비/i.test(h));
+
+  if (codeIdx === -1) return [];
+
+  const parseNumVal = (v: unknown): number => {
+    if (v === null || v === undefined || v === '') return 0;
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[,\s]/g, ''));
+    return isNaN(n) ? 0 : n;
+  };
+
+  const results: PnMapping[] = [];
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const internalCode = String(rows[i][codeIdx] || '').trim();
+    if (!internalCode) continue;
+
+    const customerPn = custPnIdx !== -1 ? String(rows[i][custPnIdx] || '').trim() : '';
+    const rawCode1 = rawCode1Idx !== -1 ? String(rows[i][rawCode1Idx] || '').trim() : '';
+    const rawCode2 = rawCode2Idx !== -1 ? String(rows[i][rawCode2Idx] || '').trim() : '';
+    const supplyType = supplyTypeIdx !== -1 ? String(rows[i][supplyTypeIdx] || '').trim() : '';
+    const processType = processTypeIdx !== -1 ? String(rows[i][processTypeIdx] || '').trim() : '';
+    const purchaseUnitPrice = purchasePriceIdx !== -1 ? parseNumVal(rows[i][purchasePriceIdx]) : 0;
+    const matCost = materialCostIdx !== -1 ? parseNumVal(rows[i][materialCostIdx]) : 0;
+    const injCost = injectionCostIdx !== -1 ? parseNumVal(rows[i][injectionCostIdx]) : 0;
+    const pntCost = paintCostIdx !== -1 ? parseNumVal(rows[i][paintCostIdx]) : 0;
+
+    results.push({
+      customerPn,
+      internalCode,
+      partName: nameIdx !== -1 ? String(rows[i][nameIdx] || '').trim() : '',
+      ...(rawCode1 ? { rawMaterialCode1: rawCode1 } : {}),
+      ...(rawCode2 ? { rawMaterialCode2: rawCode2 } : {}),
+      ...(supplyType ? { supplyType } : {}),
+      ...(processType ? { processType } : {}),
+      ...(purchaseUnitPrice > 0 ? { purchaseUnitPrice } : {}),
+      ...(matCost > 0 ? { materialCost: matCost } : {}),
+      ...(injCost > 0 ? { injectionCost: injCost } : {}),
+      ...(pntCost > 0 ? { paintCost: pntCost } : {}),
+    });
+  }
+
+  return results;
+};
+
+// ============================================
 // BOM 전개 알고리즘
 // ============================================
 
@@ -240,7 +332,7 @@ interface LeafResult {
 }
 
 /** 품번 정규화 (공백, 하이픈, 대소문자 통일) */
-const normalizePn = (pn: string): string =>
+export const normalizePn = (pn: string): string =>
   pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
 /** 모품번에서 최하위 leaf 자재까지 재귀 전개 (누적 소요량 곱셈) */
