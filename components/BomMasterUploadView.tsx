@@ -47,6 +47,14 @@ const INITIAL_STATUS: UploadStatus = {
 // Component
 // ============================================================
 
+interface GapRow {
+  name: string;
+  parsed: number;
+  saved: number;
+  gap: number;
+  status: 'match' | 'mismatch' | 'pending';
+}
+
 const BomMasterUploadView: React.FC = () => {
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(INITIAL_STATUS);
   const [qualityIssues, setQualityIssues] = useState<DataQualityIssue[]>([]);
@@ -55,6 +63,7 @@ const BomMasterUploadView: React.FC = () => {
   const [uploadMessage, setUploadMessage] = useState('');
   const [activeView, setActiveView] = useState<'status' | 'quality' | 'bom'>('status');
   const [filterIssueType, setFilterIssueType] = useState<string>('All');
+  const [gapAnalysis, setGapAnalysis] = useState<GapRow[]>([]);
   const [bomFilter, setBomFilter] = useState('');
 
   // --- 초기 로드: Supabase 우선, localStorage 폴백 ---
@@ -140,11 +149,41 @@ const BomMasterUploadView: React.FC = () => {
         setAssembledBom(assembled);
       } catch { /* ignore */ }
 
+      // Gap 분석: 파싱 결과 vs Supabase 저장 결과 비교
+      const [savedBom, savedPc, savedRi, savedEq, savedMc] = await Promise.all([
+        bomMasterService.getAll(),
+        productCodeService.getAll(),
+        referenceInfoService.getAll(),
+        equipmentService.getAll(),
+        materialCodeService.getAll(),
+      ]);
+      const parsedCounts = [
+        { name: 'BOM', parsed: result.bom.length, saved: savedBom.length },
+        { name: '제품코드', parsed: result.productCodes.length, saved: savedPc.length },
+        { name: '기준정보', parsed: result.referenceInfo.length, saved: savedRi.length },
+        { name: '설비코드', parsed: result.equipment.length, saved: savedEq.length },
+        { name: '재질코드', parsed: result.materialCodes.length, saved: savedMc.length },
+      ];
+      setGapAnalysis(parsedCounts.map(r => ({
+        ...r,
+        gap: r.saved - r.parsed,
+        status: r.saved === r.parsed ? 'match' : 'mismatch',
+      })));
+
+      // 저장 결과로 상태 갱신 (정확한 수치)
+      setUploadStatus({
+        bom: { count: savedBom.length, lastUpload: now },
+        productCode: { count: savedPc.length, lastUpload: now },
+        referenceInfo: { count: savedRi.length, lastUpload: now },
+        equipment: { count: savedEq.length, lastUpload: now },
+        materialCode: { count: savedMc.length, lastUpload: now },
+      });
+
       // 크로스 컴포넌트 이벤트
       window.dispatchEvent(new CustomEvent('dashboard-data-updated', { detail: { type: 'bomMaster' } }));
 
       const totalRows = result.sheetStats.reduce((s, st) => s + st.rows, 0);
-      setUploadMessage(`업로드 완료! ${result.sheetStats.length}개 시트, ${totalRows.toLocaleString()}건 저장. 품질이슈: ${result.qualityIssues.length}건`);
+      setUploadMessage(`업로드 완료! ${result.sheetStats.length}개 시트, ${totalRows.toLocaleString()}건 파싱. 품질이슈: ${result.qualityIssues.length}건`);
     } catch (err: any) {
       console.error('BOM 마스터 업로드 실패:', err);
       setUploadMessage(`업로드 실패: ${err.message}`);
@@ -298,14 +337,23 @@ const BomMasterUploadView: React.FC = () => {
         ))}
       </div>
 
-      {/* 업로드 현황 테이블 */}
+      {/* 업로드 현황 + Gap 분석 테이블 */}
       {activeView === 'status' && (
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <table className="min-w-full text-xs">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left text-gray-600 font-medium">시트명</th>
-                <th className="px-4 py-2 text-right text-gray-600 font-medium">행수</th>
+                <th className="px-4 py-2 text-right text-gray-600 font-medium">
+                  {gapAnalysis.length > 0 ? 'Excel 파싱' : '행수'}
+                </th>
+                {gapAnalysis.length > 0 && (
+                  <>
+                    <th className="px-4 py-2 text-right text-gray-600 font-medium">DB 저장</th>
+                    <th className="px-4 py-2 text-right text-gray-600 font-medium">차이</th>
+                    <th className="px-4 py-2 text-center text-gray-600 font-medium">상태</th>
+                  </>
+                )}
                 <th className="px-4 py-2 text-left text-gray-600 font-medium">최종 업로드</th>
               </tr>
             </thead>
@@ -316,20 +364,89 @@ const BomMasterUploadView: React.FC = () => {
                 { name: '기준정보', ...uploadStatus.referenceInfo },
                 { name: '설비코드', ...uploadStatus.equipment },
                 { name: '재질코드', ...uploadStatus.materialCode },
-              ].map(row => (
-                <tr key={row.name} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 font-medium text-gray-700">{row.name}</td>
-                  <td className="px-4 py-2 text-right text-gray-600">{row.count.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-gray-500">{row.lastUpload}</td>
-                </tr>
-              ))}
+              ].map(row => {
+                const gap = gapAnalysis.find(g => g.name === row.name);
+                return (
+                  <tr key={row.name} className="hover:bg-gray-50">
+                    <td className="px-4 py-2 font-medium text-gray-700">{row.name}</td>
+                    <td className="px-4 py-2 text-right text-gray-600">
+                      {gap ? gap.parsed.toLocaleString() : row.count.toLocaleString()}
+                    </td>
+                    {gapAnalysis.length > 0 && (
+                      <>
+                        <td className="px-4 py-2 text-right text-gray-600">
+                          {gap ? gap.saved.toLocaleString() : '-'}
+                        </td>
+                        <td className={`px-4 py-2 text-right font-mono ${
+                          gap && gap.gap !== 0 ? 'text-red-600 font-semibold' : 'text-gray-400'
+                        }`}>
+                          {gap ? (gap.gap === 0 ? '0' : (gap.gap > 0 ? `+${gap.gap}` : gap.gap)) : '-'}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {gap ? (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              gap.status === 'match'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {gap.status === 'match' ? 'MATCH' : 'GAP'}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-400">-</span>
+                          )}
+                        </td>
+                      </>
+                    )}
+                    <td className="px-4 py-2 text-gray-500">{row.lastUpload}</td>
+                  </tr>
+                );
+              })}
               <tr className="bg-blue-50 font-semibold">
                 <td className="px-4 py-2 text-blue-700">합계</td>
-                <td className="px-4 py-2 text-right text-blue-700">{totalDataRows.toLocaleString()}</td>
+                <td className="px-4 py-2 text-right text-blue-700">
+                  {gapAnalysis.length > 0
+                    ? gapAnalysis.reduce((s, g) => s + g.parsed, 0).toLocaleString()
+                    : totalDataRows.toLocaleString()
+                  }
+                </td>
+                {gapAnalysis.length > 0 && (
+                  <>
+                    <td className="px-4 py-2 text-right text-blue-700">
+                      {gapAnalysis.reduce((s, g) => s + g.saved, 0).toLocaleString()}
+                    </td>
+                    <td className={`px-4 py-2 text-right font-mono ${
+                      gapAnalysis.some(g => g.gap !== 0) ? 'text-red-600' : 'text-emerald-600'
+                    }`}>
+                      {(() => {
+                        const total = gapAnalysis.reduce((s, g) => s + g.gap, 0);
+                        return total === 0 ? '0' : (total > 0 ? `+${total}` : total);
+                      })()}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        gapAnalysis.every(g => g.status === 'match')
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {gapAnalysis.every(g => g.status === 'match') ? 'ALL MATCH' : 'HAS GAP'}
+                      </span>
+                    </td>
+                  </>
+                )}
                 <td className="px-4 py-2"></td>
               </tr>
             </tbody>
           </table>
+          {gapAnalysis.length > 0 && gapAnalysis.some(g => g.status === 'mismatch') && (
+            <div className="px-4 py-2 bg-red-50 text-xs text-red-600">
+              Gap이 있는 시트가 있습니다. UNIQUE 제약조건 중복 또는 저장 오류를 확인하세요. 재업로드하면 해결될 수 있습니다.
+            </div>
+          )}
+          {gapAnalysis.length > 0 && gapAnalysis.every(g => g.status === 'match') && (
+            <div className="px-4 py-2 bg-emerald-50 text-xs text-emerald-600">
+              모든 시트가 정확하게 일치합니다. Excel 파싱 → DB 저장 무결성 확인 완료.
+            </div>
+          )}
         </div>
       )}
 

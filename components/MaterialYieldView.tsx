@@ -7,7 +7,7 @@ import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { bomService, itemRevenueService, purchaseService } from '../services/supabaseService';
+import { bomMasterService, itemRevenueService, purchaseService } from '../services/supabaseService';
 
 const STATUS_COLORS: Record<YieldRow['status'], string> = {
   normal: '#10b981',
@@ -134,13 +134,17 @@ const MaterialYieldView: React.FC = () => {
       // bom_master가 이미 로드되었으면 스킵
       if (bomData.length > 0) return;
       try {
-        const data = await bomService.getAll();
-        if (data && data.length > 0) {
-          setBomData(data);
+        const masterData = await bomMasterService.getAll();
+        if (masterData && masterData.length > 0) {
+          const converted: BomRecord[] = masterData.map(r => ({
+            parentPn: r.parentPn, childPn: r.childPn, level: r.level,
+            qty: r.qty, childName: r.childName, supplier: r.supplier, partType: r.partType,
+          }));
+          setBomData(converted);
           const g = window as any;
           if (!g.__dashboardCache) g.__dashboardCache = {};
-          g.__dashboardCache.bomData = data;
-          try { localStorage.setItem('dashboard_bomData', JSON.stringify(data)); } catch { /* quota */ }
+          g.__dashboardCache.bomData = converted;
+          try { localStorage.setItem('dashboard_bomData', JSON.stringify(converted)); } catch { /* quota */ }
         }
       } catch (err) {
         console.error('BOM Supabase 로드 실패:', err);
@@ -699,7 +703,7 @@ const MaterialYieldView: React.FC = () => {
 
     if (isSupabaseConfigured()) {
       try {
-        await bomService.saveAll(records);
+        await bomMasterService.saveAll(records);
         console.log(`BOM Supabase 동기화 완료: ${records.length}건`);
       } catch (err) {
         console.error('BOM Supabase 동기화 실패:', err);
