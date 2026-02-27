@@ -64,7 +64,7 @@ const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
     for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
       const { error } = await supabase!
         .from(table)
-        .insert(batch, { returning: 'minimal' });
+        .insert(batch);
       if (!error) {
         lastError = null;
         break;
@@ -83,7 +83,7 @@ const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
         for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
           const { error } = await supabase!
             .from(table)
-            .insert(row, { returning: 'minimal' });
+            .insert(row);
           if (!error) {
             rowError = null;
             break;

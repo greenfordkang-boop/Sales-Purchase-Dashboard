@@ -409,7 +409,7 @@ const SalesView: React.FC = () => {
 
   // Revenue Derived (고객사별 매출현황)
   const revenueYears = useMemo(() => {
-    const years = Array.from(new Set(revenueData.map(d => d.year))).sort((a, b) => b - a);
+    const years = Array.from(new Set(revenueData.map(d => d.year))).sort((a, b) => (b as number) - (a as number));
     return years.length > 0 ? years : [2026];
   }, [revenueData]);
 
