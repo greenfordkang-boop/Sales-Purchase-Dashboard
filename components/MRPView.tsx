@@ -200,14 +200,14 @@ const MRPView: React.FC = () => {
     <div className="space-y-4">
       {/* 메트릭 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard title="총 소요자재" value={summary.totalMaterials.toLocaleString()} suffix="종" />
+        <MetricCard label="총 소요자재" value={summary.totalMaterials.toLocaleString()} suffix="종" />
         <MetricCard
           title="BOM 매칭률"
           value={`${(summary.bomMatchRate * 100).toFixed(1)}`}
           suffix="%"
         />
-        <MetricCard title="매칭 제품" value={summary.matchedProducts.toLocaleString()} suffix="건" />
-        <MetricCard title="미매칭" value={summary.unmatchedProducts.length.toLocaleString()} suffix="건" />
+        <MetricCard label="매칭 제품" value={summary.matchedProducts.toLocaleString()} suffix="건" />
+        <MetricCard label="미매칭" value={summary.unmatchedProducts.length.toLocaleString()} suffix="건" />
         <MetricCard
           title="총 소요원가"
           value={summary.totalCost > 0 ? (summary.totalCost / 100000000).toFixed(1) : '0'}

@@ -13,6 +13,7 @@ import {
   assembleBomInfo,
   AssembledBomInfo,
 } from '../utils/bomMasterParser';
+import { downloadCSV } from '../utils/csvExport';
 import {
   bomMasterService,
   productCodeService,
@@ -203,15 +204,55 @@ const BomMasterUploadView: React.FC = () => {
     material_code_not_found: '재질코드 미존재',
   };
 
+  const ISSUE_FIX_GUIDE: Record<string, { sheet: string; field: string; action: string }> = {
+    injection_missing: {
+      sheet: '기준정보',
+      field: 'NET중량(g)',
+      action: '해당 품목코드의 NET중량 값을 입력하세요. 사출 품목의 실제 제품 중량(g)을 금형도면 또는 실측에서 확인합니다.',
+    },
+    paint_missing: {
+      sheet: '기준정보',
+      field: '1도Paint량 / 2도Paint량 / 3도Paint량',
+      action: '도장 품목의 도료 사용량(g)을 입력하세요. 도장 사양서에서 1도/2도/3도별 Paint량을 확인합니다.',
+    },
+    raw_material_missing: {
+      sheet: '기준정보',
+      field: '원재료코드1',
+      action: '사출 원재료(RESIN) 코드를 입력하세요. 재질코드 시트에 등록된 코드여야 합니다. (예: PP, ABS, PC 등)',
+    },
+    material_code_not_found: {
+      sheet: '재질코드',
+      field: '재질코드 (신규 등록)',
+      action: '기준정보에 입력된 원재료코드가 재질코드 시트에 없습니다. 재질코드 시트에 해당 코드/단가를 추가 등록하세요.',
+    },
+  };
+
+  const handleDownloadQualityExcel = () => {
+    const target = filterIssueType === 'All' ? qualityIssues : filteredIssues;
+    if (target.length === 0) return;
+    const headers = ['유형', '품목코드', '품목명', '심각도', '설명', '수정 대상 시트', '수정 대상 필드', '처리방법'];
+    const rows = target.map(issue => [
+      ISSUE_TYPE_LABELS[issue.issueType] || issue.issueType,
+      issue.itemCode,
+      issue.itemName,
+      issue.severity,
+      issue.description,
+      ISSUE_FIX_GUIDE[issue.issueType]?.sheet || '',
+      ISSUE_FIX_GUIDE[issue.issueType]?.field || '',
+      ISSUE_FIX_GUIDE[issue.issueType]?.action || '',
+    ]);
+    downloadCSV(`데이터품질_이슈_${filterIssueType === 'All' ? '전체' : filterIssueType}_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
+
   return (
     <div className="space-y-4">
       {/* 메트릭 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard title="BOM" value={uploadStatus.bom.count.toLocaleString()} suffix="건" />
-        <MetricCard title="제품코드" value={uploadStatus.productCode.count.toLocaleString()} suffix="건" />
-        <MetricCard title="기준정보" value={uploadStatus.referenceInfo.count.toLocaleString()} suffix="건" />
-        <MetricCard title="설비코드" value={uploadStatus.equipment.count.toLocaleString()} suffix="건" />
-        <MetricCard title="재질코드" value={uploadStatus.materialCode.count.toLocaleString()} suffix="건" />
+        <MetricCard label="BOM" value={uploadStatus.bom.count.toLocaleString()} suffix="건" />
+        <MetricCard label="제품코드" value={uploadStatus.productCode.count.toLocaleString()} suffix="건" />
+        <MetricCard label="기준정보" value={uploadStatus.referenceInfo.count.toLocaleString()} suffix="건" />
+        <MetricCard label="설비코드" value={uploadStatus.equipment.count.toLocaleString()} suffix="건" />
+        <MetricCard label="재질코드" value={uploadStatus.materialCode.count.toLocaleString()} suffix="건" />
       </div>
 
       {/* 업로드 영역 */}
@@ -309,21 +350,57 @@ const BomMasterUploadView: React.FC = () => {
       {/* 데이터 품질 패널 */}
       {activeView === 'quality' && (
         <div className="space-y-3">
-          {/* 이슈 유형별 요약 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {Array.from(issueStats.types.entries()).map(([type, count]) => (
-              <div
-                key={type}
-                onClick={() => setFilterIssueType(filterIssueType === type ? 'All' : type)}
-                className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                  filterIssueType === type ? 'bg-orange-100 border border-orange-300' : 'bg-white border border-gray-200'
-                }`}
-              >
-                <div className="text-xs text-gray-500">{ISSUE_TYPE_LABELS[type] || type}</div>
-                <div className="text-lg font-bold text-orange-600">{count}건</div>
-              </div>
-            ))}
+          {/* 이슈 유형별 요약 + 다운로드 */}
+          <div className="flex items-center justify-between">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 flex-1">
+              {Array.from(issueStats.types.entries()).map(([type, count]) => (
+                <div
+                  key={type}
+                  onClick={() => setFilterIssueType(filterIssueType === type ? 'All' : type)}
+                  className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    filterIssueType === type ? 'bg-orange-100 border border-orange-300' : 'bg-white border border-gray-200'
+                  }`}
+                >
+                  <div className="text-xs text-gray-500">{ISSUE_TYPE_LABELS[type] || type}</div>
+                  <div className="text-lg font-bold text-orange-600">{count}건</div>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={handleDownloadQualityExcel}
+              disabled={filteredIssues.length === 0}
+              className="ml-3 px-3 py-2 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              CSV 다운로드 ({filteredIssues.length}건)
+            </button>
           </div>
+
+          {/* 처리방법 가이드 */}
+          {filterIssueType !== 'All' && ISSUE_FIX_GUIDE[filterIssueType] && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="text-xs font-semibold text-blue-800 mb-1">처리방법 — {ISSUE_TYPE_LABELS[filterIssueType]}</div>
+              <div className="text-xs text-blue-700 space-y-1">
+                <div><span className="font-medium">수정 시트:</span> <span className="font-mono bg-blue-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].sheet}</span></div>
+                <div><span className="font-medium">수정 필드:</span> <span className="font-mono bg-blue-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].field}</span></div>
+                <div><span className="font-medium">조치:</span> {ISSUE_FIX_GUIDE[filterIssueType].action}</div>
+              </div>
+            </div>
+          )}
+          {filterIssueType === 'All' && issueStats.total > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-2">이슈 유형별 처리방법</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {Object.entries(ISSUE_FIX_GUIDE).map(([type, guide]) => (
+                  <div key={type} className="text-xs bg-white rounded p-2 border border-gray-100">
+                    <div className="font-semibold text-gray-700 mb-0.5">{ISSUE_TYPE_LABELS[type]}</div>
+                    <div className="text-gray-500">
+                      <span className="font-mono text-blue-600">{guide.sheet}</span> 시트의 <span className="font-mono text-blue-600">{guide.field}</span> 수정
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 이슈 테이블 */}
           <div className="bg-white rounded-lg shadow overflow-hidden max-h-96 overflow-y-auto">
@@ -335,10 +412,11 @@ const BomMasterUploadView: React.FC = () => {
                   <th className="px-3 py-2 text-left text-gray-600 font-medium">품목명</th>
                   <th className="px-3 py-2 text-left text-gray-600 font-medium">심각도</th>
                   <th className="px-3 py-2 text-left text-gray-600 font-medium">설명</th>
+                  <th className="px-3 py-2 text-left text-gray-600 font-medium">수정위치</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredIssues.slice(0, 100).map((issue, idx) => (
+                {filteredIssues.slice(0, 200).map((issue, idx) => (
                   <tr key={idx} className="hover:bg-gray-50">
                     <td className="px-3 py-1.5 text-gray-600">
                       {ISSUE_TYPE_LABELS[issue.issueType] || issue.issueType}
@@ -355,13 +433,16 @@ const BomMasterUploadView: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-gray-500 max-w-60 truncate">{issue.description}</td>
+                    <td className="px-3 py-1.5 text-blue-600 font-mono text-[10px]">
+                      {ISSUE_FIX_GUIDE[issue.issueType]?.sheet} &gt; {ISSUE_FIX_GUIDE[issue.issueType]?.field}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {filteredIssues.length > 100 && (
+            {filteredIssues.length > 200 && (
               <div className="px-3 py-2 text-xs text-gray-400 bg-gray-50">
-                {filteredIssues.length - 100}건 더 있음 (100건까지 표시)
+                {filteredIssues.length - 200}건 더 있음 (200건까지 표시)
               </div>
             )}
           </div>

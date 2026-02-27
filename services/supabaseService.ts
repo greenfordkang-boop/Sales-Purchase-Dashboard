@@ -2137,7 +2137,7 @@ export const bomMasterService = {
   },
 
   async saveAll(records: BomMasterRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_bomMasterData', JSON.stringify(records));
+    try { localStorage.setItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
@@ -2183,7 +2183,7 @@ export const productCodeService = {
   },
 
   async saveAll(records: ProductCodeRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_productCodeMaster', JSON.stringify(records));
+    try { localStorage.setItem('dashboard_productCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productCode, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
@@ -2238,7 +2238,7 @@ export const referenceInfoService = {
   },
 
   async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_referenceInfoMaster', JSON.stringify(records));
+    try { localStorage.setItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
@@ -2291,7 +2291,7 @@ export const equipmentService = {
   },
 
   async saveAll(records: EquipmentRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_equipmentMaster', JSON.stringify(records));
+    try { localStorage.setItem('dashboard_equipmentMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for equipment, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
@@ -2334,7 +2334,7 @@ export const materialCodeService = {
   },
 
   async saveAll(records: MaterialCodeRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_materialCodeMaster', JSON.stringify(records));
+    try { localStorage.setItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
@@ -2381,7 +2381,7 @@ export const dataQualityService = {
   },
 
   async saveAll(issues: DataQualityIssue[]): Promise<void> {
-    localStorage.setItem('dashboard_dataQualityIssues', JSON.stringify(issues));
+    try { localStorage.setItem('dashboard_dataQualityIssues', JSON.stringify(issues)); } catch { console.warn('localStorage quota exceeded for dataQuality, skipping local cache'); }
     if (!isSupabaseConfigured()) return;
 
     const { error: deleteError } = await supabase!
