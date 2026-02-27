@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, PieChart, Pie, Cell } from 'recharts';
 import { parseSalesCSV, CustomerSalesData, SalesItem } from '../utils/salesDataParser';
 import { parseCRCSV, CRItem } from '../utils/crDataParser';
@@ -169,7 +170,7 @@ const SalesView: React.FC = () => {
           const supabaseSales = await salesService.getAll();
           if (supabaseSales && supabaseSales.length > 0) {
             setSalesData(supabaseSales);
-            localStorage.setItem('dashboard_salesData', JSON.stringify(supabaseSales));
+            safeSetItem('dashboard_salesData', JSON.stringify(supabaseSales));
             console.log(`✅ Supabase에서 영업 데이터 로드: ${supabaseSales.length}개 고객`);
           } else {
             console.log('ℹ️ Supabase 영업 데이터 없음 - localStorage 유지');
@@ -183,7 +184,7 @@ const SalesView: React.FC = () => {
           const supabaseCR = await crService.getAll();
           if (supabaseCR && supabaseCR.length > 0) {
             setCrData(supabaseCR);
-            localStorage.setItem('dashboard_crData', JSON.stringify(supabaseCR));
+            safeSetItem('dashboard_crData', JSON.stringify(supabaseCR));
             console.log(`✅ Supabase에서 CR 데이터 로드: ${supabaseCR.length}개`);
           } else {
             console.log('ℹ️ Supabase CR 데이터 없음 - localStorage 유지');
@@ -197,7 +198,7 @@ const SalesView: React.FC = () => {
           const supabaseRFQ = await rfqService.getAll();
           if (supabaseRFQ && supabaseRFQ.length > 0) {
             setRfqData(supabaseRFQ);
-            localStorage.setItem('dashboard_rfqData', JSON.stringify(supabaseRFQ));
+            safeSetItem('dashboard_rfqData', JSON.stringify(supabaseRFQ));
             console.log(`✅ Supabase에서 RFQ 데이터 로드: ${supabaseRFQ.length}개`);
           } else {
             console.log('ℹ️ Supabase RFQ 데이터 없음 - localStorage 유지');
@@ -211,7 +212,7 @@ const SalesView: React.FC = () => {
           const supabaseRevenue = await revenueService.getAll();
           if (supabaseRevenue && supabaseRevenue.length > 0) {
             setRevenueData(supabaseRevenue);
-            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
+            safeSetItem('dashboard_revenueData', JSON.stringify(supabaseRevenue));
             console.log(`✅ Supabase에서 매출 데이터 로드: ${supabaseRevenue.length}개`);
           } else {
             console.log('ℹ️ Supabase 매출 데이터 없음 - localStorage 유지');
@@ -225,7 +226,7 @@ const SalesView: React.FC = () => {
           const supabaseItemRevenue = await itemRevenueService.getAll();
           if (supabaseItemRevenue && supabaseItemRevenue.length > 0) {
             setItemRevenueData(supabaseItemRevenue);
-            localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(supabaseItemRevenue));
+            safeSetItem('dashboard_itemRevenueData', JSON.stringify(supabaseItemRevenue));
             console.log(`✅ Supabase에서 품목별 매출 데이터 로드: ${supabaseItemRevenue.length}개`);
           } else {
             console.log('ℹ️ Supabase 품목별 매출 데이터 없음 - localStorage 유지');
@@ -243,24 +244,24 @@ const SalesView: React.FC = () => {
 
   // --- Persistence Effects (localStorage 저장) ---
   useEffect(() => {
-    localStorage.setItem('dashboard_salesData', JSON.stringify(salesData));
+    safeSetItem('dashboard_salesData', JSON.stringify(salesData));
   }, [salesData]);
 
 
   useEffect(() => {
-    localStorage.setItem('dashboard_crData', JSON.stringify(crData));
+    safeSetItem('dashboard_crData', JSON.stringify(crData));
   }, [crData]);
 
   useEffect(() => {
-    localStorage.setItem('dashboard_rfqData', JSON.stringify(rfqData));
+    safeSetItem('dashboard_rfqData', JSON.stringify(rfqData));
   }, [rfqData]);
 
   useEffect(() => {
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(revenueData));
+    safeSetItem('dashboard_revenueData', JSON.stringify(revenueData));
   }, [revenueData]);
 
   useEffect(() => {
-    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(itemRevenueData));
+    safeSetItem('dashboard_itemRevenueData', JSON.stringify(itemRevenueData));
   }, [itemRevenueData]);
 
   // --- Derived Data ---
@@ -876,7 +877,7 @@ const SalesView: React.FC = () => {
         console.log(`✅ 품목별 매출 데이터 파싱 완료: ${parsed.length}건`);
         
         setItemRevenueData(parsed);
-        localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(parsed));
+        safeSetItem('dashboard_itemRevenueData', JSON.stringify(parsed));
 
         // Supabase 동기화
         if (isSupabaseConfigured()) {

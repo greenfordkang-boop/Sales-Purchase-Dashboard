@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import {
   parseBomMasterExcel,
   BomMasterParseResult,
@@ -131,7 +132,7 @@ const BomMasterUploadView: React.FC = () => {
 
       // 업로드 시각 저장
       const now = new Date().toLocaleString('ko-KR');
-      localStorage.setItem('dashboard_bomMaster_uploadTimestamp', now);
+      safeSetItem('dashboard_bomMaster_uploadTimestamp', now);
 
       // 상태 갱신
       setUploadStatus({

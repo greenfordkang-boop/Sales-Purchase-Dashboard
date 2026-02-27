@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { downloadCSV } from '../utils/csvExport';
 import { ForecastItem } from '../utils/salesForecastParser';
@@ -211,7 +212,7 @@ const StandardMaterialCostView: React.FC = () => {
       if (!g.__dashboardCache) g.__dashboardCache = {};
       g.__dashboardCache.pnMapping = mappings;
       try { sessionStorage.setItem('dashboard_pnMapping', JSON.stringify(mappings)); } catch { /* */ }
-      try { localStorage.setItem('dashboard_pnMapping', JSON.stringify(mappings)); } catch { /* */ }
+      try { safeSetItem('dashboard_pnMapping', JSON.stringify(mappings)); } catch { /* */ }
       window.dispatchEvent(new CustomEvent('dashboard-data-updated', { detail: { key: 'dashboard_pnMapping', data: mappings } }));
       const withCost = mappings.filter(m => m.materialCost && m.materialCost > 0).length;
       const withSupply = mappings.filter(m => m.supplyType).length;
@@ -2212,7 +2213,7 @@ const StandardMaterialCostView: React.FC = () => {
     };
     setBomData(prev => {
       const next = [...prev, newRecord];
-      try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+      try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
       return next;
     });
     setBomAddForm({ childPn: '', childName: '', qty: '1', supplier: '', partType: '' });
@@ -2233,7 +2234,7 @@ const StandardMaterialCostView: React.FC = () => {
         } else {
           next = [...prev, { customerPn: '', internalCode: bomEditForm.childPn.trim() || originalChildPn, partName: bomEditForm.childName.trim(), purchaseUnitPrice: editedPrice }];
         }
-        try { localStorage.setItem('dashboard_pnMapping', JSON.stringify(next)); } catch { /* */ }
+        try { safeSetItem('dashboard_pnMapping', JSON.stringify(next)); } catch { /* */ }
         return next;
       });
     }
@@ -2252,7 +2253,7 @@ const StandardMaterialCostView: React.FC = () => {
         }
         return r;
       });
-      try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+      try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
       return next;
     });
     setBomEditingId(null);
@@ -2263,7 +2264,7 @@ const StandardMaterialCostView: React.FC = () => {
     if (!confirm(`"${childPn}" 자재를 삭제하시겠습니까?`)) return;
     setBomData(prev => {
       const next = prev.filter(r => !(r.parentPn === parentPn && r.childPn === childPn));
-      try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+      try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
       return next;
     });
   }, []);
@@ -2278,7 +2279,7 @@ const StandardMaterialCostView: React.FC = () => {
       } else {
         next[customerPn] = now;
       }
-      try { localStorage.setItem('dashboard_bomConfirmed', JSON.stringify(next)); } catch { /* */ }
+      try { safeSetItem('dashboard_bomConfirmed', JSON.stringify(next)); } catch { /* */ }
       return next;
     });
   }, []);
@@ -2318,7 +2319,7 @@ const StandardMaterialCostView: React.FC = () => {
         delete forStorage.paintMixRatios;
         const jsonStr = JSON.stringify(forStorage);
         // localStorage + sessionStorage 이중 저장 (용량 초과 대비)
-        try { localStorage.setItem('dashboard_standardMaterial', jsonStr); } catch {
+        try { safeSetItem('dashboard_standardMaterial', jsonStr); } catch {
           console.warn('[표준재료비] localStorage 저장 실패 (용량 초과), items 경량화 시도');
           // items 경량화: 산출에 필요한 핵심 필드만 보존
           const lightItems = forStorage.items?.map((it: any) => ({
@@ -2330,7 +2331,7 @@ const StandardMaterialCostView: React.FC = () => {
             purchaseCost: it.purchaseCost, totalCost: it.totalCost,
           }));
           const lightData = { ...forStorage, items: lightItems };
-          try { localStorage.setItem('dashboard_standardMaterial', JSON.stringify(lightData)); }
+          try { safeSetItem('dashboard_standardMaterial', JSON.stringify(lightData)); }
           catch { console.warn('[표준재료비] 경량화 후에도 localStorage 초과'); }
         }
         try { sessionStorage.setItem('dashboard_standardMaterial', jsonStr); } catch { /* */ }
@@ -2371,7 +2372,7 @@ const StandardMaterialCostView: React.FC = () => {
         if (mergedCount > 0) {
           setPnMapping(updatedMapping);
           try { sessionStorage.setItem('dashboard_pnMapping', JSON.stringify(updatedMapping)); } catch { /* */ }
-          try { localStorage.setItem('dashboard_pnMapping', JSON.stringify(updatedMapping)); } catch { /* */ }
+          try { safeSetItem('dashboard_pnMapping', JSON.stringify(updatedMapping)); } catch { /* */ }
           console.log(`[표준재료비] Excel→pnMapping 병합: ${mergedCount}건 (사출/도장 단가 포함)`);
         }
       }
@@ -3572,7 +3573,7 @@ const StandardMaterialCostView: React.FC = () => {
                             if (dataUrl) {
                               setDrawingMap(prev => {
                                 const next = { ...prev, [bomPopupPn.customerPn]: dataUrl };
-                                try { localStorage.setItem('dashboard_bomDrawings', JSON.stringify(next)); } catch {
+                                try { safeSetItem('dashboard_bomDrawings', JSON.stringify(next)); } catch {
                                   try { sessionStorage.setItem('dashboard_bomDrawings', JSON.stringify(next)); } catch { /* */ }
                                 }
                                 return next;
@@ -3654,7 +3655,7 @@ const StandardMaterialCostView: React.FC = () => {
                               if (dataUrl) {
                                 setDrawingMap(prev => {
                                   const next = { ...prev, [bomPopupPn.customerPn]: dataUrl };
-                                  try { localStorage.setItem('dashboard_bomDrawings', JSON.stringify(next)); } catch {
+                                  try { safeSetItem('dashboard_bomDrawings', JSON.stringify(next)); } catch {
                                     try { sessionStorage.setItem('dashboard_bomDrawings', JSON.stringify(next)); } catch { /* */ }
                                   }
                                   return next;
@@ -3729,7 +3730,7 @@ const StandardMaterialCostView: React.FC = () => {
                                         }
                                         return r;
                                       });
-                                      try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+                                      try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
                                       return next;
                                     });
                                   }} className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-amber-600 text-white rounded hover:bg-amber-700">
@@ -3767,7 +3768,7 @@ const StandardMaterialCostView: React.FC = () => {
                                     };
                                     setBomData(prev => {
                                       const next = [...prev, newRecord];
-                                      try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+                                      try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
                                       return next;
                                     });
                                     // pnMapping에도 품명 등록 (트리에서 품명 표시용)
@@ -3866,7 +3867,7 @@ const StandardMaterialCostView: React.FC = () => {
                                             const next = prev.filter(r =>
                                               !(normalizePn(r.parentPn) === normalizePn(bomPopupData.bomKey) && normalizePn(r.childPn) === normalizePn(item.childPn))
                                             );
-                                            try { localStorage.setItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
+                                            try { safeSetItem('dashboard_bomData', JSON.stringify(next)); } catch { /* */ }
                                             return next;
                                           });
                                         }} className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-amber-600 text-white rounded hover:bg-amber-700">

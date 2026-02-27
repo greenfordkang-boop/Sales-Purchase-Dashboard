@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { BomRecord, YieldRow, PnMapping, parseBomCSV, parseBomExcel, parsePnMappingFromExcel, parseMaterialMasterExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
@@ -144,7 +145,7 @@ const MaterialYieldView: React.FC = () => {
           const g = window as any;
           if (!g.__dashboardCache) g.__dashboardCache = {};
           g.__dashboardCache.bomData = converted;
-          try { localStorage.setItem('dashboard_bomData', JSON.stringify(converted)); } catch { /* quota */ }
+          try { safeSetItem('dashboard_bomData', JSON.stringify(converted)); } catch { /* quota */ }
         }
       } catch (err) {
         console.error('BOM Supabase 로드 실패:', err);
@@ -683,14 +684,14 @@ const MaterialYieldView: React.FC = () => {
     }));
     const bomJson = JSON.stringify(compactBom);
     try {
-      localStorage.setItem('dashboard_bomData', bomJson);
+      safeSetItem('dashboard_bomData', bomJson);
     } catch {
       console.warn('BOM localStorage 저장 실패, 용량 확보 시도');
       try {
         localStorage.removeItem('dashboard_standardMaterial');
         localStorage.removeItem('dashboard_forecastData_prev');
         localStorage.removeItem('dashboard_forecastData_prev_summary');
-        localStorage.setItem('dashboard_bomData', bomJson);
+        safeSetItem('dashboard_bomData', bomJson);
       } catch (e2) {
         console.error('BOM localStorage 최종 실패, sessionStorage 사용:', e2);
         try { sessionStorage.setItem('dashboard_bomData', bomJson); } catch { /* */ }
@@ -755,7 +756,7 @@ const MaterialYieldView: React.FC = () => {
     }));
     const mappingJson = JSON.stringify(compactMappings);
     try {
-      localStorage.setItem('dashboard_pnMapping', mappingJson);
+      safeSetItem('dashboard_pnMapping', mappingJson);
     } catch {
       console.warn('품번매핑 localStorage 저장 실패, sessionStorage 시도');
       try { sessionStorage.setItem('dashboard_pnMapping', mappingJson); } catch { /* */ }

@@ -1,5 +1,6 @@
 
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { safeSetItem } from '../utils/safeStorage';
 import { SalesItem, CustomerSalesData, MonthlyStats } from '../utils/salesDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
 import { PurchaseItemMaster, PurchaseMonthlySummary } from '../utils/purchaseSummaryTypes';
@@ -200,7 +201,7 @@ export const salesService = {
 
   async saveAll(data: CustomerSalesData[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_salesData', JSON.stringify(data));
+      safeSetItem('dashboard_salesData', JSON.stringify(data));
       return;
     }
 
@@ -228,7 +229,7 @@ export const salesService = {
     await insertInBatches('sales_data', rows);
 
     // Also save to localStorage as backup
-    localStorage.setItem('dashboard_salesData', JSON.stringify(data));
+    safeSetItem('dashboard_salesData', JSON.stringify(data));
   }
 };
 
@@ -258,7 +259,7 @@ export const revenueService = {
 
   async saveAll(data: RevenueItem[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+      safeSetItem('dashboard_revenueData', JSON.stringify(data));
       return;
     }
 
@@ -270,7 +271,7 @@ export const revenueService = {
     if (deleteError) handleError(deleteError, 'revenue delete');
 
     // localStorage에 먼저 저장 (데이터 손실 방지)
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+    safeSetItem('dashboard_revenueData', JSON.stringify(data));
 
     const rows = data.map(item => ({
       year: item.year,
@@ -291,7 +292,7 @@ export const revenueService = {
       const existing: RevenueItem[] = stored ? JSON.parse(stored) : [];
       const filtered = existing.filter(item => item.year !== year);
       const merged = [...filtered, ...data];
-      localStorage.setItem('dashboard_revenueData', JSON.stringify(merged));
+      safeSetItem('dashboard_revenueData', JSON.stringify(merged));
       return;
     }
 
@@ -357,7 +358,7 @@ export const itemRevenueService = {
 
   async saveAll(data: ItemRevenueRow[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+      safeSetItem('dashboard_itemRevenueData', JSON.stringify(data));
       return;
     }
 
@@ -369,7 +370,7 @@ export const itemRevenueService = {
     if (deleteError) handleError(deleteError, 'itemRevenue delete');
 
     // localStorage에 먼저 저장 (데이터 손실 방지)
-    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+    safeSetItem('dashboard_itemRevenueData', JSON.stringify(data));
 
     const rows = data.map(item => ({
       period: item.period,
@@ -419,7 +420,7 @@ export const purchaseService = {
 
   async saveAll(data: PurchaseItem[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+      safeSetItem('dashboard_purchaseData', JSON.stringify(data));
       return;
     }
 
@@ -448,7 +449,7 @@ export const purchaseService = {
 
     await insertInBatches('purchase_data', rows);
 
-    localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+    safeSetItem('dashboard_purchaseData', JSON.stringify(data));
   },
 
   // 월별/카테고리별 데이터 저장 (기존 해당 월/카테고리 데이터만 삭제 후 새 데이터 추가)
@@ -461,7 +462,7 @@ export const purchaseService = {
         !(item.month === month && item.category === category && item.year === year)
       );
       const merged = [...filtered, ...data];
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+      safeSetItem('dashboard_purchaseData', JSON.stringify(merged));
       return;
     }
 
@@ -505,7 +506,7 @@ export const purchaseService = {
         !(item.month === month && item.category === category && item.year === year)
       );
       const merged = [...filtered, ...data];
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+      safeSetItem('dashboard_purchaseData', JSON.stringify(merged));
 
       console.log(`✅ Purchase data for ${year}년 ${month} ${category} saved to Supabase (${rows.length} rows)`);
     } catch (error) {
@@ -622,7 +623,7 @@ export const inventoryService = {
 
   async saveAll(data: InventoryData): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
+      safeSetItem('dashboard_inventoryData', JSON.stringify(data));
       return;
     }
 
@@ -670,7 +671,7 @@ export const inventoryService = {
 
     await insertInBatches('inventory_data', rows);
 
-    localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
+    safeSetItem('dashboard_inventoryData', JSON.stringify(data));
   },
 
   // ============================================
@@ -749,7 +750,7 @@ export const inventoryService = {
 
   async saveInventoryV2(data: InventoryDataV2): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+      safeSetItem('dashboard_inventory_v2', JSON.stringify(data));
       return;
     }
 
@@ -820,12 +821,12 @@ export const inventoryService = {
       await insertInBatches('inventory_v2', rows);
 
       // Also save to localStorage
-      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+      safeSetItem('dashboard_inventory_v2', JSON.stringify(data));
       console.log(`✅ inventory_v2 saved: ${rows.length} rows`);
     } catch (err) {
       console.error('Failed to save inventory_v2 to Supabase:', err);
       // Still save to localStorage
-      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+      safeSetItem('dashboard_inventory_v2', JSON.stringify(data));
     }
   }
 };
@@ -857,7 +858,7 @@ export const crService = {
 
   async saveAll(data: CRItem[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_crData', JSON.stringify(data));
+      safeSetItem('dashboard_crData', JSON.stringify(data));
       return;
     }
 
@@ -881,7 +882,7 @@ export const crService = {
 
     await insertInBatches('cr_data', rows);
 
-    localStorage.setItem('dashboard_crData', JSON.stringify(data));
+    safeSetItem('dashboard_crData', JSON.stringify(data));
   }
 };
 
@@ -919,7 +920,7 @@ export const rfqService = {
 
   async saveAll(data: RFQItem[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+      safeSetItem('dashboard_rfqData', JSON.stringify(data));
       return;
     }
 
@@ -949,7 +950,7 @@ export const rfqService = {
 
     await insertInBatches('rfq_data', rows);
 
-    localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+    safeSetItem('dashboard_rfqData', JSON.stringify(data));
   },
 
   async add(item: RFQItem): Promise<void> {
@@ -957,7 +958,7 @@ export const rfqService = {
       const stored = localStorage.getItem('dashboard_rfqData');
       const data: RFQItem[] = stored ? JSON.parse(stored) : [];
       data.push(item);
-      localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+      safeSetItem('dashboard_rfqData', JSON.stringify(data));
       return;
     }
 
@@ -988,7 +989,7 @@ export const rfqService = {
       const index = data.findIndex(d => d.id === item.id);
       if (index !== -1) {
         data[index] = item;
-        localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+        safeSetItem('dashboard_rfqData', JSON.stringify(data));
       }
       return;
     }
@@ -1021,7 +1022,7 @@ export const rfqService = {
       const stored = localStorage.getItem('dashboard_rfqData');
       const data: RFQItem[] = stored ? JSON.parse(stored) : [];
       const filtered = data.filter(d => d.id !== id);
-      localStorage.setItem('dashboard_rfqData', JSON.stringify(filtered));
+      safeSetItem('dashboard_rfqData', JSON.stringify(filtered));
       return;
     }
 
@@ -1061,7 +1062,7 @@ export const supplierService = {
 
   async saveAll(data: SupplierItem[]): Promise<void> {
     if (!isSupabaseConfigured()) {
-      localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+      safeSetItem('dashboard_supplierData', JSON.stringify(data));
       return;
     }
 
@@ -1073,7 +1074,7 @@ export const supplierService = {
     if (deleteError) handleError(deleteError, 'supplier delete');
 
     // localStorage에 먼저 저장 (데이터 손실 방지)
-    localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+    safeSetItem('dashboard_supplierData', JSON.stringify(data));
 
     const rows = data.map(item => ({
       company_name: item.companyName,
@@ -1143,7 +1144,7 @@ export const purchaseItemMasterService = {
   },
 
   async saveAll(data: PurchaseItemMaster[]): Promise<void> {
-    localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(data));
+    safeSetItem('dashboard_purchaseItemMaster', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('purchase_item_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -1174,7 +1175,7 @@ export const purchaseItemMasterService = {
       const existing: PurchaseItemMaster[] = stored ? JSON.parse(stored) : [];
       const map = new Map(existing.map(i => [i.partNo, i]));
       data.forEach(item => map.set(item.partNo, item));
-      localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(Array.from(map.values())));
+      safeSetItem('dashboard_purchaseItemMaster', JSON.stringify(Array.from(map.values())));
       return;
     }
 
@@ -1271,7 +1272,7 @@ export const purchaseSummaryService = {
     const stored = localStorage.getItem('dashboard_purchaseSummary');
     const existing: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
     const filtered = existing.filter(d => !(d.year === year && d.month === month));
-    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify([...filtered, ...data]));
+    safeSetItem('dashboard_purchaseSummary', JSON.stringify([...filtered, ...data]));
 
     if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
@@ -1313,7 +1314,7 @@ export const purchaseSummaryService = {
   },
 
   async saveAll(data: PurchaseMonthlySummary[]): Promise<void> {
-    localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(data));
+    safeSetItem('dashboard_purchaseSummary', JSON.stringify(data));
 
     if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
@@ -1382,7 +1383,7 @@ export const bomService = {
   },
 
   async saveAll(data: BomRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+    safeSetItem('dashboard_bomData', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('bom_data')) return;
 
     const { error: deleteError } = await supabase!
@@ -1462,7 +1463,7 @@ export const ciKpiService = {
   },
 
   async save(data: CRKpiData): Promise<void> {
-    localStorage.setItem('dashboard_crKpiData', JSON.stringify(data));
+    safeSetItem('dashboard_crKpiData', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('ci_kpi_settings')) return;
 
     const { error: deleteError } = await supabase!
@@ -1533,7 +1534,7 @@ export const ciDetailService = {
   },
 
   async saveAll(data: Record<number, CIDetailItem[]>): Promise<void> {
-    localStorage.setItem('dashboard_ciDetails', JSON.stringify(data));
+    safeSetItem('dashboard_ciDetails', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('ci_details')) return;
 
     const { error: deleteError } = await supabase!
@@ -1615,7 +1616,7 @@ export const ciUploadService = {
   },
 
   async saveAll(data: CIUploadRecord[]): Promise<void> {
-    localStorage.setItem('dashboard_ciUploads', JSON.stringify(data));
+    safeSetItem('dashboard_ciUploads', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('ci_uploads')) return;
 
     const { error: deleteError } = await supabase!
@@ -1812,79 +1813,79 @@ export const loadAllDataFromSupabase = async (): Promise<{ success: boolean; mes
   await loadOne('sales', async () => {
     const data = await salesService.getAll();
     console.log(`📊 sales downloaded: ${data.length} customers, ${data.reduce((s, c) => s + (c.items?.length || 0), 0)} items`);
-    localStorage.setItem('dashboard_salesData', JSON.stringify(data));
+    safeSetItem('dashboard_salesData', JSON.stringify(data));
   });
   await loadOne('revenue', async () => {
     const data = await revenueService.getAll();
     const total2026 = data.filter(r => r.year === 2026).reduce((s, r) => s + (r.amount || 0), 0);
     console.log(`📊 revenue downloaded: ${data.length} rows, 2026 total: ${(total2026/100000000).toFixed(1)}억`);
-    localStorage.setItem('dashboard_revenueData', JSON.stringify(data));
+    safeSetItem('dashboard_revenueData', JSON.stringify(data));
   });
   await loadOne('itemRevenue', async () => {
     const data = await itemRevenueService.getAll();
     console.log(`📊 itemRevenue downloaded: ${data.length} rows`);
-    localStorage.setItem('dashboard_itemRevenueData', JSON.stringify(data));
+    safeSetItem('dashboard_itemRevenueData', JSON.stringify(data));
   });
   await loadOne('purchase', async () => {
     const data = await purchaseService.getAll();
     console.log(`📊 purchase downloaded: ${data.length} rows`);
-    localStorage.setItem('dashboard_purchaseData', JSON.stringify(data));
+    safeSetItem('dashboard_purchaseData', JSON.stringify(data));
   });
   await loadOne('inventory', async () => {
     const data = await inventoryService.getAll();
-    localStorage.setItem('dashboard_inventoryData', JSON.stringify(data));
+    safeSetItem('dashboard_inventoryData', JSON.stringify(data));
   });
   await loadOne('inventoryV2', async () => {
     const data = await inventoryService.getInventoryV2();
-    if (data) localStorage.setItem('dashboard_inventory_v2', JSON.stringify(data));
+    if (data) safeSetItem('dashboard_inventory_v2', JSON.stringify(data));
   });
   await loadOne('cr', async () => {
     const data = await crService.getAll();
-    localStorage.setItem('dashboard_crData', JSON.stringify(data));
+    safeSetItem('dashboard_crData', JSON.stringify(data));
   });
   await loadOne('rfq', async () => {
     const data = await rfqService.getAll();
-    localStorage.setItem('dashboard_rfqData', JSON.stringify(data));
+    safeSetItem('dashboard_rfqData', JSON.stringify(data));
   });
   await loadOne('supplier', async () => {
     const data = await supplierService.getAll();
-    localStorage.setItem('dashboard_supplierData', JSON.stringify(data));
+    safeSetItem('dashboard_supplierData', JSON.stringify(data));
   });
   await loadOne('bom', async () => {
     const data = await bomService.getAll();
-    localStorage.setItem('dashboard_bomData', JSON.stringify(data));
+    safeSetItem('dashboard_bomData', JSON.stringify(data));
   });
 
   // Forecast data
   await loadOne('forecast', async () => {
     const items = await forecastService.getItems('current');
-    localStorage.setItem('dashboard_forecastData', JSON.stringify(items));
+    safeSetItem('dashboard_forecastData', JSON.stringify(items));
     const summary = await forecastService.getSummary('current');
-    if (summary) localStorage.setItem('dashboard_forecastData_summary', JSON.stringify(summary));
+    if (summary) safeSetItem('dashboard_forecastData_summary', JSON.stringify(summary));
   });
   await loadOne('forecastPrev', async () => {
     const items = await forecastService.getItems('previous');
-    localStorage.setItem('dashboard_forecastData_prev', JSON.stringify(items));
+    safeSetItem('dashboard_forecastData_prev', JSON.stringify(items));
     const summary = await forecastService.getSummary('previous');
-    if (summary) localStorage.setItem('dashboard_forecastData_prev_summary', JSON.stringify(summary));
+    if (summary) safeSetItem('dashboard_forecastData_prev_summary', JSON.stringify(summary));
   });
   await loadOne('forecastUploads', async () => {
     const data = await forecastService.getUploads();
-    localStorage.setItem('dashboard_forecastUploads', JSON.stringify(data));
+    safeSetItem('dashboard_forecastUploads', JSON.stringify(data));
   });
 
   // CI data
   await loadOne('ciKpi', async () => {
     const data = await ciKpiService.get();
-    if (data) localStorage.setItem('dashboard_crKpiData', JSON.stringify(data));
+    if (data) safeSetItem('dashboard_crKpiData', JSON.stringify(data));
   });
   await loadOne('ciDetails', async () => {
     const data = await ciDetailService.getAll();
-    if (data && Object.keys(data).length > 0) localStorage.setItem('dashboard_ciDetails', JSON.stringify(data));
+    if (data && Object.keys(data).length > 0) safeSetItem('dashboard_ciDetails', JSON.stringify(data));
   });
   await loadOne('ciUploads', async () => {
     const data = await ciUploadService.getAll();
-    if (data.length > 0) localStorage.setItem('dashboard_ciUploads', JSON.stringify(data));
+    if (data.length > 0) safeSetItem('dashboard_ciUploads', JSON.stringify(data));
   });
 
   if (errors.length === 0) {
@@ -1954,7 +1955,7 @@ export const forecastService = {
 
   async saveItems(data: ForecastItem[], version: 'current' | 'previous' = 'current'): Promise<void> {
     const key = version === 'current' ? 'dashboard_forecastData' : 'dashboard_forecastData_prev';
-    localStorage.setItem(key, JSON.stringify(data));
+    safeSetItem(key, JSON.stringify(data));
 
     if (!isSupabaseConfigured()) return;
 
@@ -2039,7 +2040,7 @@ export const forecastService = {
   async saveSummary(data: ForecastSummary | null, version: 'current' | 'previous' = 'current'): Promise<void> {
     const key = version === 'current' ? 'dashboard_forecastData_summary' : 'dashboard_forecastData_prev_summary';
     if (data) {
-      localStorage.setItem(key, JSON.stringify(data));
+      safeSetItem(key, JSON.stringify(data));
     } else {
       localStorage.removeItem(key);
     }
@@ -2107,7 +2108,7 @@ export const forecastService = {
   },
 
   async saveUploads(data: ForecastUpload[]): Promise<void> {
-    localStorage.setItem('dashboard_forecastUploads', JSON.stringify(data));
+    safeSetItem('dashboard_forecastUploads', JSON.stringify(data));
 
     if (!isSupabaseConfigured()) return;
 
@@ -2178,7 +2179,7 @@ export const bomMasterService = {
   },
 
   async saveAll(records: BomMasterRecord[]): Promise<void> {
-    try { localStorage.setItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
+    try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('bom_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -2229,7 +2230,7 @@ export const productCodeService = {
   },
 
   async saveAll(records: ProductCodeRecord[]): Promise<void> {
-    try { localStorage.setItem('dashboard_productCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productCode, skipping local cache'); }
+    try { safeSetItem('dashboard_productCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productCode, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('product_code_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -2289,7 +2290,7 @@ export const referenceInfoService = {
   },
 
   async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
-    try { localStorage.setItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
+    try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -2347,7 +2348,7 @@ export const equipmentService = {
   },
 
   async saveAll(records: EquipmentRecord[]): Promise<void> {
-    try { localStorage.setItem('dashboard_equipmentMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for equipment, skipping local cache'); }
+    try { safeSetItem('dashboard_equipmentMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for equipment, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('equipment_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -2395,7 +2396,7 @@ export const materialCodeService = {
   },
 
   async saveAll(records: MaterialCodeRecord[]): Promise<void> {
-    try { localStorage.setItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
+    try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('material_code_master')) return;
 
     const { error: deleteError } = await supabase!
@@ -2447,7 +2448,7 @@ export const dataQualityService = {
   },
 
   async saveAll(issues: DataQualityIssue[]): Promise<void> {
-    try { localStorage.setItem('dashboard_dataQualityIssues', JSON.stringify(issues)); } catch { console.warn('localStorage quota exceeded for dataQuality, skipping local cache'); }
+    try { safeSetItem('dashboard_dataQualityIssues', JSON.stringify(issues)); } catch { console.warn('localStorage quota exceeded for dataQuality, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('data_quality_issues')) return;
 
     const { error: deleteError } = await supabase!

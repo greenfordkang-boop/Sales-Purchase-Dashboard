@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { safeSetItem } from '../utils/safeStorage';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { inventoryService } from '../services/supabaseService';
@@ -346,7 +347,7 @@ const InventoryView: React.FC = () => {
                    inventoryData.paint.length > 0 ||
                    inventoryData.parts.length > 0;
     if (hasData) {
-      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(inventoryData));
+      safeSetItem('dashboard_inventory_v2', JSON.stringify(inventoryData));
     }
   }, [inventoryData]);
 
@@ -359,7 +360,7 @@ const InventoryView: React.FC = () => {
         const supabaseData = await inventoryService.getInventoryV2?.();
         if (supabaseData && (supabaseData.resin?.length > 0 || supabaseData.paint?.length > 0 || supabaseData.parts?.length > 0)) {
           setInventoryData(supabaseData);
-          localStorage.setItem('dashboard_inventory_v2', JSON.stringify(supabaseData));
+          safeSetItem('dashboard_inventory_v2', JSON.stringify(supabaseData));
           console.log('✅ Supabase에서 재고 데이터 로드');
         }
       } catch (err) {
@@ -388,7 +389,7 @@ const InventoryView: React.FC = () => {
 
       const updatedData = { ...inventoryData, [type]: data };
       setInventoryData(updatedData);
-      localStorage.setItem('dashboard_inventory_v2', JSON.stringify(updatedData));
+      safeSetItem('dashboard_inventory_v2', JSON.stringify(updatedData));
 
       // Supabase sync
       if (isSupabaseConfigured()) {

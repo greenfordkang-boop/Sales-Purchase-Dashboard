@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { parseSupplierCSV, SupplierItem } from '../utils/supplierDataParser';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -38,7 +39,7 @@ const SupplierView: React.FC = () => {
         const supabaseData = await supplierService.getAll();
         if (supabaseData && supabaseData.length > 0) {
           setSupplierData(supabaseData);
-          localStorage.setItem('dashboard_supplierData', JSON.stringify(supabaseData));
+          safeSetItem('dashboard_supplierData', JSON.stringify(supabaseData));
           console.log(`✅ Supabase에서 협력사 데이터 로드: ${supabaseData.length}개`);
         } else {
           console.log('ℹ️ Supabase 협력사 데이터 없음 - localStorage 유지');
@@ -54,7 +55,7 @@ const SupplierView: React.FC = () => {
   // --- Persistence ---
   useEffect(() => {
     if (supplierData.length > 0) {
-      localStorage.setItem('dashboard_supplierData', JSON.stringify(supplierData));
+      safeSetItem('dashboard_supplierData', JSON.stringify(supplierData));
     }
   }, [supplierData]);
 
@@ -173,7 +174,7 @@ const SupplierView: React.FC = () => {
         console.log(`✅ 협력사 데이터 파싱 완료: ${parsed.length}건`);
         
         setSupplierData(parsed);
-        localStorage.setItem('dashboard_supplierData', JSON.stringify(parsed));
+        safeSetItem('dashboard_supplierData', JSON.stringify(parsed));
 
         // Supabase 동기화
         if (isSupabaseConfigured()) {

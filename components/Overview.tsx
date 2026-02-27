@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { ComposedChart, Bar, Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList, Cell } from 'recharts';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { parseRevenueCSV, RevenueItem } from '../utils/revenueDataParser';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
@@ -55,7 +56,7 @@ const Overview: React.FC = () => {
           const supabaseData = await revenueService.getAll();
           if (supabaseData && supabaseData.length > 0) {
             salesItems = supabaseData;
-            localStorage.setItem('dashboard_revenueData', JSON.stringify(supabaseData));
+            safeSetItem('dashboard_revenueData', JSON.stringify(supabaseData));
           }
         }
         if (salesItems.length === 0) {

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { parseCIExcel, CIDetailItem, CIParseResult } from '../utils/ciDataParser';
 import { ForecastSummary } from '../utils/salesForecastParser';
@@ -136,19 +137,19 @@ const CRView: React.FC = () => {
 
   useEffect(() => {
     if (!initialLoadDone.current) return;
-    localStorage.setItem(STORAGE_KEY_CR_KPI, JSON.stringify(kpiData));
+    safeSetItem(STORAGE_KEY_CR_KPI, JSON.stringify(kpiData));
     ciKpiService.save(kpiData).catch(e => console.error('CI KPI save error:', e));
   }, [kpiData]);
 
   useEffect(() => {
     if (!initialLoadDone.current) return;
-    localStorage.setItem(STORAGE_KEY_CI_DETAILS, JSON.stringify(ciDetailsByMonth));
+    safeSetItem(STORAGE_KEY_CI_DETAILS, JSON.stringify(ciDetailsByMonth));
     ciDetailService.saveAll(ciDetailsByMonth).catch(e => console.error('CI details save error:', e));
   }, [ciDetailsByMonth]);
 
   useEffect(() => {
     if (!initialLoadDone.current) return;
-    localStorage.setItem(STORAGE_KEY_CI_UPLOADS, JSON.stringify(uploads));
+    safeSetItem(STORAGE_KEY_CI_UPLOADS, JSON.stringify(uploads));
     ciUploadService.saveAll(uploads).catch(e => console.error('CI uploads save error:', e));
   }, [uploads]);
 

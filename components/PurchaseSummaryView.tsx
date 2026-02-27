@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import MetricCard from './MetricCard';
+import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { PurchaseItemMaster, PurchaseMonthlySummary, parsePurchaseSummaryCSV } from '../utils/purchaseSummaryTypes';
 import { isSupabaseConfigured } from '../lib/supabase';
@@ -158,8 +159,8 @@ const PurchaseSummaryView: React.FC = () => {
           }
           if (summary.length === 0 || needsRefresh) {
             summary = parseInitialSummary();
-            localStorage.setItem('dashboard_purchaseSummary', JSON.stringify(summary));
-            localStorage.setItem('dashboard_purchaseSummary_version', DATA_VERSION);
+            safeSetItem('dashboard_purchaseSummary', JSON.stringify(summary));
+            safeSetItem('dashboard_purchaseSummary_version', DATA_VERSION);
             console.log(`Loaded ${summary.length} initial summary rows (${DATA_VERSION})`);
           }
         }
@@ -171,7 +172,7 @@ const PurchaseSummaryView: React.FC = () => {
           }
           if (master.length === 0 || needsRefresh) {
             master = parseInitialItemMaster();
-            localStorage.setItem('dashboard_purchaseItemMaster', JSON.stringify(master));
+            safeSetItem('dashboard_purchaseItemMaster', JSON.stringify(master));
             console.log(`Loaded ${master.length} initial master items (${DATA_VERSION})`);
           }
         }

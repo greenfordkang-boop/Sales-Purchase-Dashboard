@@ -1,6 +1,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { safeSetItem } from '../utils/safeStorage';
 import {
   salesService,
   revenueService,
@@ -26,7 +27,7 @@ export function useSupabaseSync<T>(
   // Save to localStorage and Supabase
   const saveData = useCallback(async (newData: T) => {
     setData(newData);
-    localStorage.setItem(localStorageKey, JSON.stringify(newData));
+    safeSetItem(localStorageKey, JSON.stringify(newData));
 
     if (isSupabaseConfigured() && service) {
       try {
@@ -52,7 +53,7 @@ export function useSupabaseSync<T>(
           const supabaseData = await service.getAll();
           if (supabaseData && (Array.isArray(supabaseData) ? supabaseData.length > 0 : Object.keys(supabaseData).length > 0)) {
             setData(supabaseData);
-            localStorage.setItem(localStorageKey, JSON.stringify(supabaseData));
+            safeSetItem(localStorageKey, JSON.stringify(supabaseData));
           }
           setLastSyncTime(new Date());
         } catch (error: any) {
