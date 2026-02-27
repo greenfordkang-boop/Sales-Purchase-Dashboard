@@ -39,6 +39,8 @@ export interface MRPResult {
     fuzzyMatchedProducts: string[];
     matchedProducts: number;
     directCostProducts: number;   // 표준재료비 직접 적용 제품 수
+    noPriceMaterials: number;      // 단가 없는 자재 수
+    priceMatchRate: number;        // 자재 단가 매칭률
   };
 }
 
@@ -312,12 +314,18 @@ export function calculateMRP(
 
           const mq = new Array(12).fill(0);
           mq[m] = leaf.totalRequired;
+          // 초기 단가: 재질코드 → 표준재료비(BOM 리프가 제품코드인 경우)
+          let initPrice = priceMap.get(childKey) || 0;
+          if (initPrice <= 0) {
+            const stdEntry = stdCostMap.get(childKey);
+            if (stdEntry) initPrice = stdEntry.eaCost;
+          }
           materialAgg.set(childKey, {
             name: leaf.childName || nameMap.get(childKey) || childKey,
             type: matType,
             monthlyQty: mq,
             parents: new Set([forecastPn]),
-            unitPrice: priceMap.get(childKey) || 0,
+            unitPrice: initPrice,
           });
         }
       }
@@ -433,6 +441,23 @@ export function calculateMRP(
         }
       }
     }
+    // 매입단가 폴백: 6) 표준재료비 EA단가 (BOM 리프가 제품코드인 경우)
+    if (unitPrice <= 0) {
+      const stdEntry = stdCostMap.get(code);
+      if (stdEntry && stdEntry.eaCost > 0) {
+        unitPrice = stdEntry.eaCost;
+        unit = 'EA';
+      }
+    }
+    // 매입단가 폴백: 7) 표준재료비 - 자재명으로 제품코드/고객사PN 검색
+    if (unitPrice <= 0 && agg.name && agg.name !== code) {
+      const nameKey = normalizePn(agg.name);
+      const stdEntry = stdCostMap.get(nameKey);
+      if (stdEntry && stdEntry.eaCost > 0) {
+        unitPrice = stdEntry.eaCost;
+        unit = 'EA';
+      }
+    }
 
     // 자재명 보강
     let materialName = agg.name;
@@ -475,6 +500,7 @@ export function calculateMRP(
   const totalRequiredQty = materials.reduce((s, m) => s + m.requiredQty, 0);
   const totalCost = materials.reduce((s, m) => s + m.totalCost, 0);
   const totalForecastProducts = forecastQtyMap.size;
+  const noPriceMaterials = materials.filter(m => m.unitPrice <= 0).length;
 
   return {
     materials,
@@ -488,6 +514,8 @@ export function calculateMRP(
       fuzzyMatchedProducts: fuzzyMatched,
       matchedProducts: matchedProducts + directCostProducts,
       directCostProducts,
+      noPriceMaterials,
+      priceMatchRate: materials.length > 0 ? (materials.length - noPriceMaterials) / materials.length : 0,
     },
   };
 }

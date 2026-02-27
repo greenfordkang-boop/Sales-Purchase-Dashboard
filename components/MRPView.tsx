@@ -151,7 +151,9 @@ const MRPView: React.FC = () => {
     if (!mrpResult) return [];
     let result = mrpResult.materials;
 
-    if (filterType !== 'All') {
+    if (filterType === '__NO_PRICE__') {
+      result = result.filter(m => m.unitPrice <= 0);
+    } else if (filterType !== 'All') {
       result = result.filter(m => m.materialType === filterType);
     }
     if (filterText) {
@@ -243,17 +245,19 @@ const MRPView: React.FC = () => {
   return (
     <div className="space-y-4">
       {/* 메트릭 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         <MetricCard label="총 소요자재" value={`${summary.totalMaterials.toLocaleString()}종`} />
         <MetricCard
           label="BOM 매칭률"
           value={`${(summary.bomMatchRate * 100).toFixed(1)}%`}
         />
-        <MetricCard label="매칭 제품" value={`${summary.matchedProducts.toLocaleString()}건`} />
-        {summary.directCostProducts > 0 && (
-          <MetricCard label="표준재료비 적용" value={`${summary.directCostProducts}건`} />
+        <MetricCard
+          label="단가 매칭률"
+          value={`${(summary.priceMatchRate * 100).toFixed(1)}%`}
+        />
+        {summary.noPriceMaterials > 0 && (
+          <MetricCard label="단가 미매칭" value={`${summary.noPriceMaterials}종`} />
         )}
-        <MetricCard label="미매칭" value={`${summary.unmatchedProducts.length.toLocaleString()}건`} />
         <MetricCard
           label="총 소요원가"
           value={`${summary.totalCost > 0 ? (summary.totalCost / 100000000).toFixed(1) : '0'}억원`}
@@ -320,6 +324,7 @@ const MRPView: React.FC = () => {
           <option value="PAINT">PAINT</option>
           <option value="구매">구매</option>
           <option value="외주">외주</option>
+          <option value="__NO_PRICE__">단가없음</option>
         </select>
         <input
           type="text"
@@ -398,7 +403,7 @@ const MRPView: React.FC = () => {
                 {filteredMaterials.slice(0, 300).map((m, idx) => (
                   <tr
                     key={idx}
-                    className={`hover:bg-blue-50 cursor-pointer ${selectedMaterial?.materialCode === m.materialCode ? 'bg-blue-50' : ''}`}
+                    className={`hover:bg-blue-50 cursor-pointer ${selectedMaterial?.materialCode === m.materialCode ? 'bg-blue-50' : m.unitPrice <= 0 ? 'bg-red-50' : ''}`}
                     onClick={() => setSelectedMaterial(selectedMaterial?.materialCode === m.materialCode ? null : m)}
                   >
                     <td className="px-3 py-1.5 font-mono text-gray-700">{m.materialCode}</td>
