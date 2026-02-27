@@ -334,9 +334,10 @@ const MRPView: React.FC = () => {
                     { key: 'materialCode', label: '자재코드' },
                     { key: 'materialName', label: '자재명' },
                     { key: 'materialType', label: '유형' },
+                    { key: 'unit', label: '단위' },
                     { key: 'requiredQty', label: '총소요량', align: 'right' },
-                    { key: 'unitPrice', label: '단가', align: 'right' },
-                    { key: 'totalCost', label: '총원가', align: 'right' },
+                    { key: 'unitPrice', label: '단가(₩)', align: 'right' },
+                    { key: 'totalCost', label: '총원가(₩)', align: 'right' },
                     { key: 'parentProducts', label: '관련제품', align: 'right' },
                     ...Array.from({ length: 12 }, (_, i) => ({
                       key: `month_${i}`,
@@ -376,12 +377,16 @@ const MRPView: React.FC = () => {
                         {m.materialType}
                       </span>
                     </td>
-                    <td className="px-3 py-1.5 text-right text-gray-600">{m.requiredQty.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 text-gray-500 text-center">{m.unit || '-'}</td>
                     <td className="px-3 py-1.5 text-right text-gray-600">
-                      {m.unitPrice > 0 ? m.unitPrice.toLocaleString() : '-'}
+                      {m.requiredQty.toLocaleString()}
+                      {m.unit && <span className="text-[10px] text-gray-400 ml-0.5">{m.unit}</span>}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-gray-600">
+                      {m.unitPrice > 0 ? `₩${Math.round(m.unitPrice).toLocaleString()}` : '-'}
                     </td>
                     <td className="px-3 py-1.5 text-right text-gray-700 font-medium">
-                      {m.totalCost > 0 ? (m.totalCost / 10000).toFixed(0) + '만' : '-'}
+                      {m.totalCost > 0 ? `₩${Math.round(m.totalCost).toLocaleString()}` : '-'}
                     </td>
                     <td className="px-3 py-1.5 text-right text-gray-500">{m.parentProducts.length}</td>
                     {Array.from({ length: 12 }, (_, i) => (

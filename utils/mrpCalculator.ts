@@ -10,6 +10,7 @@ export interface MRPMaterialRow {
   materialCode: string;
   materialName: string;
   materialType: string;       // RESIN / PAINT / 구매 / 외주
+  unit: string;                // 단위 (kg, EA, L 등)
   requiredQty: number;         // 총 소요량
   unitPrice: number;           // 재질 단가
   totalCost: number;           // 소요량 × 단가
@@ -119,11 +120,13 @@ export function calculateMRP(
   const priceMap = new Map<string, number>();
   const nameMap = new Map<string, string>();
   const typeMap = new Map<string, string>();
+  const unitMap = new Map<string, string>();
   for (const mc of materialCodes) {
     const key = normalizePn(mc.materialCode);
     if (mc.currentPrice > 0) priceMap.set(key, mc.currentPrice);
     if (mc.materialName) nameMap.set(key, mc.materialName);
     if (mc.materialType) typeMap.set(key, mc.materialType);
+    if (mc.unit) unitMap.set(key, mc.unit);
   }
 
   // 5. 기준정보에서 자재유형 분류 보조 맵
@@ -218,6 +221,7 @@ export function calculateMRP(
       materialCode: code,
       materialName: agg.name,
       materialType: agg.type,
+      unit: unitMap.get(code) || '',
       requiredQty: totalQty,
       unitPrice: agg.unitPrice,
       totalCost: totalQty * agg.unitPrice,
