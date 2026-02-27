@@ -8,6 +8,8 @@ import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRe
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
 import { downloadCSV } from '../utils/csvExport';
 import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService } from '../services/supabaseService';
+import fallbackMaterialCodes from '../data/materialCodes.json';
+import fallbackPurchasePrices from '../data/purchasePrices.json';
 
 // ============================================================
 // Constants
@@ -79,7 +81,51 @@ const MRPView: React.FC = () => {
         return;
       }
 
-      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, materialCodes, purchaseData);
+      // 재질코드 데이터 보강: 서비스 데이터 + 내장 재질단가 병합
+      const pricedFromService = materialCodes.filter(m => m.currentPrice > 0).length;
+      let mergedMaterialCodes = materialCodes;
+      if (pricedFromService === 0 && fallbackMaterialCodes.length > 0) {
+        // 서비스에 단가가 없으면 내장 재질단가를 사용
+        const existingCodes = new Set(materialCodes.map(m => m.materialCode.trim().toUpperCase()));
+        const merged = [...materialCodes];
+        for (const fb of fallbackMaterialCodes) {
+          const key = fb.materialCode.trim().toUpperCase();
+          if (!existingCodes.has(key)) {
+            merged.push(fb);
+            existingCodes.add(key);
+          } else if (fb.currentPrice > 0) {
+            // 기존 항목에 단가만 업데이트
+            const idx = merged.findIndex(m => m.materialCode.trim().toUpperCase() === key);
+            if (idx >= 0 && merged[idx].currentPrice <= 0) {
+              merged[idx] = { ...merged[idx], currentPrice: fb.currentPrice };
+            }
+          }
+        }
+        mergedMaterialCodes = merged;
+        console.log(`[MRP] 재질단가 보강: 서비스 ${materialCodes.length}개 + 내장 ${fallbackMaterialCodes.length}개 → ${merged.length}개 (단가 ${merged.filter(m => m.currentPrice > 0).length}개)`);
+      }
+
+      // 구매단가 보강: 내장 구매단가를 purchaseData에 병합
+      const existingPartNos = new Set(purchaseData.map(p => p.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '')));
+      let addedPurchase = 0;
+      const mergedPurchaseData = [...purchaseData];
+      for (const fp of fallbackPurchasePrices) {
+        const key = fp.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+        if (!existingPartNos.has(key)) {
+          mergedPurchaseData.push({
+            partNo: fp.partNo, partName: fp.partName, unit: fp.unit, unitPrice: fp.unitPrice,
+            year: 2026, month: '1월', supplier: '', spec: '', salesQty: 0, closingQty: 0,
+            amount: 0, location: '', costType: '', purchaseType: '구매', materialType: '', process: '', customer: '',
+          } as any);
+          existingPartNos.add(key);
+          addedPurchase++;
+        }
+      }
+      if (addedPurchase > 0) {
+        console.log(`[MRP] 구매단가 보강: 기존 ${purchaseData.length}건 + 내장 ${addedPurchase}건 → ${mergedPurchaseData.length}건`);
+      }
+
+      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData);
       setMrpResult(result);
     } catch (err) {
       console.error('MRP 계산 실패:', err);
@@ -433,12 +479,43 @@ const MRPView: React.FC = () => {
         </div>
       )}
 
+      {/* 퍼지 매칭 결과 */}
+      {summary.fuzzyMatchedProducts && summary.fuzzyMatchedProducts.length > 0 && (
+        <div className="bg-blue-50 rounded-lg shadow p-4">
+          <h3 className="text-sm font-semibold text-blue-700 mb-2">
+            퍼지 매칭 ({summary.fuzzyMatchedProducts.length}건) - 유사 BOM 사용
+          </h3>
+          <div className="flex flex-wrap gap-1">
+            {summary.fuzzyMatchedProducts.map((desc, i) => (
+              <span key={i} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-mono">
+                {desc}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 미매칭 제품 */}
       {summary.unmatchedProducts.length > 0 && (
         <div className="bg-orange-50 rounded-lg shadow p-4">
-          <h3 className="text-sm font-semibold text-orange-700 mb-2">
-            BOM 미매칭 제품 ({summary.unmatchedProducts.length}건)
-          </h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-orange-700">
+              BOM 미매칭 제품 ({summary.unmatchedProducts.length}건)
+            </h3>
+            <button
+              onClick={() => {
+                const csv = 'NEW_PN\n' + summary.unmatchedProducts.join('\n');
+                const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'BOM_미매칭_리스트.csv'; a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="text-xs px-2 py-1 bg-orange-200 text-orange-800 rounded hover:bg-orange-300"
+            >
+              CSV 다운로드
+            </button>
+          </div>
           <div className="flex flex-wrap gap-1">
             {summary.unmatchedProducts.slice(0, 30).map((pn, i) => (
               <span key={i} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-[10px] font-mono">

@@ -28,6 +28,7 @@ export interface MRPResult {
     totalCost: number;
     bomMatchRate: number;
     unmatchedProducts: string[];
+    fuzzyMatchedProducts: string[];
     matchedProducts: number;
   };
 }
@@ -188,6 +189,16 @@ export function calculateMRP(
   let matchedProducts = 0;
   const unmatchedProducts: string[] = [];
 
+  // BOM parent 접두사 인덱스 구축 (퍼지 매칭용)
+  const bomPrefixIndex = new Map<string, string>();  // prefix → first BOM key
+  for (const bk of bomRelations.keys()) {
+    for (let len = 8; len <= bk.length; len++) {
+      const p = bk.slice(0, len);
+      if (!bomPrefixIndex.has(p)) bomPrefixIndex.set(p, bk);
+    }
+  }
+  const fuzzyMatched: string[] = [];
+
   for (const [forecastPn, monthlyQty] of forecastQtyMap.entries()) {
     // BOM에서 parent 찾기: forecast P/N 직접 or 매핑 변환
     let bomParent = forecastPn;
@@ -199,6 +210,19 @@ export function calculateMRP(
         const cust = internalToCust.get(forecastPn);
         if (cust && bomRelations.has(cust)) {
           bomParent = cust;
+        }
+      }
+    }
+
+    // 퍼지 매칭: 접두사 유사도 (같은 모델+파트, 다른 색상/리비전)
+    if (!bomRelations.has(bomParent) && bomParent.length >= 10) {
+      for (let prefixLen = bomParent.length - 1; prefixLen >= 8; prefixLen--) {
+        const prefix = bomParent.slice(0, prefixLen);
+        const candidate = bomPrefixIndex.get(prefix);
+        if (candidate && bomRelations.has(candidate)) {
+          fuzzyMatched.push(`${forecastPn} → ${candidate} (prefix ${prefixLen})`);
+          bomParent = candidate;
+          break;
         }
       }
     }
@@ -251,6 +275,14 @@ export function calculateMRP(
         }
       }
     }
+  }
+
+  // 퍼지 매칭 결과 로그
+  if (fuzzyMatched.length > 0) {
+    console.log(`[MRP] 퍼지 매칭: ${fuzzyMatched.length}건\n  ${fuzzyMatched.join('\n  ')}`);
+  }
+  if (unmatchedProducts.length > 0) {
+    console.log(`[MRP] BOM 미매칭: ${unmatchedProducts.length}건 (Forecast ${forecastQtyMap.size}개 중)`);
   }
 
   // 7. 결과 구성
@@ -416,7 +448,8 @@ export function calculateMRP(
       totalRequiredQty,
       totalCost,
       bomMatchRate: totalForecastProducts > 0 ? matchedProducts / totalForecastProducts : 0,
-      unmatchedProducts: unmatchedProducts.slice(0, 50),
+      unmatchedProducts: unmatchedProducts.slice(0, 100),
+      fuzzyMatchedProducts: fuzzyMatched,
       matchedProducts,
     },
   };
