@@ -219,29 +219,48 @@ export function calculateMRP(
   for (const [code, agg] of materialAgg.entries()) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
 
+    // 기준정보 조회 (단위/단가/이름 공통)
+    const ri = refInfoMap.get(code);
+    const rawCodes = ri
+      ? [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean)
+      : [];
+
     // 단위 조회: 1) 직접 매칭 2) 기준정보→원재료코드→재질코드 단위 3) 유형 기본값
     let unit = unitMap.get(code);
     if (!unit) {
-      const ri = refInfoMap.get(code);
-      if (ri) {
-        for (const rawCode of [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4]) {
-          if (rawCode) {
-            const u = unitMap.get(normalizePn(rawCode));
-            if (u) { unit = u; break; }
-          }
-        }
+      for (const rawCode of rawCodes) {
+        const u = unitMap.get(normalizePn(rawCode));
+        if (u) { unit = u; break; }
       }
     }
     if (!unit) unit = DEFAULT_UNITS[agg.type] || 'EA';
 
+    // 단가 조회: 1) 직접 매칭 2) 기준정보→원재료코드→재질코드 단가 3) 0
+    let unitPrice = priceMap.get(code) || 0;
+    if (unitPrice <= 0) {
+      for (const rawCode of rawCodes) {
+        const p = priceMap.get(normalizePn(rawCode));
+        if (p && p > 0) { unitPrice = p; break; }
+      }
+    }
+
+    // 자재명 보강: agg.name이 코드값 자체일 때 재질코드 이름으로 대체
+    let materialName = agg.name;
+    if (materialName === code) {
+      for (const rawCode of rawCodes) {
+        const n = nameMap.get(normalizePn(rawCode));
+        if (n) { materialName = n; break; }
+      }
+    }
+
     materials.push({
       materialCode: code,
-      materialName: agg.name,
+      materialName,
       materialType: agg.type,
       unit,
       requiredQty: Math.round(totalQty),
-      unitPrice: agg.unitPrice,
-      totalCost: totalQty * agg.unitPrice,
+      unitPrice,
+      totalCost: totalQty * unitPrice,
       parentProducts: Array.from(agg.parents),
       monthlyQty: agg.monthlyQty,
     });
