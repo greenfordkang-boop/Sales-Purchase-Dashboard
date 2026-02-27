@@ -214,12 +214,25 @@ export function calculateMRP(
   }
 
   // 7. 결과 구성
+  const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
   const materials: MRPMaterialRow[] = [];
   for (const [code, agg] of materialAgg.entries()) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
-    // 단위: 재질코드 마스터 → 유형별 기본값 폴백
-    const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
-    const unit = unitMap.get(code) || DEFAULT_UNITS[agg.type] || 'EA';
+
+    // 단위 조회: 1) 직접 매칭 2) 기준정보→원재료코드→재질코드 단위 3) 유형 기본값
+    let unit = unitMap.get(code);
+    if (!unit) {
+      const ri = refInfoMap.get(code);
+      if (ri) {
+        for (const rawCode of [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4]) {
+          if (rawCode) {
+            const u = unitMap.get(normalizePn(rawCode));
+            if (u) { unit = u; break; }
+          }
+        }
+      }
+    }
+    if (!unit) unit = DEFAULT_UNITS[agg.type] || 'EA';
 
     materials.push({
       materialCode: code,
