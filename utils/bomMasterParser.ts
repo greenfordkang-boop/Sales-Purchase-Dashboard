@@ -145,7 +145,7 @@ const MATERIAL_CODE_HEADERS: Record<string, RegExp> = {
   materialType: /^재질분류$|^재질구분$|material.*type/i,
   unit: /^단위$|^unit$/i,
   lossRate: /loss.*율|loss.*rate|^로스율/i,
-  currentPrice: /현재단가|current.*price|^단가$|^가격$/i,
+  currentPrice: /단가|가격|price/i,
 };
 
 // ============================================
@@ -300,6 +300,8 @@ export function parseMaterialCodeSheet(rows: unknown[][]): MaterialCodeRecord[] 
 
   const headers = rows[headerIdx].map(c => strVal(c));
   const m = matchHeaders(headers, MATERIAL_CODE_HEADERS);
+  console.log(`[재질코드 파싱] 헤더(row ${headerIdx}):`, headers.filter(Boolean).join(' | '));
+  console.log(`[재질코드 파싱] 매칭결과:`, JSON.stringify(m));
   if (m.materialCode === undefined) return [];
 
   const results: MaterialCodeRecord[] = [];

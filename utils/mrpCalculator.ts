@@ -1,6 +1,7 @@
 import { BomRecord, buildBomRelations, expandBomToLeaves } from './bomDataParser';
 import { ForecastItem } from './salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from './bomMasterParser';
+import { PurchaseMonthlySummary } from './purchaseSummaryTypes';
 
 // ============================================
 // Types
@@ -100,7 +101,7 @@ export function calculateMRP(
   productCodes: ProductCodeRecord[],
   refInfo: ReferenceInfoRecord[],
   materialCodes: MaterialCodeRecord[],
-  options?: { year?: number; months?: number[] },
+  purchaseData?: PurchaseMonthlySummary[],
 ): MRPResult {
   // 1. Forecast 수량 맵 구축
   const forecastQtyMap = buildForecastQtyMap(forecastData);
@@ -116,7 +117,7 @@ export function calculateMRP(
   }));
   const bomRelations = buildBomRelations(normalizedBom);
 
-  // 4. 재질코드 가격 맵
+  // 4. 재질코드 맵 (이름/유형/단위)
   const priceMap = new Map<string, number>();
   const nameMap = new Map<string, string>();
   const typeMap = new Map<string, string>();
@@ -127,6 +128,25 @@ export function calculateMRP(
     if (mc.materialName) nameMap.set(key, mc.materialName);
     if (mc.materialType) typeMap.set(key, mc.materialType);
     if (mc.unit) unitMap.set(key, mc.unit);
+  }
+
+  // 4-1. 매입단가 맵 구축 (partNo → 최신 단가)
+  const purchasePriceMap = new Map<string, { price: number; unit: string; name: string }>();
+  if (purchaseData && purchaseData.length > 0) {
+    for (const row of purchaseData) {
+      if (!row.partNo || row.unitPrice <= 0) continue;
+      const key = normalizePn(row.partNo);
+      const existing = purchasePriceMap.get(key);
+      // 같은 P/N이면 최신(더 큰 금액)으로 갱신
+      if (!existing || row.unitPrice > 0) {
+        purchasePriceMap.set(key, {
+          price: row.unitPrice,
+          unit: row.unit || '',
+          name: row.partName || '',
+        });
+      }
+    }
+    console.log(`[MRP] 매입단가 맵: ${purchasePriceMap.size}개 (매입 원본: ${purchaseData.length}건)`);
   }
 
   // 5. 기준정보에서 자재유형 분류 보조 맵
@@ -214,6 +234,10 @@ export function calculateMRP(
   }
 
   // 7. 결과 구성
+  // 디버그: 가격 매칭 현황
+  let priceMatchCount = 0;
+  let refInfoMatchCount = 0;
+  let rawCodeMatchCount = 0;
   const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
   const materials: MRPMaterialRow[] = [];
   for (const [code, agg] of materialAgg.entries()) {
@@ -235,7 +259,7 @@ export function calculateMRP(
     }
     if (!unit) unit = DEFAULT_UNITS[agg.type] || 'EA';
 
-    // 단가 조회: 1) 직접 매칭 2) 기준정보→원재료코드→재질코드 단가 3) 0
+    // 단가 조회: 1) 재질코드 직접 2) rawMaterialCode 경유 3) 매입단가 4) 0
     let unitPrice = priceMap.get(code) || 0;
     if (unitPrice <= 0) {
       for (const rawCode of rawCodes) {
@@ -243,13 +267,34 @@ export function calculateMRP(
         if (p && p > 0) { unitPrice = p; break; }
       }
     }
+    // 매입단가 폴백
+    if (unitPrice <= 0) {
+      const pp = purchasePriceMap.get(code);
+      if (pp && pp.price > 0) {
+        unitPrice = pp.price;
+        if (!unit || unit === DEFAULT_UNITS[agg.type]) unit = pp.unit || unit;
+      }
+    }
+    // rawMaterialCode로 매입단가 조회
+    if (unitPrice <= 0) {
+      for (const rawCode of rawCodes) {
+        const pp = purchasePriceMap.get(normalizePn(rawCode));
+        if (pp && pp.price > 0) { unitPrice = pp.price; break; }
+      }
+    }
 
-    // 자재명 보강: agg.name이 코드값 자체일 때 재질코드 이름으로 대체
+    // 자재명 보강
     let materialName = agg.name;
     if (materialName === code) {
-      for (const rawCode of rawCodes) {
-        const n = nameMap.get(normalizePn(rawCode));
-        if (n) { materialName = n; break; }
+      // 매입 데이터에서 이름 가져오기
+      const pp = purchasePriceMap.get(code);
+      if (pp && pp.name) {
+        materialName = pp.name;
+      } else {
+        for (const rawCode of rawCodes) {
+          const n = nameMap.get(normalizePn(rawCode));
+          if (n) { materialName = n; break; }
+        }
       }
     }
 
@@ -265,6 +310,10 @@ export function calculateMRP(
       monthlyQty: agg.monthlyQty,
     });
   }
+
+  // 디버그: 가격 매칭 결과
+  const pricedCount = materials.filter(m => m.unitPrice > 0).length;
+  console.log(`[MRP] 가격 매칭: ${pricedCount}/${materials.length}건 (재질코드: ${priceMap.size}, 매입단가: ${purchasePriceMap.size})`);
 
   // 정렬: 총 소요량 내림차순
   materials.sort((a, b) => b.requiredQty - a.requiredQty);
