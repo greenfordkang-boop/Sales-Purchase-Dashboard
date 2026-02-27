@@ -664,7 +664,7 @@ const PurchaseView: React.FC = () => {
                     월별 매입 금액 추이 ({selectedYears.join(', ')})
                 </h3>
                 <div className="h-[320px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer minWidth={0} width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 30, right: 20, bottom: 20, left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500}} />
@@ -708,7 +708,7 @@ const PurchaseView: React.FC = () => {
                     </select>
                 </div>
                 <div className="flex-1 min-h-[300px] flex items-center justify-center relative">
-                     <ResponsiveContainer width="100%" height="100%">
+                     <ResponsiveContainer minWidth={0} width="100%" height="100%">
                         <PieChart>
                         <Pie
                             data={typeShareData}

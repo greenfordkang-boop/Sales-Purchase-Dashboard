@@ -981,7 +981,7 @@ const MaterialYieldView: React.FC = () => {
           </h3>
           {deviationChartData.length > 0 ? (
             <div className="h-[320px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer minWidth={0} width="100%" height="100%">
                 <BarChart data={deviationChartData} layout="vertical" margin={{ top: 10, right: 30, bottom: 10, left: 80 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                   <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} tickFormatter={v => `${v > 0 ? '+' : ''}${v}%`} />
@@ -1011,7 +1011,7 @@ const MaterialYieldView: React.FC = () => {
           </h3>
           {statusPieData.length > 0 ? (
             <div className="flex-1 min-h-[300px] flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer minWidth={0} width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={statusPieData}

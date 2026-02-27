@@ -1164,7 +1164,7 @@ const SalesView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
           <div className="h-[400px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer minWidth={0} width="100%" height="100%">
               <ComposedChart data={qtyChartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} />
@@ -1291,7 +1291,7 @@ const SalesView: React.FC = () => {
                 월별 매출 추이 {revenueMetrics.hasForecast && <span className="text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">계획 vs 실적</span>}
               </h3>
               <div className="h-[350px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer minWidth={0} width="100%" height="100%">
                   <ComposedChart data={revenueMetrics.chartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
                     <defs>
                       <linearGradient id="gradPlan" x1="0" y1="0" x2="0" y2="1">
@@ -1627,7 +1627,7 @@ const SalesView: React.FC = () => {
                     <div className="flex-1">
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">상태별 분포</p>
                         <div className="h-24 w-full">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer minWidth={0} width="100%" height="100%">
                                 <BarChart data={rfqMetrics.chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                                     <XAxis 
                                         dataKey="status" 

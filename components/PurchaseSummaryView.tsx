@@ -506,7 +506,7 @@ const PurchaseSummaryView: React.FC = () => {
         {/* Monthly Amount Bar Chart */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-700 mb-3">월별 매입금액 ({selectedYear}년)</h3>
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer minWidth={0} width="100%" height={240}>
             <BarChart data={monthlyChartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -521,7 +521,7 @@ const PurchaseSummaryView: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-sm font-bold text-slate-700 mb-3">공정별 매입비중</h3>
           {processChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
+            <ResponsiveContainer minWidth={0} width="100%" height={240}>
               <PieChart>
                 <Pie data={processChartData} dataKey="value" nameKey="name" cx="50%" cy="50%"
                   outerRadius={80} innerRadius={40} label={({ name, percent }: any) => `${name} ${(percent * 100).toFixed(0)}%`}
@@ -539,7 +539,7 @@ const PurchaseSummaryView: React.FC = () => {
       {customerChartData.length > 0 && (
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
           <h3 className="text-sm font-bold text-slate-700 mb-3">고객사별 매입금액</h3>
-          <ResponsiveContainer width="100%" height={200}>
+          <ResponsiveContainer minWidth={0} width="100%" height={200}>
             <BarChart data={customerChartData} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis type="number" tickFormatter={(v: number) => formatAmount(v)} tick={{ fontSize: 10 }} />

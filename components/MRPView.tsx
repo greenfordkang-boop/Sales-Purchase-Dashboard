@@ -231,7 +231,7 @@ const MRPView: React.FC = () => {
         {/* 월별 소요량 바차트 */}
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">월별 소요량</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer minWidth={0} width="100%" height={250}>
             <BarChart data={byMonth}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -248,7 +248,7 @@ const MRPView: React.FC = () => {
         {/* 자재유형별 파이차트 */}
         <div className="bg-white rounded-lg shadow p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">자재유형별 분포</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer minWidth={0} width="100%" height={250}>
             <PieChart>
               <Pie
                 data={typeDistribution}
@@ -423,7 +423,7 @@ const MRPView: React.FC = () => {
           </div>
 
           {/* 월별 소요량 바차트 */}
-          <ResponsiveContainer width="100%" height={150}>
+          <ResponsiveContainer minWidth={0} width="100%" height={150}>
             <BarChart data={selectedMaterial.monthlyQty.map((q, i) => ({ month: `${i + 1}월`, qty: q }))}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />

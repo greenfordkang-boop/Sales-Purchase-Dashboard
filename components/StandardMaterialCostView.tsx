@@ -2810,7 +2810,7 @@ const StandardMaterialCostView: React.FC = () => {
             {/* 재료유형별 표준 vs 실적 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 실적</h3>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer minWidth={0} width="100%" height={280}>
                 <BarChart data={calc.byType} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fontWeight: 600 }} />
@@ -2826,7 +2826,7 @@ const StandardMaterialCostView: React.FC = () => {
             {/* 재료유형별 구성 파이 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <h3 className="text-sm font-bold text-slate-700 mb-4">표준재료비 구성</h3>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer minWidth={0} width="100%" height={280}>
                 <PieChart>
                   <Pie data={calc.byType} cx="50%" cy="50%" outerRadius={100} innerRadius={55} paddingAngle={3} dataKey="standard"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}>
@@ -2847,7 +2847,7 @@ const StandardMaterialCostView: React.FC = () => {
               </h3>
 
               {/* Combo Chart: Bar(금액) + Line(비율) */}
-              <ResponsiveContainer width="100%" height={320}>
+              <ResponsiveContainer minWidth={0} width="100%" height={320}>
                 <ComposedChart data={monthlySummary} margin={{ top: 10, right: 60, bottom: 10, left: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fontWeight: 600 }} />
@@ -3365,7 +3365,7 @@ const StandardMaterialCostView: React.FC = () => {
 
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <h3 className="text-sm font-bold text-slate-700 mb-4">협력업체별 표준재료비 Top 15</h3>
-              <ResponsiveContainer width="100%" height={350}>
+              <ResponsiveContainer minWidth={0} width="100%" height={350}>
                 <BarChart data={autoAnalysis.bySupplier} layout="vertical" margin={{ left: 100 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis type="number" tickFormatter={v => formatWon(v as number)} tick={{ fontSize: 10 }} />
@@ -3428,7 +3428,7 @@ const StandardMaterialCostView: React.FC = () => {
 
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 실적</h3>
-              <ResponsiveContainer width="100%" height={280}>
+              <ResponsiveContainer minWidth={0} width="100%" height={280}>
                 <BarChart data={[
                   { name: 'RESIN', 표준: exSummary.standardResin, 실적: exSummary.actualResin },
                   { name: 'PAINT', 표준: exSummary.standardPaint, 실적: exSummary.actualPaint },

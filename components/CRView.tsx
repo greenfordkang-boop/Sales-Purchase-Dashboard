@@ -671,7 +671,7 @@ const CRView: React.FC = () => {
         {/* Monthly Chart */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
           <h3 className="text-sm font-black text-slate-800 mb-4">CI 금액 월별 추이 (백만원)</h3>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer minWidth={0} width="100%" height={220}>
             <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
@@ -692,7 +692,7 @@ const CRView: React.FC = () => {
           <h3 className="text-sm font-black text-slate-800 mb-4">품목별 CI 실적</h3>
           {categoryChartData.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={180}>
+              <ResponsiveContainer minWidth={0} width="100%" height={180}>
                 <PieChart>
                   <Pie
                     data={categoryChartData}
