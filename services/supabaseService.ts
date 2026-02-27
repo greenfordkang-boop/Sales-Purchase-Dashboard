@@ -1081,33 +1081,39 @@ export const purchaseItemMasterService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const pageSize = 1000;
-    let from = 0;
-    let allRows: any[] = [];
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      let allRows: any[] = [];
 
-    while (true) {
-      const { data, error } = await supabase!
-        .from('purchase_item_master')
-        .select('*')
-        .order('part_no')
-        .range(from, from + pageSize - 1);
+      while (true) {
+        const { data, error } = await supabase!
+          .from('purchase_item_master')
+          .select('*')
+          .order('part_no')
+          .range(from, from + pageSize - 1);
 
-      if (error) { handleError(error, 'purchaseItemMaster getAll'); break; }
-      if (!data || data.length === 0) break;
-      allRows = allRows.concat(data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return allRows.map((row: any) => ({
+        id: row.id,
+        partNo: row.part_no || '',
+        costType: row.cost_type || '',
+        purchaseType: row.purchase_type || '',
+        materialType: row.material_type || '',
+        process: row.process || '',
+        customer: row.customer || '',
+      }));
+    } catch {
+      // Table may not exist – fall back to localStorage
+      const stored = localStorage.getItem('dashboard_purchaseItemMaster');
+      return stored ? JSON.parse(stored) : [];
     }
-
-    return allRows.map((row: any) => ({
-      id: row.id,
-      partNo: row.part_no || '',
-      costType: row.cost_type || '',
-      purchaseType: row.purchase_type || '',
-      materialType: row.material_type || '',
-      process: row.process || '',
-      customer: row.customer || '',
-    }));
   },
 
   async getMap(): Promise<Map<string, PurchaseItemMaster>> {
@@ -1187,50 +1193,57 @@ export const purchaseSummaryService = {
       return year ? all.filter(d => d.year === year) : all;
     }
 
-    const pageSize = 1000;
-    let from = 0;
-    let allRows: any[] = [];
+    try {
+      const pageSize = 1000;
+      let from = 0;
+      let allRows: any[] = [];
 
-    while (true) {
-      let query = supabase!
-        .from('purchase_monthly_summary')
-        .select('*')
-        .order('month')
-        .order('supplier')
-        .range(from, from + pageSize - 1);
+      while (true) {
+        let query = supabase!
+          .from('purchase_monthly_summary')
+          .select('*')
+          .order('month')
+          .order('supplier')
+          .range(from, from + pageSize - 1);
 
-      if (year) query = query.eq('year', year);
+        if (year) query = query.eq('year', year);
 
-      const { data, error } = await query;
-      if (error) { handleError(error, 'purchaseSummary getAll'); break; }
-      if (!data || data.length === 0) break;
-      allRows = allRows.concat(data);
-      if (data.length < pageSize) break;
-      from += pageSize;
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows = allRows.concat(data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      return allRows.map((row: any) => ({
+        id: row.id,
+        year: row.year,
+        month: row.month || '',
+        supplier: row.supplier || '',
+        partNo: row.part_no || '',
+        partName: row.part_name || '',
+        spec: row.spec || '',
+        unit: row.unit || '',
+        salesQty: Number(row.sales_qty) || 0,
+        closingQty: Number(row.closing_qty) || 0,
+        unitPrice: Number(row.unit_price) || 0,
+        amount: Number(row.amount) || 0,
+        location: row.location || '',
+        costType: row.cost_type || '',
+        purchaseType: row.purchase_type || '',
+        materialType: row.material_type || '',
+        process: row.process || '',
+        customer: row.customer || '',
+        remark: row.remark || '',
+        closingMonth: row.closing_month || '',
+      }));
+    } catch {
+      // Table may not exist – fall back to localStorage
+      const stored = localStorage.getItem('dashboard_purchaseSummary');
+      const all: PurchaseMonthlySummary[] = stored ? JSON.parse(stored) : [];
+      return year ? all.filter(d => d.year === year) : all;
     }
-
-    return allRows.map((row: any) => ({
-      id: row.id,
-      year: row.year,
-      month: row.month || '',
-      supplier: row.supplier || '',
-      partNo: row.part_no || '',
-      partName: row.part_name || '',
-      spec: row.spec || '',
-      unit: row.unit || '',
-      salesQty: Number(row.sales_qty) || 0,
-      closingQty: Number(row.closing_qty) || 0,
-      unitPrice: Number(row.unit_price) || 0,
-      amount: Number(row.amount) || 0,
-      location: row.location || '',
-      costType: row.cost_type || '',
-      purchaseType: row.purchase_type || '',
-      materialType: row.material_type || '',
-      process: row.process || '',
-      customer: row.customer || '',
-      remark: row.remark || '',
-      closingMonth: row.closing_month || '',
-    }));
   },
 
   async saveByYearMonth(data: PurchaseMonthlySummary[], year: number, month: string): Promise<void> {
