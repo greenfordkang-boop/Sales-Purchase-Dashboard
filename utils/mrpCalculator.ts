@@ -217,12 +217,16 @@ export function calculateMRP(
   const materials: MRPMaterialRow[] = [];
   for (const [code, agg] of materialAgg.entries()) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
+    // 단위: 재질코드 마스터 → 유형별 기본값 폴백
+    const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
+    const unit = unitMap.get(code) || DEFAULT_UNITS[agg.type] || 'EA';
+
     materials.push({
       materialCode: code,
       materialName: agg.name,
       materialType: agg.type,
-      unit: unitMap.get(code) || '',
-      requiredQty: totalQty,
+      unit,
+      requiredQty: Math.round(totalQty),
       unitPrice: agg.unitPrice,
       totalCost: totalQty * agg.unitPrice,
       parentProducts: Array.from(agg.parents),

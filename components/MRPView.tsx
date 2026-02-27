@@ -391,7 +391,7 @@ const MRPView: React.FC = () => {
                     <td className="px-3 py-1.5 text-right text-gray-500">{m.parentProducts.length}</td>
                     {Array.from({ length: 12 }, (_, i) => (
                       <td key={i} className={`px-3 py-1.5 text-right font-mono ${m.monthlyQty[i] > 0 ? 'text-gray-700' : 'text-gray-300'}`}>
-                        {m.monthlyQty[i] > 0 ? m.monthlyQty[i].toLocaleString() : '-'}
+                        {m.monthlyQty[i] > 0 ? Math.round(m.monthlyQty[i]).toLocaleString() : '-'}
                       </td>
                     ))}
                   </tr>
