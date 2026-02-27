@@ -36,7 +36,7 @@ const PurchaseView: React.FC = () => {
         if (needsMigration) {
           console.log(`[구매데이터 마이그레이션] 재파싱합니다. (기존: ${parsed.length}건, 내장: ${freshCount}건)`);
           const fresh = [...freshParts, ...freshMaterials];
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(fresh));
+          try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(fresh)); } catch { /* quota */ }
           return fresh;
         }
         return parsed;
@@ -100,11 +100,11 @@ const PurchaseView: React.FC = () => {
             const missingData = freshData.filter(d => missingMonths.includes(`${d.year}-${d.month}`));
             const merged = [...supabaseData, ...missingData];
             setPurchaseData(merged);
-            localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged));
+            try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(merged)); } catch { /* quota */ }
             console.log(`✅ Supabase ${supabaseData.length}건 + 내장 ${missingData.length}건(누락월: ${missingMonths.join(', ')}) = ${merged.length}건`);
           } else {
             setPurchaseData(supabaseData);
-            localStorage.setItem('dashboard_purchaseData', JSON.stringify(supabaseData));
+            try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(supabaseData)); } catch { /* quota */ }
             console.log(`✅ Supabase에서 구매 데이터 로드: ${supabaseData.length}개`);
           }
         } else {
@@ -121,7 +121,7 @@ const PurchaseView: React.FC = () => {
   // --- Persistence & Derived Year State ---
   useEffect(() => {
     if (purchaseData.length > 0) {
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData));
+      try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(purchaseData)); } catch { /* quota */ }
       window.dispatchEvent(new Event('dashboard-data-updated'));
     }
 
@@ -357,9 +357,9 @@ const PurchaseView: React.FC = () => {
       const updatedData = [...otherData, ...partsWithMonth];
       
       // localStorage 즉시 저장
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+      try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData)); } catch { /* quota */ }
       setPurchaseData(updatedData);
-      
+
       // Supabase 저장 (완료 후 최신 데이터 재로드)
       if (isSupabaseConfigured()) {
         try {
@@ -368,7 +368,7 @@ const PurchaseView: React.FC = () => {
           
           const latestData = await purchaseService.getAll();
           setPurchaseData(latestData);
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+          try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData)); } catch { /* quota */ }
           console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
         } catch (err) {
           console.error('Supabase 동기화 실패:', err);
@@ -411,18 +411,18 @@ const PurchaseView: React.FC = () => {
       const updatedData = [...otherData, ...materialsWithMonth];
       
       // localStorage 즉시 저장
-      localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData));
+      try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(updatedData)); } catch { /* quota */ }
       setPurchaseData(updatedData);
-      
+
       // Supabase 저장 (완료 후 최신 데이터 재로드)
       if (isSupabaseConfigured()) {
         try {
           await purchaseService.saveByMonthAndCategory(materialsWithMonth, uploadMonth, 'Material', selectedYears[0] || new Date().getFullYear());
           console.log(`✅ ${uploadMonth} 원재료 데이터 Supabase 동기화 완료`);
-          
+
           const latestData = await purchaseService.getAll();
           setPurchaseData(latestData);
-          localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData));
+          try { localStorage.setItem('dashboard_purchaseData', JSON.stringify(latestData)); } catch { /* quota */ }
           console.log(`✅ Supabase에서 최신 구매 데이터 재로드 완료: ${latestData.length}개`);
         } catch (err) {
           console.error('Supabase 동기화 실패:', err);
