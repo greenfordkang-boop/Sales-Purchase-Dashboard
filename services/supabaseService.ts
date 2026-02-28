@@ -20,6 +20,7 @@ import {
   MaterialCodeRecord,
   DataQualityIssue,
 } from '../utils/bomMasterParser';
+import type { PurchasePrice, OutsourcePrice, PaintMixRatio, ItemStandardCost } from '../utils/standardMaterialParser';
 
 // ============================================
 // Helper Functions
@@ -2569,5 +2570,198 @@ export const dataQualityService = {
 
     await insertInBatches('data_quality_issues', rows);
     console.log(`✅ data_quality_issues saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Purchase Price Master Service (구매단가)
+// ============================================
+
+export const purchasePriceService = {
+  async getAll(): Promise<PurchasePrice[]> {
+    if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) {
+      const stored = localStorage.getItem('dashboard_purchasePriceMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('purchase_price_master', 'item_code');
+      return data.map((row: any) => ({
+        itemCode: row.item_code || '',
+        customerPn: row.customer_pn || '',
+        itemName: row.item_name || '',
+        supplier: row.supplier || '',
+        currentPrice: Number(row.current_price) || 0,
+        previousPrice: Number(row.previous_price) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_purchasePriceMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(records: PurchasePrice[]): Promise<void> {
+    try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for purchasePrice, skipping local cache'); }
+    if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) return;
+
+    const { error: deleteError } = await supabase!
+      .from('purchase_price_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError && checkTableError(deleteError, 'purchase_price_master')) return;
+
+    const rows = records.map(r => ({
+      item_code: r.itemCode,
+      customer_pn: r.customerPn,
+      item_name: r.itemName,
+      supplier: r.supplier,
+      current_price: r.currentPrice,
+      previous_price: r.previousPrice,
+    }));
+
+    await insertInBatches('purchase_price_master', rows);
+    console.log(`✅ purchase_price_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Paint Mix Ratio Master Service (도료배합비율)
+// ============================================
+
+export const paintMixRatioService = {
+  async getAll(): Promise<PaintMixRatio[]> {
+    if (!isSupabaseConfigured() || isTableMissing('paint_mix_ratio_master')) {
+      const stored = localStorage.getItem('dashboard_paintMixRatioMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('paint_mix_ratio_master', 'paint_code');
+      return data.map((row: any) => ({
+        paintCode: row.paint_code || '',
+        paintName: row.paint_name || '',
+        mainRatio: Number(row.main_ratio) || 100,
+        hardenerRatio: Number(row.hardener_ratio) || 0,
+        thinnerRatio: Number(row.thinner_ratio) || 0,
+        mainCode: row.main_code || '',
+        hardenerCode: row.hardener_code || '',
+        thinnerCode: row.thinner_code || '',
+        mainPrice: Number(row.main_price) || 0,
+        hardenerPrice: Number(row.hardener_price) || 0,
+        thinnerPrice: Number(row.thinner_price) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_paintMixRatioMaster');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(records: PaintMixRatio[]): Promise<void> {
+    try { safeSetItem('dashboard_paintMixRatioMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for paintMixRatio, skipping local cache'); }
+    if (!isSupabaseConfigured() || isTableMissing('paint_mix_ratio_master')) return;
+
+    const { error: deleteError } = await supabase!
+      .from('paint_mix_ratio_master')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError && checkTableError(deleteError, 'paint_mix_ratio_master')) return;
+
+    const rows = records.map(r => ({
+      paint_code: r.paintCode,
+      paint_name: r.paintName,
+      main_ratio: r.mainRatio,
+      hardener_ratio: r.hardenerRatio,
+      thinner_ratio: r.thinnerRatio,
+      main_code: r.mainCode,
+      hardener_code: r.hardenerCode,
+      thinner_code: r.thinnerCode,
+      main_price: r.mainPrice,
+      hardener_price: r.hardenerPrice,
+      thinner_price: r.thinnerPrice,
+    }));
+
+    await insertInBatches('paint_mix_ratio_master', rows);
+    console.log(`✅ paint_mix_ratio_master saved: ${rows.length} rows`);
+  },
+};
+
+// ============================================
+// Outsource Injection Price Service (외주사출판매가)
+// ============================================
+
+export const outsourceInjPriceService = {
+  async getAll(): Promise<OutsourcePrice[]> {
+    if (!isSupabaseConfigured() || isTableMissing('outsource_injection_price')) {
+      const stored = localStorage.getItem('dashboard_outsourceInjPrice');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('outsource_injection_price', 'item_code');
+      return data.map((row: any) => ({
+        itemCode: row.item_code || '',
+        customerPn: row.customer_pn || '',
+        itemName: row.item_name || '',
+        supplier: row.supplier || '',
+        injectionPrice: Number(row.injection_price) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_outsourceInjPrice');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(records: OutsourcePrice[]): Promise<void> {
+    try { safeSetItem('dashboard_outsourceInjPrice', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for outsourceInjPrice, skipping local cache'); }
+    if (!isSupabaseConfigured() || isTableMissing('outsource_injection_price')) return;
+
+    const { error: deleteError } = await supabase!
+      .from('outsource_injection_price')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError && checkTableError(deleteError, 'outsource_injection_price')) return;
+
+    const rows = records.map(r => ({
+      item_code: r.itemCode,
+      customer_pn: r.customerPn,
+      item_name: r.itemName,
+      supplier: r.supplier,
+      injection_price: r.injectionPrice,
+    }));
+
+    await insertInBatches('outsource_injection_price', rows);
+    console.log(`✅ outsource_injection_price saved: ${rows.length} rows`);
+  },
+};
+
+// ── item_standard_cost (품목별 표준원가) ──
+export const itemStandardCostService = {
+  async getAll(): Promise<ItemStandardCost[]> {
+    if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) {
+      const stored = localStorage.getItem('dashboard_itemStandardCost');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('item_standard_cost', 'item_code');
+      return data as ItemStandardCost[];
+    } catch {
+      const stored = localStorage.getItem('dashboard_itemStandardCost');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(records: ItemStandardCost[]): Promise<void> {
+    // Skip localStorage for large datasets
+    if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) return;
+
+    const { error: deleteError } = await supabase!
+      .from('item_standard_cost')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError && checkTableError(deleteError, 'item_standard_cost')) return;
+
+    await insertInBatches('item_standard_cost', records);
+    console.log(`✅ item_standard_cost saved: ${records.length} rows`);
   },
 };

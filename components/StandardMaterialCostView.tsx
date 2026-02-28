@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
@@ -15,45 +15,24 @@ import {
   StandardMaterialData,
   StandardMaterialSummary,
   parseStandardMaterialExcel,
+  PurchasePrice,
+  OutsourcePrice,
+  PaintMixRatio,
+  ItemStandardCost,
 } from '../utils/standardMaterialParser';
 import {
   calcUnifiedMaterialCost,
   calcMonthlyUnified,
+  calcMasterMaterialCost,
+  calcFromItemStandardCosts,
+  buildReferenceDataFromMasters,
   UnifiedCalcResult,
   CalcItemRow,
 } from '../utils/materialCostCalculator';
-
-// ============================================================
-// Types for automated calculation
-// ============================================================
-
-interface MaterialCostRow {
-  id: string;
-  childPn: string;        // 자재 품번
-  childName: string;      // 자재명
-  supplier: string;       // 협력업체
-  materialType: string;   // RESIN / PAINT / 구매 / 외주
-  parentProducts: string[];
-  standardReq: number;    // 표준소요량 (BOM 전개)
-  avgUnitPrice: number;   // 평균 단가 (입고 기준)
-  standardCost: number;   // 표준재료비 = standardReq × avgUnitPrice
-  actualQty: number;      // 실제 투입수량
-  actualCost: number;     // 실적재료비 (입고 금액)
-  diff: number;           // 차이 (표준 - 실적)
-  diffRate: number;       // 차이율
-}
-
-interface AutoCalcResult {
-  rows: MaterialCostRow[];
-  totalStandard: number;
-  totalActual: number;
-  byType: { name: string; standard: number; actual: number }[];
-  forecastRevenue: number;  // 매출계획 금액
-  standardRatio: number;    // 표준재료비율
-  actualRatio: number;      // 실적재료비율
-  matchRate: number;        // BOM 매칭율
-  debug: { forecastItems: number; bomProducts: number; bomMissing: number; materials: number; purchaseMatched: number; calcSource?: string };
-}
+import { ReferenceInfoRecord, MaterialCodeRecord } from '../utils/bomMasterParser';
+import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService } from '../services/supabaseService';
+import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
+import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
 
 // ============================================================
 // Constants
@@ -93,44 +72,6 @@ const classifyMaterialType = (
   return '구매';
 };
 
-type ViewMode = 'summary' | 'items' | 'comparison' | 'diagnostic' | 'analysis';
-type DataMode = 'auto' | 'excel' | 'master';
-
-interface DiagnosticRow {
-  customerPn: string;
-  internalCode: string;
-  itemName: string;
-  supplyType: string;
-  processType: string;
-  hasForecast: boolean;
-  forecastQty: number;
-  hasPnMapping: boolean;
-  hasUnitCost: boolean;
-  unitCostPerEa: number;
-  injectionCost: number;
-  paintCost: number;
-  purchasePrice: number;
-  stdAmount: number;
-  breakPoint: string;
-  breakLevel: 0 | 1 | 2 | 3;
-}
-
-interface ComparisonRow {
-  itemCode: string;
-  itemName: string;
-  supplyType: string;    // 자작/구매/외주/미분류
-  stdQty: number;        // 표준수량
-  stdUnitPrice: number;  // 표준단가 (원/EA)
-  stdAmount: number;     // 표준금액
-  actQty: number;        // 실적수량
-  actUnitPrice: number;  // 실적단가
-  actAmount: number;     // 실적금액
-  diffAmount: number;    // 차이 (표준-실적, 양수=절감)
-  diffRate: number;      // 차이율%
-  absDiffAmount: number; // |차이| (정렬용)
-  matchStatus: 'matched' | 'std-only' | 'act-only';
-}
-
 const StandardMaterialCostView: React.FC = () => {
   // --- Data Mode ---
   const [dataMode, setDataMode] = useState<DataMode>('auto');
@@ -142,22 +83,19 @@ const StandardMaterialCostView: React.FC = () => {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
 
-  // --- Auto mode: Load existing data from localStorage/Supabase ---
-  const [forecastData, setForecastData] = useState<ForecastItem[]>([]);
-  const [itemRevenueData, setItemRevenueData] = useState<ItemRevenueRow[]>([]);
-  const [bomData, setBomData] = useState<BomRecord[]>([]);
-  const [pnMapping, setPnMapping] = useState<PnMapping[]>([]);
-  const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
-  const [itemMasterData, setItemMasterData] = useState<PurchaseItemMaster[]>([]);
+  // --- Data loading via hook ---
+  const {
+    supabaseLoading,
+    forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData,
+    masterRefInfo, masterMaterialCodes,
+    masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
+    masterItemStandardCosts,
+    excelData,
+    setPnMapping, setBomData, setExcelData,
+    setMasterItemStandardCosts,
+    loadAllData,
+  } = useStandardMaterialCost();
 
-  // --- Excel mode ---
-  const [excelData, setExcelData] = useState<StandardMaterialData | null>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_standardMaterial')
-        || sessionStorage.getItem('dashboard_standardMaterial');
-      return stored ? JSON.parse(stored) : null;
-    } catch { return null; }
-  });
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const masterInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +110,26 @@ const StandardMaterialCostView: React.FC = () => {
   const [showDrawingViewer, setShowDrawingViewer] = useState(false);
   const [drawingAnalysis, setDrawingAnalysis] = useState<BomCompareResult | null>(null);
   const [drawingAnalyzing, setDrawingAnalyzing] = useState(false);
+
+  // --- 마감재료비: 월별 수동 입력 (localStorage 저장) ---
+  const [closingCosts, setClosingCosts] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem('dashboard_closingMaterialCost');
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
+  const updateClosingCost = (year: number, monthIdx: number, value: number) => {
+    const key = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+    setClosingCosts(prev => {
+      const next = { ...prev, [key]: value };
+      try { localStorage.setItem('dashboard_closingMaterialCost', JSON.stringify(next)); } catch { /* */ }
+      return next;
+    });
+  };
+  const getClosingCost = (year: number, monthIdx: number): number => {
+    const key = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
+    return closingCosts[key] || 0;
+  };
 
   // --- BOM 진단: 팝업 + 확인 체크 ---
   const [bomPopupPn, setBomPopupPn] = useState<{ customerPn: string; internalCode: string; itemName: string } | null>(null);
@@ -231,61 +189,6 @@ const StandardMaterialCostView: React.FC = () => {
   const [filterSupplier, setFilterSupplier] = useState('All');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- Safe storage read (localStorage → sessionStorage fallback) ---
-  const safeGet = (key: string): string | null => {
-    try { return localStorage.getItem(key) || sessionStorage.getItem(key); } catch { return null; }
-  };
-
-  // --- Load data from localStorage (reusable), with global cache fallback ---
-  const loadAllData = useCallback(() => {
-    const cache = (window as any).__dashboardCache || {};
-    const f = safeGet('dashboard_forecastData');
-    if (f) try { setForecastData(JSON.parse(f)); } catch { /* */ }
-    const ir = safeGet('dashboard_itemRevenueData');
-    if (ir) try { setItemRevenueData(JSON.parse(ir)); } catch { /* */ }
-    const b = safeGet('dashboard_bomData');
-    if (b) try { setBomData(JSON.parse(b)); } catch { /* */ }
-    else if (cache.bomData) setBomData(cache.bomData);
-    const m = safeGet('dashboard_pnMapping');
-    if (m) try { setPnMapping(JSON.parse(m)); } catch { /* */ }
-    else if (cache.pnMapping) setPnMapping(cache.pnMapping);
-    const p = safeGet('dashboard_purchaseData');
-    if (p) try { setPurchaseData(JSON.parse(p)); } catch { /* */ }
-    const im = safeGet('dashboard_purchaseItemMaster');
-    if (im) try { setItemMasterData(JSON.parse(im)); } catch { /* */ }
-    console.log('[표준재료비] 데이터 로드 완료', { bomFromCache: !b && !!cache.bomData, pnFromCache: !m && !!cache.pnMapping });
-  }, []);
-
-  // --- Load on mount + listen for changes ---
-  useEffect(() => {
-    loadAllData();
-    // Cross-tab storage events
-    const onStorage = (e: StorageEvent) => {
-      if (e.key?.startsWith('dashboard_')) loadAllData();
-    };
-    // Same-window custom events (with direct data payload - bypasses localStorage)
-    const onDataUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.key && detail?.data) {
-        const { key, data } = detail;
-        if (key === 'dashboard_bomData') setBomData(data);
-        else if (key === 'dashboard_pnMapping') setPnMapping(data);
-        else if (key === 'dashboard_purchaseData') setPurchaseData(data);
-        else if (key === 'dashboard_forecastData') setForecastData(data);
-        else if (key === 'dashboard_itemRevenueData') setItemRevenueData(data);
-        console.log(`[표준재료비] ${key} 이벤트 수신: ${data.length}건`);
-      } else {
-        loadAllData(); // fallback: 전체 새로고침
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('dashboard-data-updated', onDataUpdate);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('dashboard-data-updated', onDataUpdate);
-    };
-  }, [loadAllData]);
-
   // --- Available years ---
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -306,33 +209,237 @@ const StandardMaterialCostView: React.FC = () => {
   // ============================================================
   const autoCalcResult = useMemo<AutoCalcResult | null>(() => {
     if (dataMode === 'excel') return null;
+
+    // Supabase 로딩 중이면 스킵 (완료 후 1회만 계산)
+    if (supabaseLoading) return null;
+
+    // ===== 품목별원가 모드: item_standard_cost 데이터가 있으면 우선 사용 (Excel 검증된 per-item 비용) =====
+    if (dataMode === 'master' && masterItemStandardCosts.length > 0) {
+      // 월 인덱스 (0=1월, ...)
+      const monthIdx = selectedMonth === 'All' ? 0 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
+
+      // 매출 계산: 매출계획 or 매출실적에서 해당 월 집계
+      let totalRevenue = 0;
+      if (forecastData.length > 0) {
+        const monthKey = `m${monthIdx + 1}` as keyof ForecastItem;
+        forecastData.forEach(fc => {
+          const qty = Number(fc[monthKey] || 0);
+          const price = fc.unitPrice || 0;
+          totalRevenue += qty * price;
+        });
+      }
+      if (totalRevenue === 0 && itemRevenueData.length > 0) {
+        const mm = String(monthIdx + 1).padStart(2, '0');
+        itemRevenueData.forEach(row => {
+          const dm = row.period?.match(/\d{4}-(\d{1,2})/);
+          const m = dm ? dm[1].padStart(2, '0') : null;
+          if (m === mm) totalRevenue += row.amount || 0;
+        });
+      }
+
+      const result = calcFromItemStandardCosts(masterItemStandardCosts, monthIdx, totalRevenue);
+
+      const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
+        id: `isc-${ir.itemCode}-${idx}`,
+        childPn: ir.itemCode,
+        childName: ir.itemName,
+        supplier: '',
+        materialType: ir.supplyType === '구매' ? '구매' : ir.supplyType?.includes('외주') ? '외주' : ir.injectionCost > 0 ? 'RESIN' : ir.paintCostPerEa > 0 ? 'PAINT' : '자작',
+        parentProducts: [],
+        standardReq: ir.production,
+        avgUnitPrice: ir.totalCostPerEa,
+        standardCost: ir.totalAmount,
+        actualQty: 0,
+        actualCost: 0,
+        diff: ir.totalAmount,
+        diffRate: 0,
+      }));
+      rows.sort((a, b) => b.standardCost - a.standardCost);
+
+      const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
+
+      return {
+        rows,
+        totalStandard: result.totalStandard,
+        totalActual: 0,
+        byType,
+        forecastRevenue: totalRevenue,
+        standardRatio: result.standardRatio,
+        actualRatio: 0,
+        matchRate: 100,
+        debug: {
+          forecastItems: masterItemStandardCosts.length,
+          bomProducts: result.stats.excelItems,
+          bomMissing: 0,
+          materials: result.stats.totalItems,
+          purchaseMatched: 0,
+          calcSource: 'ItemStandardCost',
+        },
+      };
+    }
+
+    // ===== Master mode (fallback): BOM + 기준정보 + 재질코드 + 구매단가 + 도료배합 + 외주사출 → 정방향 적산 =====
+    if (dataMode === 'master') {
+      if (bomData.length === 0 || masterRefInfo.length === 0 || masterMaterialCodes.length === 0) return null;
+      console.log(`[마스터 모드] 참조데이터: BOM ${bomData.length}, 기준정보 ${masterRefInfo.length}, 재질코드 ${masterMaterialCodes.length}, 구매단가 ${masterPurchasePrices.length}, 외주사출 ${masterOutsourcePrices.length}, 도료배합 ${masterPaintMixRatios.length}`);
+
+      // P/N 매핑 (기준정보 기반, 매출계획 품번 → BOM 내부코드 연결)
+      const mCustToInternal = new Map<string, string>();
+      const mInternalToCust = new Map<string, string>();
+      masterRefInfo.forEach(ri => {
+        if (ri.customerPn && ri.itemCode) {
+          mCustToInternal.set(normalizePn(ri.customerPn), normalizePn(ri.itemCode));
+          mInternalToCust.set(normalizePn(ri.itemCode), normalizePn(ri.customerPn));
+        }
+      });
+
+      // 제품별 수량 Map 구성: 매출계획 우선 → 매출실적 보완
+      const productQtyMap = new Map<string, number>();
+      let totalRevenue = 0;
+
+      const monthIdx = selectedMonth === 'All' ? -1 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
+
+      // 1차: 매출계획 (forecastData)
+      // 내부코드 기준으로만 등록 (중복 방지 — 양방향 등록 제거)
+      if (forecastData.length > 0) {
+        forecastData.forEach(item => {
+          if (!item.partNo) return;
+          const rawPn = normalizePn(item.partNo);
+          const qty = monthIdx >= 0 ? (item.monthlyQty?.[monthIdx] || 0) : (item.totalQty || 0);
+          const rev = monthIdx >= 0 ? (item.monthlyRevenue?.[monthIdx] || 0) : (item.totalRevenue || 0);
+          if (qty <= 0) return;
+          // 매출계획 품번(고객사P/N) → 내부코드 변환 (내부코드 기준으로만 등록)
+          const internalPn = mCustToInternal.get(rawPn) || rawPn;
+          productQtyMap.set(internalPn, (productQtyMap.get(internalPn) || 0) + qty);
+          totalRevenue += rev;
+        });
+      }
+
+      // 2차: 매출실적 보완 (매출계획에 없는 품목만)
+      if (itemRevenueData.length > 0) {
+        itemRevenueData.forEach(row => {
+          const yearMatch = row.period?.match(/(\d{4})/);
+          if (yearMatch && parseInt(yearMatch[1]) !== selectedYear) return;
+          if (selectedMonth !== 'All') {
+            const dm = row.period?.match(/\d{4}-(\d{1,2})/);
+            const monthStr = dm ? dm[1].padStart(2, '0') + '월' : null;
+            if (monthStr && monthStr !== selectedMonth) return;
+          }
+          const rawPn = normalizePn(row.partNo || row.customerPN || '');
+          if (!rawPn || (row.qty || 0) <= 0) return;
+          const internalPn = mCustToInternal.get(rawPn) || rawPn;
+          if (productQtyMap.has(internalPn)) return; // 이미 계획에 있음
+          productQtyMap.set(internalPn, (productQtyMap.get(internalPn) || 0) + (row.qty || 0));
+          totalRevenue += row.amount || 0;
+        });
+      }
+
+      if (productQtyMap.size === 0) {
+        console.log('[마스터 모드] 매출계획/실적 없음 — 수량 Map 구성 불가');
+        return null;
+      }
+
+      const result = calcMasterMaterialCost(
+        bomData, masterRefInfo, masterMaterialCodes, productQtyMap, totalRevenue,
+        masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
+      );
+
+      // UnifiedCalcResult → AutoCalcResult 변환
+      const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
+        id: `master-${ir.itemCode}-${idx}`,
+        childPn: ir.itemCode,
+        childName: ir.itemName,
+        supplier: '',
+        materialType: ir.supplyType === '구매' ? '구매' : ir.supplyType?.includes('외주') ? '외주' : ir.injectionCost > 0 ? 'RESIN' : ir.paintCostPerEa > 0 ? 'PAINT' : '자작',
+        parentProducts: [],
+        standardReq: ir.production,
+        avgUnitPrice: ir.totalCostPerEa,
+        standardCost: ir.totalAmount,
+        actualQty: 0,
+        actualCost: 0,
+        diff: ir.totalAmount,
+        diffRate: 0,
+      }));
+
+      rows.sort((a, b) => b.standardCost - a.standardCost);
+
+      const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
+
+      return {
+        rows,
+        totalStandard: result.totalStandard,
+        totalActual: 0,
+        byType,
+        forecastRevenue: totalRevenue,
+        standardRatio: result.standardRatio,
+        actualRatio: 0,
+        matchRate: productQtyMap.size > 0 ? (result.stats.bomItems / productQtyMap.size) * 100 : 0,
+        debug: {
+          forecastItems: productQtyMap.size,
+          bomProducts: result.stats.bomItems,
+          bomMissing: productQtyMap.size - result.stats.bomItems,
+          materials: result.stats.totalItems,
+          purchaseMatched: 0,
+          calcSource: 'Master',
+        },
+      };
+    }
+
+    // ===== Auto mode: 기존 로직 =====
     // BOM, 자재마스터, 또는 Excel(재료비.xlsx) 중 하나라도 있으면 산출 가능
     const hasMasterCosts = pnMapping.some(m => m.materialCost && m.materialCost > 0);
     const hasExcelItems = excelData?.items && excelData.items.length > 0;
     if (bomData.length === 0 && !hasMasterCosts && !hasExcelItems) return null;
 
     // 1. Build P/N mappings (bidirectional + multi-value)
+    //    pnMapping(자재마스터) + masterRefInfo(기준정보) 양쪽에서 P/N 브릿지 구성
     const custToInternal = new Map<string, string>();
     const internalToCust = new Map<string, string>();
     const custToInternals = new Map<string, Set<string>>();
     const internalToCusts = new Map<string, Set<string>>();
     const itemToRawMaterial = new Map<string, string[]>();
+
+    const addPnBridge = (cust: string, internal: string) => {
+      if (!cust || !internal || cust === internal) return;
+      custToInternal.set(cust, internal);
+      internalToCust.set(internal, cust);
+      if (!custToInternals.has(cust)) custToInternals.set(cust, new Set());
+      custToInternals.get(cust)!.add(internal);
+      if (!internalToCusts.has(internal)) internalToCusts.set(internal, new Set());
+      internalToCusts.get(internal)!.add(cust);
+    };
+
     pnMapping.forEach(m => {
-      const cust = normalizePn(m.customerPn);
-      const internal = normalizePn(m.internalCode);
-      if (cust && internal) {
-        custToInternal.set(cust, internal);
-        internalToCust.set(internal, cust);
-        if (!custToInternals.has(cust)) custToInternals.set(cust, new Set());
-        custToInternals.get(cust)!.add(internal);
-        if (!internalToCusts.has(internal)) internalToCusts.set(internal, new Set());
-        internalToCusts.get(internal)!.add(cust);
-      }
+      addPnBridge(normalizePn(m.customerPn), normalizePn(m.internalCode));
       const rawCodes: string[] = [];
       if (m.rawMaterialCode1) rawCodes.push(normalizePn(m.rawMaterialCode1));
       if (m.rawMaterialCode2) rawCodes.push(normalizePn(m.rawMaterialCode2));
+      const internal = normalizePn(m.internalCode);
       if (rawCodes.length > 0 && internal) itemToRawMaterial.set(internal, rawCodes);
     });
+
+    // masterRefInfo(기준정보)에서 P/N 브릿지 보강 (pnMapping에 없는 항목)
+    if (masterRefInfo.length > 0) {
+      let refAdded = 0;
+      masterRefInfo.forEach(ri => {
+        if (!ri.customerPn || !ri.itemCode) return;
+        const cust = normalizePn(ri.customerPn);
+        const internal = normalizePn(ri.itemCode);
+        if (!cust || !internal) return;
+        if (!custToInternal.has(cust)) {
+          addPnBridge(cust, internal);
+          refAdded++;
+        }
+        // 원재료 코드 브릿지도 보강
+        if (!itemToRawMaterial.has(internal)) {
+          const rawCodes: string[] = [];
+          if (ri.rawMaterialCode1) rawCodes.push(normalizePn(ri.rawMaterialCode1));
+          if (ri.rawMaterialCode2) rawCodes.push(normalizePn(ri.rawMaterialCode2));
+          if (rawCodes.length > 0) itemToRawMaterial.set(internal, rawCodes);
+        }
+      });
+      if (refAdded > 0) console.log(`[표준재료비] 기준정보에서 P/N 브릿지 ${refAdded}건 추가 (총 ${custToInternal.size}건)`);
+    }
 
     // Build item master map
     const masterMap = new Map<string, PurchaseItemMaster>();
@@ -447,7 +554,7 @@ const StandardMaterialCostView: React.FC = () => {
     console.log(`[표준재료비] 데이터: BOM ${bomRelations.size}개 모품번, 매출 ${forecastByPart.size}개 품번 (source: ${salesSource})`);
     console.log(`[표준재료비] BOM 모품번 샘플:`, bomParentSamples);
     console.log(`[표준재료비] 매출 품번 샘플:`, salesPnSamples);
-    console.log(`[표준재료비] P/N 매핑: ${pnMapping.length}건, 구매: ${purchaseData.length}건`);
+    console.log(`[표준재료비] P/N 매핑: ${custToInternal.size}건 (자재마스터: ${pnMapping.length}, 기준정보: ${masterRefInfo.length}), 구매: ${purchaseData.length}건`);
 
     // 4. BOM expansion → leaf materials with accumulated quantities
     interface ChildAccum {
@@ -459,12 +566,14 @@ const StandardMaterialCostView: React.FC = () => {
     const childMap = new Map<string, ChildAccum>();
     let bomMissing = 0;
     let bomMatched = 0;
+    const noBomKeys: string[] = []; // BOM 미매칭 품목 키 수집
 
     if (forecastByPart.size > 0) {
       // 매출계획 기반 전개
       for (const [key, forecast] of forecastByPart) {
         if (!bomRelations.has(key)) {
           bomMissing++;
+          noBomKeys.push(key);
           continue;
         }
         bomMatched++;
@@ -507,6 +616,19 @@ const StandardMaterialCostView: React.FC = () => {
         }
       }
     }
+
+    // ── 4a-2. BOM 미매칭 품목 정보 준비 (단가 기반 직접 산출용) ──
+    // 구매/외주 품목은 BOM 없는 게 정상 → row 생성 시 직접 산출
+    const pnMasterLookup = new Map<string, PnMapping>();
+    pnMapping.forEach(m => {
+      if (m.internalCode) pnMasterLookup.set(normalizePn(m.internalCode), m);
+      if (m.customerPn) pnMasterLookup.set(normalizePn(m.customerPn), m);
+    });
+    const refInfoLookup = new Map<string, ReferenceInfoRecord>();
+    masterRefInfo.forEach(ri => {
+      if (ri.itemCode) refInfoLookup.set(normalizePn(ri.itemCode), ri);
+      if (ri.customerPn) refInfoLookup.set(normalizePn(ri.customerPn), ri);
+    });
 
     // 4b. Raw material (원재료: RESIN/PAINT) entries via rawMaterialCode linkage
     //     Products link to raw materials via PnMapping.rawMaterialCode1/rawMaterialCode2
@@ -592,14 +714,14 @@ const StandardMaterialCostView: React.FC = () => {
     console.log(`[표준재료비] 원재료 추가: ${rawMaterialAdded}건, 연결된 제품: ${rawCodeToProducts.size}개 원재료코드`);
 
     // 5. Match with purchase inbound data → get unit prices and actual costs
-    //    Filter purchase data by year/month
+    //    Filter purchase data by year/month (실적용)
     const filteredPurchase = purchaseData.filter(p => {
       if (p.year !== selectedYear) return false;
       if (selectedMonth !== 'All' && p.month !== selectedMonth) return false;
       return true;
     });
 
-    // Group purchase by itemCode → { totalQty, totalAmount, type, category }
+    // Group purchase by itemCode → { totalQty, totalAmount, type, category } (기간 필터 적용 — 실적용)
     const purchaseByCode = new Map<string, { totalQty: number; totalAmount: number; avgPrice: number; type: string; category: string }>();
     filteredPurchase.forEach(p => {
       const code = normalizePn(p.itemCode || '');
@@ -640,6 +762,35 @@ const StandardMaterialCostView: React.FC = () => {
       }
     });
 
+    // 연간 평균 단가 맵 (표준비 산출용 — monthlySummary와 동일 기준)
+    // 특정 월 선택 시에도 표준비는 연간 평균 단가로 산출 (표준=기준 단가 개념)
+    const annualPriceByCode = new Map<string, number>();
+    if (selectedMonth !== 'All') {
+      const annualPurchase = purchaseData.filter(p => p.year === selectedYear);
+      const annualAcc = new Map<string, { totalQty: number; totalAmt: number }>();
+      const addAnnual = (code: string, qty: number, amt: number) => {
+        if (!code) return;
+        const ex = annualAcc.get(code);
+        if (ex) { ex.totalQty += qty; ex.totalAmt += amt; }
+        else annualAcc.set(code, { totalQty: qty, totalAmt: amt });
+      };
+      annualPurchase.forEach(p => {
+        addAnnual(normalizePn(p.itemCode || ''), p.qty, p.amount);
+        if (p.customerPn) addAnnual(normalizePn(p.customerPn), p.qty, p.amount);
+      });
+      for (const [code, acc] of annualAcc) {
+        annualPriceByCode.set(code, acc.totalQty > 0 ? acc.totalAmt / acc.totalQty : 0);
+      }
+    }
+    // 표준 단가 조회: 연간 평균 우선, 없으면 기간 purchaseByCode 사용
+    const getStdUnitPrice = (code: string): number => {
+      if (annualPriceByCode.size > 0) {
+        const ap = annualPriceByCode.get(code);
+        if (ap && ap > 0) return ap;
+      }
+      return purchaseByCode.get(code)?.avgPrice || 0;
+    };
+
     // 6. Build result rows
     const rows: MaterialCostRow[] = [];
     let purchaseMatched = 0;
@@ -658,7 +809,11 @@ const StandardMaterialCostView: React.FC = () => {
         if (asInternal) purchaseInfo = purchaseByCode.get(asInternal);
       }
 
-      const avgUnitPrice = purchaseInfo?.avgPrice || 0;
+      // 표준 단가: 연간 평균 단가 우선 (monthlySummary와 일관성 보장)
+      const avgUnitPrice = getStdUnitPrice(normalized)
+        || (purchaseInfo ? getStdUnitPrice(internalToCust.get(normalized) || '') : 0)
+        || (purchaseInfo ? getStdUnitPrice(custToInternal.get(normalized) || '') : 0)
+        || (purchaseInfo?.avgPrice || 0);
       const standardCost = accum.totalRequired * avgUnitPrice;
       const actualCost = purchaseInfo?.totalAmount || 0;
       const actualQty = purchaseInfo?.totalQty || 0;
@@ -689,12 +844,104 @@ const StandardMaterialCostView: React.FC = () => {
       });
     }
 
+    // ── 6b. BOM 미매칭 품목: 단가 기반 직접 산출 (제품 수준 row 추가) ──
+    let nonBomCalculated = 0;
+    let nonBomStandard = 0;
+    for (const key of noBomKeys) {
+      const forecast = forecastByPart.get(key);
+      if (!forecast) continue;
+
+      // 다중 키로 단가 조회 (findBomKey와 동일한 5-strategy 키 생성)
+      const lookupKeys = [key];
+      const asInt = custToInternal.get(key);
+      if (asInt && asInt !== key) lookupKeys.push(asInt);
+      const asCust = internalToCust.get(key);
+      if (asCust && asCust !== key) lookupKeys.push(asCust);
+      const allInts = custToInternals.get(key);
+      if (allInts) for (const ic of allInts) if (!lookupKeys.includes(ic)) lookupKeys.push(ic);
+
+      let unitCost = 0;
+      let itemName = '';
+      let supplyType = '';
+      let materialType = '구매';
+
+      // pnMapping → masterRefInfo 단가 조회
+      for (const lk of lookupKeys) {
+        const master = pnMasterLookup.get(lk);
+        if (master) {
+          const mc = master.materialCost || 0;
+          const injPntPur = (master.injectionCost || 0) + (master.paintCost || 0) + (master.purchaseUnitPrice || 0);
+          if (mc > 0) unitCost = mc;
+          else if (injPntPur > 0) unitCost = injPntPur;
+          itemName = itemName || master.partName || '';
+          supplyType = supplyType || master.supplyType || '';
+          if (unitCost > 0) break;
+        }
+        const ref = refInfoLookup.get(lk);
+        if (ref) {
+          itemName = itemName || ref.itemName || '';
+          supplyType = supplyType || ref.supplyType || '';
+        }
+      }
+
+      // purchaseByCode 폴백 (연간 평균 단가 우선 → 기간 실적 단가)
+      if (unitCost <= 0) {
+        for (const lk of lookupKeys) {
+          const stdP = getStdUnitPrice(lk);
+          if (stdP > 0) {
+            unitCost = stdP;
+            const pInfo = purchaseByCode.get(lk);
+            if (pInfo) materialType = classifyMaterialType(pInfo.type, pInfo.category);
+            break;
+          }
+        }
+      }
+
+      // 조달구분 기반 materialType
+      if (supplyType.includes('자작')) materialType = 'RESIN';
+      else if (supplyType.includes('외주')) materialType = '외주';
+      else if (supplyType.includes('구매')) materialType = '구매';
+
+      if (unitCost <= 0) continue;
+
+      const standardCost = forecast.qty * unitCost;
+      // 입고 실적 조회
+      let actualCost = 0;
+      let actualQty = 0;
+      for (const lk of lookupKeys) {
+        const pInfo = purchaseByCode.get(lk);
+        if (pInfo) {
+          actualCost = pInfo.totalAmount;
+          actualQty = pInfo.totalQty;
+          break;
+        }
+      }
+
+      rows.push({
+        id: `nonbom-${key}`,
+        childPn: key,
+        childName: itemName || forecast.partNo || key,
+        supplier: '',
+        materialType,
+        parentProducts: [key],
+        standardReq: forecast.qty,
+        avgUnitPrice: unitCost,
+        standardCost,
+        actualQty,
+        actualCost,
+        diff: standardCost - actualCost,
+        diffRate: standardCost > 0 ? ((standardCost - actualCost) / standardCost) * 100 : 0,
+      });
+      nonBomCalculated++;
+      nonBomStandard += standardCost;
+      purchaseMatched++;
+    }
+
     // 디버그: 단가 분석
-    const zeroPriceCount = rows.filter(r => r.avgUnitPrice === 0).length;
     const resinRows = rows.filter(r => r.materialType === 'RESIN');
     const paintRows = rows.filter(r => r.materialType === 'PAINT');
     const partsRows = rows.filter(r => r.materialType === '구매');
-    console.log(`[표준재료비 진단] 총 자재: ${rows.length} (구매: ${partsRows.length}, RESIN: ${resinRows.length}, PAINT: ${paintRows.length})`);
+    console.log(`[표준재료비 진단] 총 자재: ${rows.length} (구매: ${partsRows.length}, RESIN: ${resinRows.length}, PAINT: ${paintRows.length}, BOM없음→직접산출: ${nonBomCalculated}건 ₩${nonBomStandard.toLocaleString()})`);
     console.log(`[표준재료비 진단] 표준비 구성: 구매 ₩${partsRows.reduce((s,r)=>s+r.standardCost,0).toLocaleString()}, RESIN ₩${resinRows.reduce((s,r)=>s+r.standardCost,0).toLocaleString()}, PAINT ₩${paintRows.reduce((s,r)=>s+r.standardCost,0).toLocaleString()}`);
     console.log(`[표준재료비 진단] 실적비 구성: 구매 ₩${partsRows.reduce((s,r)=>s+r.actualCost,0).toLocaleString()}, RESIN ₩${resinRows.reduce((s,r)=>s+r.actualCost,0).toLocaleString()}, PAINT ₩${paintRows.reduce((s,r)=>s+r.actualCost,0).toLocaleString()}`);
     console.log(`[표준재료비 진단] 구매코드 수: ${purchaseByCode.size}, 매칭: ${purchaseMatched}/${rows.length}, 원재료추가: ${rawMaterialAdded}건`);
@@ -719,8 +966,29 @@ const StandardMaterialCostView: React.FC = () => {
     const bomTotalStandard = rows.reduce((s, r) => s + r.standardCost, 0);
     const bomTotalActual = rows.reduce((s, r) => s + r.actualCost, 0);
 
+    // ── BOM path 커버리지 보정: BOM도 없고 단가도 없는 잔여 품목의 표준비 추정 ──
+    // (nonBomCalculated로 직접 산출된 품목은 이미 bomTotalStandard에 포함됨)
+    const stillMissing = bomMissing - nonBomCalculated; // 아직 산출 못 한 품목 수
+    let bomCorrectedStandard = bomTotalStandard;
+    if (stillMissing > 0 && totalForecastRevenue > 0) {
+      // 산출된 품목(BOM+nonBom)의 매출 vs 전체 매출 비교
+      const calculatedKeys = [...forecastByPart.entries()].filter(([key]) => {
+        if (bomRelations.has(key)) return true;
+        // nonBom 산출된 것도 포함
+        return rows.some(r => r.id === `nonbom-${key}`);
+      });
+      const calculatedRevenue = calculatedKeys.reduce((s, [, f]) => s + f.revenue, 0);
+      const uncalcRevenue = totalForecastRevenue - calculatedRevenue;
+      const covRatio = calculatedRevenue > 0 ? bomTotalStandard / calculatedRevenue : 0;
+      if (uncalcRevenue > 0 && covRatio > 0) {
+        const extra = uncalcRevenue * covRatio;
+        bomCorrectedStandard = bomTotalStandard + extra;
+        console.log(`[표준재료비 BOM] 커버리지 보정: 산출매출 ₩${calculatedRevenue.toLocaleString()} (비율 ${(covRatio * 100).toFixed(1)}%), 미산출 ${stillMissing}건 매출 ₩${uncalcRevenue.toLocaleString()} → +₩${Math.round(extra).toLocaleString()}`);
+      }
+    }
+
     // ===== Excel 기반 표준재료비: 통합 산출 엔진 사용 =====
-    let finalStandard = bomTotalStandard;
+    let finalStandard = bomCorrectedStandard;
     let finalActual = bomTotalActual;
     let finalByType = byType;
     let finalRevenue = totalForecastRevenue;
@@ -1013,23 +1281,11 @@ const StandardMaterialCostView: React.FC = () => {
         calcSource,
       },
     };
-  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData, selectedYear, selectedMonth, excelData]);
+  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData, selectedYear, selectedMonth, excelData, masterRefInfo, masterMaterialCodes, masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios, masterItemStandardCosts, supabaseLoading]);
 
   // ============================================================
   // MONTHLY SUMMARY (12개월 추이)
   // ============================================================
-  interface MonthlySummaryRow {
-    month: string;           // 'Jan', 'Feb', ...
-    monthKr: string;         // '01월', '02월', ...
-    revenue: number;         // 매출액
-    standardCost: number;    // 표준재료비
-    actualCost: number;      // 실적재료비
-    diff: number;            // 차이금액 (표준 - 실적)
-    standardRatio: number;   // 표준재료비율
-    actualRatio: number;     // 실적재료비율
-    achievementRate: number; // 달성율
-  }
-
   const monthlySummary = useMemo<MonthlySummaryRow[]>(() => {
     const hasMasterCosts = pnMapping.some(m => m.materialCost && m.materialCost > 0);
     if (dataMode === 'excel' || (bomData.length === 0 && !hasMasterCosts && !(excelData?.items?.length))) return [];
@@ -1152,9 +1408,9 @@ const StandardMaterialCostView: React.FC = () => {
       return rows;
     }
 
-    // ===== 자재마스터 기반 월별 표준재료비 (Excel 불필요) =====
+    // ===== 자재마스터 기반 월별 표준재료비 (Excel & BOM 모두 없을 때만) =====
     const mappingsWithCost2 = pnMapping.filter(m => (m.materialCost && m.materialCost > 0) || (m.purchaseUnitPrice && m.purchaseUnitPrice > 0) || (m.injectionCost && m.injectionCost > 0) || (m.paintCost && m.paintCost > 0));
-    if (mappingsWithCost2.length > 0 && (forecastData.length > 0 || itemRevenueData.length > 0)) {
+    if (mappingsWithCost2.length > 0 && bomData.length === 0 && (forecastData.length > 0 || itemRevenueData.length > 0)) {
       // Build master lookup
       const masterLookup = new Map<string, typeof pnMapping[0]>();
       pnMapping.forEach(m => {
@@ -1283,28 +1539,65 @@ const StandardMaterialCostView: React.FC = () => {
     }
 
     // ===== BOM 기반 월별 표준재료비 (근사) =====
+    // P/N 브릿지: autoCalcResult와 동일한 양방향 + 1:N + masterRefInfo 보강
     const custToInternal = new Map<string, string>();
+    const internalToCust = new Map<string, string>();
     const custToInternals = new Map<string, Set<string>>();
+    const internalToCusts = new Map<string, Set<string>>();
+    const itemToRawMaterial = new Map<string, string[]>();
+
+    const addBridge = (cust: string, internal: string) => {
+      if (!cust || !internal || cust === internal) return;
+      custToInternal.set(cust, internal);
+      internalToCust.set(internal, cust);
+      if (!custToInternals.has(cust)) custToInternals.set(cust, new Set());
+      custToInternals.get(cust)!.add(internal);
+      if (!internalToCusts.has(internal)) internalToCusts.set(internal, new Set());
+      internalToCusts.get(internal)!.add(cust);
+    };
+
     pnMapping.forEach(m => {
-      const cust = normalizePn(m.customerPn);
+      addBridge(normalizePn(m.customerPn), normalizePn(m.internalCode));
+      const rawCodes: string[] = [];
+      if (m.rawMaterialCode1) rawCodes.push(normalizePn(m.rawMaterialCode1));
+      if (m.rawMaterialCode2) rawCodes.push(normalizePn(m.rawMaterialCode2));
       const internal = normalizePn(m.internalCode);
-      if (cust && internal) {
-        custToInternal.set(cust, internal);
-        if (!custToInternals.has(cust)) custToInternals.set(cust, new Set());
-        custToInternals.get(cust)!.add(internal);
-      }
+      if (rawCodes.length > 0 && internal) itemToRawMaterial.set(internal, rawCodes);
     });
+
+    // masterRefInfo 보강 (pnMapping에 없는 브릿지)
+    if (masterRefInfo.length > 0) {
+      masterRefInfo.forEach(ri => {
+        if (!ri.customerPn || !ri.itemCode) return;
+        const cust = normalizePn(ri.customerPn);
+        const internal = normalizePn(ri.itemCode);
+        if (!cust || !internal) return;
+        if (!custToInternal.has(cust)) addBridge(cust, internal);
+        if (!itemToRawMaterial.has(internal)) {
+          const rawCodes: string[] = [];
+          if (ri.rawMaterialCode1) rawCodes.push(normalizePn(ri.rawMaterialCode1));
+          if (ri.rawMaterialCode2) rawCodes.push(normalizePn(ri.rawMaterialCode2));
+          if (rawCodes.length > 0) itemToRawMaterial.set(internal, rawCodes);
+        }
+      });
+    }
 
     const rawRelations = buildBomRelations(bomData);
     const bomRelations = new Map<string, BomRecord[]>();
     for (const [key, val] of rawRelations) bomRelations.set(normalizePn(key), val);
 
+    // 5-strategy BOM key resolver (autoCalcResult와 동일)
     const findBomKey = (rawPn: string): string | null => {
       if (bomRelations.has(rawPn)) return rawPn;
       const asInternal = custToInternal.get(rawPn);
       if (asInternal && bomRelations.has(asInternal)) return asInternal;
+      const asCust = internalToCust.get(rawPn);
+      if (asCust && bomRelations.has(asCust)) return asCust;
       const internals = custToInternals.get(rawPn);
       if (internals) { for (const ic of internals) { if (bomRelations.has(ic)) return ic; } }
+      for (const [internal, rawCodes] of itemToRawMaterial) {
+        if (rawCodes.includes(rawPn) && bomRelations.has(internal)) return internal;
+      }
       return null;
     };
 
@@ -1334,11 +1627,36 @@ const StandardMaterialCostView: React.FC = () => {
       return d && d.totalQty > 0 ? d.totalAmt / d.totalQty : 0;
     };
 
+    // pnMapping 단가 lookup (BOM 없는 품목의 단가 기반 산출용)
+    const pnMasterMap = new Map<string, PnMapping>();
+    pnMapping.forEach(m => {
+      if (m.internalCode) pnMasterMap.set(normalizePn(m.internalCode), m);
+      if (m.customerPn) pnMasterMap.set(normalizePn(m.customerPn), m);
+    });
+    const getUnitCostFromMaster = (rawPn: string): number => {
+      const keys = [rawPn];
+      const asInt = custToInternal.get(rawPn);
+      if (asInt) keys.push(asInt);
+      const ints = custToInternals.get(rawPn);
+      if (ints) for (const ic of ints) keys.push(ic);
+      for (const k of keys) {
+        const m = pnMasterMap.get(k);
+        if (m) {
+          if (m.materialCost && m.materialCost > 0) return m.materialCost;
+          const sum = (m.injectionCost || 0) + (m.paintCost || 0) + (m.purchaseUnitPrice || 0);
+          if (sum > 0) return sum;
+        }
+      }
+      return 0;
+    };
+
     const rows: MonthlySummaryRow[] = [];
     for (let mi = 0; mi < 12; mi++) {
       const monthLabel = `${String(mi + 1).padStart(2, '0')}월`;
       let revenue = 0;
       let stdCost = 0;
+      let matchedRev = 0;
+      let unmatchedRev = 0;
 
       if (forecastData.length > 0) {
         for (const item of forecastData) {
@@ -1349,10 +1667,22 @@ const StandardMaterialCostView: React.FC = () => {
           revenue += rev;
           const rawPn = normalizePn(item.partNo);
           const bomKey = findBomKey(rawPn);
-          if (!bomKey) continue;
-          const ratios = getBomRatios(bomKey);
-          for (const [leafPn, reqPerUnit] of ratios) {
-            stdCost += reqPerUnit * qty * avgPrice(leafPn);
+          let itemCost = 0;
+          if (bomKey) {
+            const ratios = getBomRatios(bomKey);
+            for (const [leafPn, reqPerUnit] of ratios) {
+              itemCost += reqPerUnit * qty * avgPrice(leafPn);
+            }
+          } else {
+            // BOM 없는 품목: pnMapping 단가 기반 직접 산출
+            const uc = getUnitCostFromMaster(rawPn);
+            if (uc > 0) itemCost = qty * uc;
+          }
+          if (itemCost > 0) {
+            stdCost += itemCost;
+            matchedRev += rev;
+          } else {
+            unmatchedRev += rev;
           }
         }
       } else if (itemRevenueData.length > 0) {
@@ -1361,14 +1691,26 @@ const StandardMaterialCostView: React.FC = () => {
           if (!ym || parseInt(ym[1]) !== selectedYear) continue;
           if (parseInt(ym[2]) !== mi + 1) continue;
           const qty = row.qty || 0;
-          revenue += row.amount || 0;
-          if (qty <= 0) continue;
+          const rev = row.amount || 0;
+          revenue += rev;
+          if (qty <= 0) { unmatchedRev += rev; continue; }
           const rawPn = normalizePn(row.partNo || row.customerPN || '');
           const bomKey = findBomKey(rawPn);
-          if (!bomKey) continue;
-          const ratios = getBomRatios(bomKey);
-          for (const [leafPn, reqPerUnit] of ratios) {
-            stdCost += reqPerUnit * qty * avgPrice(leafPn);
+          let itemCost = 0;
+          if (bomKey) {
+            const ratios = getBomRatios(bomKey);
+            for (const [leafPn, reqPerUnit] of ratios) {
+              itemCost += reqPerUnit * qty * avgPrice(leafPn);
+            }
+          } else {
+            const uc = getUnitCostFromMaster(rawPn);
+            if (uc > 0) itemCost = qty * uc;
+          }
+          if (itemCost > 0) {
+            stdCost += itemCost;
+            matchedRev += rev;
+          } else {
+            unmatchedRev += rev;
           }
         }
       }
@@ -1377,6 +1719,12 @@ const StandardMaterialCostView: React.FC = () => {
       purchaseData.filter(p =>
         p.category === 'Material' && p.year === selectedYear && p.month === monthLabel
       ).forEach(p => { stdCost += p.amount; });
+
+      // 커버리지 보정: 산출 못 한 품목의 표준비 추정 (autoCalcResult와 동일 방식)
+      if (unmatchedRev > 0 && matchedRev > 0 && stdCost > 0) {
+        const covRatio = stdCost / matchedRev;
+        stdCost += unmatchedRev * covRatio;
+      }
 
       const actual = actualByMonth[mi];
       const diff = stdCost - actual;
@@ -1398,7 +1746,7 @@ const StandardMaterialCostView: React.FC = () => {
     }
 
     return rows;
-  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, selectedYear, excelData]);
+  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, masterRefInfo, purchaseData, selectedYear, excelData]);
 
   // ============================================================
   // GAP ANALYSIS: Excel vs 구매입고 품목별 비교 분석
@@ -1761,32 +2109,71 @@ const StandardMaterialCostView: React.FC = () => {
 
   // ============================================================
   // BOM 파이프라인 진단 (diagnostic)
-  // 표준재료비 = 매출수량(고객사P/N) × 단가/EA
+  // 매출수량 → P/N매핑 → BOM전개 → 단가매칭 → 재료비율(45~50%)
   // 각 품목별로 파이프라인 어디가 끊기는지 진단
   // ============================================================
   const [diagFilterStatus, setDiagFilterStatus] = useState('All');
+  const TARGET_RATIO_MIN = 0.20; // 재료비율 하한
+  const TARGET_RATIO_MAX = 0.70; // 재료비율 상한
+  const TARGET_RATIO_IDEAL_MIN = 0.45;
+  const TARGET_RATIO_IDEAL_MAX = 0.50;
 
   const diagnosticData = useMemo(() => {
-    // P/N 매핑 빌드
+    if (forecastData.length === 0 && pnMapping.length === 0 && masterRefInfo.length === 0) return null;
+
+    // --- P/N 브릿지: pnMapping + masterRefInfo 양쪽 활용 (auto 모드와 동일, 1:N 포함) ---
     const custToInt = new Map<string, string>();
     const intToCust = new Map<string, string>();
+    const custToInts = new Map<string, Set<string>>();
+    const itemToRawMat = new Map<string, string[]>();
+
+    const addBridge = (cust: string, internal: string) => {
+      if (!cust || !internal || cust === internal) return;
+      custToInt.set(cust, internal);
+      intToCust.set(internal, cust);
+      if (!custToInts.has(cust)) custToInts.set(cust, new Set());
+      custToInts.get(cust)!.add(internal);
+    };
+
     pnMapping.forEach(m => {
-      const cust = normalizePn(m.customerPn);
+      addBridge(normalizePn(m.customerPn), normalizePn(m.internalCode));
+      const rawCodes: string[] = [];
+      if (m.rawMaterialCode1) rawCodes.push(normalizePn(m.rawMaterialCode1));
+      if (m.rawMaterialCode2) rawCodes.push(normalizePn(m.rawMaterialCode2));
       const internal = normalizePn(m.internalCode);
-      if (cust && internal) {
-        custToInt.set(cust, internal);
-        intToCust.set(internal, cust);
+      if (rawCodes.length > 0 && internal) itemToRawMat.set(internal, rawCodes);
+    });
+    // masterRefInfo 보강
+    masterRefInfo.forEach(ri => {
+      if (!ri.customerPn || !ri.itemCode) return;
+      const cust = normalizePn(ri.customerPn);
+      const internal = normalizePn(ri.itemCode);
+      if (!cust || !internal) return;
+      if (!custToInt.has(cust)) addBridge(cust, internal);
+      // 원재료 코드 브릿지도 보강
+      if (!itemToRawMat.has(internal)) {
+        const rawCodes: string[] = [];
+        if (ri.rawMaterialCode1) rawCodes.push(normalizePn(ri.rawMaterialCode1));
+        if (ri.rawMaterialCode2) rawCodes.push(normalizePn(ri.rawMaterialCode2));
+        if (rawCodes.length > 0) itemToRawMat.set(internal, rawCodes);
       }
     });
 
-    // pnMapping lookup by normalized code
+    // --- 기준정보 lookup (단가/품목정보) ---
+    const refLookup = new Map<string, ReferenceInfoRecord>();
+    masterRefInfo.forEach(ri => {
+      if (ri.itemCode) refLookup.set(normalizePn(ri.itemCode), ri);
+      if (ri.customerPn) refLookup.set(normalizePn(ri.customerPn), ri);
+    });
+
+    // pnMapping lookup
     const masterLookup = new Map<string, typeof pnMapping[0]>();
     pnMapping.forEach(m => {
       if (m.internalCode) masterLookup.set(normalizePn(m.internalCode), m);
       if (m.customerPn) masterLookup.set(normalizePn(m.customerPn), m);
     });
 
-    // excelData.items lookup by normalized itemCode or customerPn
+    // excelData.items lookup
     const excelItemLookup = new Map<string, { injectionCost: number; paintCost: number; purchasePrice: number; itemName: string; supplyType: string; processType: string }>();
     if (excelData?.items) {
       for (const item of excelData.items) {
@@ -1803,46 +2190,163 @@ const StandardMaterialCostView: React.FC = () => {
       }
     }
 
+    // --- BOM relations (auto 모드와 동일) ---
+    const rawRelations = buildBomRelations(bomData);
+    const bomRelations = new Map<string, BomRecord[]>();
+    for (const [key, val] of rawRelations) bomRelations.set(normalizePn(key), val);
+
+    // --- 입고단가 lookup (purchaseData 기반 평균단가) ---
+    const purchaseAvgPrice = new Map<string, number>();
+    const purchaseByCode = new Map<string, { totalQty: number; totalAmt: number }>();
+    purchaseData.filter(p => p.year === selectedYear).forEach(p => {
+      const code = normalizePn(p.itemCode || '');
+      if (!code) return;
+      const ex = purchaseByCode.get(code);
+      if (ex) { ex.totalQty += p.qty; ex.totalAmt += p.amount; }
+      else purchaseByCode.set(code, { totalQty: p.qty, totalAmt: p.amount });
+    });
+    for (const [code, data] of purchaseByCode) {
+      if (data.totalQty > 0) purchaseAvgPrice.set(code, data.totalAmt / data.totalQty);
+    }
+    // 교차 참조: 내부코드 ↔ 고객코드 양방향으로 purchaseAvgPrice 조회 가능하게
+    for (const [code, price] of [...purchaseAvgPrice.entries()]) {
+      const asCust = intToCust.get(code);
+      if (asCust && !purchaseAvgPrice.has(asCust)) purchaseAvgPrice.set(asCust, price);
+      const asInt = custToInt.get(code);
+      if (asInt && !purchaseAvgPrice.has(asInt)) purchaseAvgPrice.set(asInt, price);
+    }
+
     const monthIdx = selectedMonth === 'All' ? -1 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
     const rows: DiagnosticRow[] = [];
     const processedPns = new Set<string>();
 
-    // --- 1. forecastData 기준 순회 (매출계획 있는 품목) ---
+    // BOM key resolver (5-strategy — auto 모드와 동일)
+    const findBomKey = (rawPn: string): string | null => {
+      if (bomRelations.has(rawPn)) return rawPn;
+      const asInt = custToInt.get(rawPn);
+      if (asInt && bomRelations.has(asInt)) return asInt;
+      const asCust = intToCust.get(rawPn);
+      if (asCust && bomRelations.has(asCust)) return asCust;
+      // 1:N 매핑: 고객코드 → 여러 내부코드 중 BOM 있는 것
+      const internals = custToInts.get(rawPn);
+      if (internals) { for (const ic of internals) { if (bomRelations.has(ic)) return ic; } }
+      // 원재료 코드 기반 역추적
+      for (const [internal, rawCodes] of itemToRawMat) {
+        if (rawCodes.includes(rawPn) && bomRelations.has(internal)) return internal;
+      }
+      return null;
+    };
+
+    // --- 1. forecastData 기준 순회 ---
     for (const fi of forecastData) {
       if (!fi.partNo) continue;
       const custPn = normalizePn(fi.partNo);
       if (!custPn || processedPns.has(custPn)) continue;
       processedPns.add(custPn);
 
-      const qty = monthIdx >= 0
-        ? (fi.monthlyQty?.[monthIdx] || 0)
-        : (fi.totalQty || 0);
+      const qty = monthIdx >= 0 ? (fi.monthlyQty?.[monthIdx] || 0) : (fi.totalQty || 0);
+      const revenue = monthIdx >= 0 ? (fi.monthlyRevenue?.[monthIdx] || 0) : (fi.totalRevenue || 0);
       if (qty <= 0) continue;
 
-      // P/N 매핑
-      const internalCode = custToInt.get(custPn) || '';
+      // P/N 매핑 (1:N도 포함)
+      let internalCode = custToInt.get(custPn) || '';
+      if (!internalCode) {
+        const ints = custToInts.get(custPn);
+        if (ints && ints.size > 0) internalCode = [...ints][0];
+      }
       const hasPnMapping = !!internalCode;
 
-      // 단가 조회 (excelData.items 우선 → pnMapping fallback)
-      let exItem = excelItemLookup.get(custPn);
-      if (!exItem && internalCode) exItem = excelItemLookup.get(internalCode);
+      // BOM 존재 여부
+      const bomKey = findBomKey(custPn);
+      const hasBom = !!bomKey;
+      const bomChildren = bomKey ? (bomRelations.get(bomKey) || []) : [];
+      const bomChildCount = bomChildren.length;
+      // BOM 전개 후 리프 수 (간이 카운트)
+      let leafCount = 0;
+      if (hasBom) {
+        const leaves = expandBomToLeaves(bomKey!, 1, bomRelations);
+        leafCount = leaves.length;
+      }
 
-      const master = masterLookup.get(custPn) || (internalCode ? masterLookup.get(internalCode) : undefined);
+      // 단가 조회: excelData → pnMapping → masterRefInfo → 입고평균
+      // BOM key로도 단가 조회 (bomKey는 실제 BOM에 매칭된 내부코드)
+      const lookupKeys = [custPn];
+      if (internalCode) lookupKeys.push(internalCode);
+      if (bomKey && bomKey !== custPn && bomKey !== internalCode) lookupKeys.push(bomKey);
+      // 1:N 매핑된 다른 내부코드도 탐색
+      const allInts = custToInts.get(custPn);
+      if (allInts) { for (const ic of allInts) { if (!lookupKeys.includes(ic)) lookupKeys.push(ic); } }
 
-      const injCost = exItem?.injectionCost || master?.injectionCost || 0;
-      const pntCost = exItem?.paintCost || master?.paintCost || 0;
-      const purPrice = exItem?.purchasePrice || master?.purchaseUnitPrice || 0;
+      let exItem: { injectionCost: number; paintCost: number; purchasePrice: number; itemName: string; supplyType: string; processType: string } | undefined;
+      let master: typeof pnMapping[0] | undefined;
+      let refInfo: ReferenceInfoRecord | undefined;
+      for (const lk of lookupKeys) {
+        if (!exItem) exItem = excelItemLookup.get(lk);
+        if (!master) master = masterLookup.get(lk);
+        if (!refInfo) refInfo = refLookup.get(lk);
+      }
+
+      let injCost = exItem?.injectionCost || master?.injectionCost || 0;
+      let pntCost = exItem?.paintCost || master?.paintCost || 0;
+      let purPrice = exItem?.purchasePrice || master?.purchaseUnitPrice || 0;
+
+      // materialCost 폴백: 개별 단가 없으면 총 재료비 단가 사용
+      if (injCost === 0 && pntCost === 0 && purPrice === 0 && master?.materialCost && master.materialCost > 0) {
+        purPrice = master.materialCost;
+      }
+
+      // 입고평균 단가로 보강 (BOM 리프별 단가가 없을 때)
+      if (injCost === 0 && pntCost === 0 && purPrice === 0 && hasBom && leafCount > 0) {
+        // BOM 리프별 입고단가 합산
+        const leaves = expandBomToLeaves(bomKey!, 1, bomRelations);
+        let bomBasedCost = 0;
+        for (const leaf of leaves) {
+          const lc = normalizePn(leaf.childPn);
+          const price = purchaseAvgPrice.get(lc) || 0;
+          bomBasedCost += price * leaf.totalRequired;
+        }
+        if (bomBasedCost > 0) purPrice = bomBasedCost; // BOM 전개 기반 단가
+      }
+
+      // 입고평균 단가 폴백 (제품 P/N 자체의 입고 데이터 확인)
+      if (injCost === 0 && pntCost === 0 && purPrice === 0) {
+        const directPrice = purchaseAvgPrice.get(custPn) || (internalCode ? purchaseAvgPrice.get(internalCode) : 0) || 0;
+        if (directPrice > 0) purPrice = directPrice;
+      }
+
       const unitCost = injCost + pntCost + purPrice;
       const hasUnitCost = unitCost > 0;
+      const stdAmount = qty * unitCost;
+      const materialRatio = revenue > 0 ? stdAmount / revenue : 0;
 
-      const itemName = exItem?.itemName || master?.partName || fi.partName || '';
-      const supplyType = exItem?.supplyType || master?.supplyType || '';
-      const processType = exItem?.processType || master?.processType || '';
+      const itemName = exItem?.itemName || master?.partName || refInfo?.itemName || fi.partName || '';
+      const supplyType = exItem?.supplyType || master?.supplyType || refInfo?.supplyType || '';
+      const processType = exItem?.processType || master?.processType || refInfo?.processType || '';
 
+      // 파이프라인 진단: P/N → BOM → 단가 → 비율
+      // 구매/외주 품목은 BOM 없는 게 정상 → 단가 있으면 정상 처리
+      const isSelfMade = supplyType.includes('자작');
+      const needsBom = isSelfMade || !supplyType; // 자작 또는 미분류만 BOM 필요
       let breakPoint = '정상';
-      let breakLevel: 0 | 1 | 2 | 3 = 0;
+      let breakLevel: 0 | 1 | 2 | 3 | 4 = 0;
       if (!hasPnMapping) { breakPoint = 'P/N 매핑 없음'; breakLevel = 2; }
+      else if (!hasBom && needsBom) { breakPoint = 'BOM 누락 (자작)'; breakLevel = 3; }
+      else if (!hasBom && !needsBom && !hasUnitCost) { breakPoint = '단가 없음 (구매/외주)'; breakLevel = 3; }
+      else if (!hasBom && !needsBom && hasUnitCost) { breakPoint = `정상 (${supplyType}·BOM불요)`; breakLevel = 0; }
       else if (!hasUnitCost) { breakPoint = '단가 없음'; breakLevel = 3; }
+      else if (revenue > 0 && (materialRatio < TARGET_RATIO_MIN || materialRatio > TARGET_RATIO_MAX)) {
+        if (materialRatio > TARGET_RATIO_MAX) {
+          breakPoint = `비율 과다 ${(materialRatio * 100).toFixed(0)}%`;
+        } else {
+          // 비율 과소 원인 세분화
+          const missingParts: string[] = [];
+          if (injCost === 0 && (supplyType === '자작' || processType === '사출' || !supplyType)) missingParts.push('사출');
+          if (pntCost === 0 && (processType === '도장' || supplyType === '자작' || !supplyType)) missingParts.push('도장');
+          if (purPrice === 0 && supplyType !== '자작') missingParts.push('구매단가');
+          breakPoint = `비율 과소 ${(materialRatio * 100).toFixed(0)}%${missingParts.length > 0 ? ` (${missingParts.join('+')} 누락)` : ''}`;
+        }
+        breakLevel = 4;
+      }
 
       rows.push({
         customerPn: fi.partNo,
@@ -1852,48 +2356,56 @@ const StandardMaterialCostView: React.FC = () => {
         processType: processType || '-',
         hasForecast: true,
         forecastQty: qty,
+        forecastRevenue: revenue,
         hasPnMapping,
+        hasBom,
+        bomChildCount: leafCount,
         hasUnitCost,
         unitCostPerEa: unitCost,
         injectionCost: injCost,
         paintCost: pntCost,
         purchasePrice: purPrice,
-        stdAmount: qty * unitCost,
+        stdAmount,
+        materialRatio,
         breakPoint,
         breakLevel,
       });
     }
 
-    // --- 2. pnMapping에 있지만 forecastData에 없는 품목 ---
-    for (const m of pnMapping) {
-      const custPn = normalizePn(m.customerPn);
-      const internalCode = normalizePn(m.internalCode);
-      if (processedPns.has(custPn) || processedPns.has(internalCode)) continue;
-      const key = custPn || internalCode;
+    // --- 2. masterRefInfo에 있지만 forecastData에 없는 품목 (샘플링) ---
+    let noForecastCount = 0;
+    for (const ri of masterRefInfo) {
+      if (!ri.customerPn && !ri.itemCode) continue;
+      const custPn = normalizePn(ri.customerPn || '');
+      const internal = normalizePn(ri.itemCode || '');
+      if (processedPns.has(custPn) || processedPns.has(internal)) continue;
+      const key = custPn || internal;
       if (!key) continue;
       processedPns.add(key);
-
-      let exItem = excelItemLookup.get(custPn) || excelItemLookup.get(internalCode);
-      const injCost = exItem?.injectionCost || m.injectionCost || 0;
-      const pntCost = exItem?.paintCost || m.paintCost || 0;
-      const purPrice = exItem?.purchasePrice || m.purchaseUnitPrice || 0;
-      const unitCost = injCost + pntCost + purPrice;
+      if (custPn) processedPns.add(custPn);
+      if (internal) processedPns.add(internal);
+      noForecastCount++;
+      if (noForecastCount > 200) continue; // 상위 200건만 표시
 
       rows.push({
-        customerPn: m.customerPn || '-',
-        internalCode: m.internalCode || '-',
-        itemName: exItem?.itemName || m.partName || '',
-        supplyType: exItem?.supplyType || m.supplyType || '미분류',
-        processType: exItem?.processType || m.processType || '-',
+        customerPn: ri.customerPn || '-',
+        internalCode: ri.itemCode || '-',
+        itemName: ri.itemName || '',
+        supplyType: ri.supplyType || '미분류',
+        processType: ri.processType || '-',
         hasForecast: false,
         forecastQty: 0,
-        hasPnMapping: !!(custPn && internalCode),
-        hasUnitCost: unitCost > 0,
-        unitCostPerEa: unitCost,
-        injectionCost: injCost,
-        paintCost: pntCost,
-        purchasePrice: purPrice,
+        forecastRevenue: 0,
+        hasPnMapping: !!(custPn && internal),
+        hasBom: !!findBomKey(custPn || internal),
+        bomChildCount: 0,
+        hasUnitCost: false,
+        unitCostPerEa: 0,
+        injectionCost: 0,
+        paintCost: 0,
+        purchasePrice: 0,
         stdAmount: 0,
+        materialRatio: 0,
         breakPoint: '매출계획 없음',
         breakLevel: 1,
       });
@@ -1902,23 +2414,77 @@ const StandardMaterialCostView: React.FC = () => {
     // 정렬: breakLevel 내림 → stdAmount 내림
     rows.sort((a, b) => b.breakLevel - a.breakLevel || b.stdAmount - a.stdAmount);
 
-    const okCount = rows.filter(r => r.breakLevel === 0).length;
+    const forecastRows = rows.filter(r => r.hasForecast);
+    const okCount = forecastRows.filter(r => r.breakLevel === 0).length;
+    const ratioIssueCount = forecastRows.filter(r => r.breakLevel === 4).length;
     const forecastMissCount = rows.filter(r => r.breakLevel === 1).length;
-    const pnMissCount = rows.filter(r => r.breakLevel === 2).length;
-    const costMissCount = rows.filter(r => r.breakLevel === 3).length;
-    const totalStdAmount = rows.filter(r => r.breakLevel === 0).reduce((s, r) => s + r.stdAmount, 0);
+    const pnMissCount = forecastRows.filter(r => r.breakLevel === 2).length;
+    const costMissCount = forecastRows.filter(r => r.breakLevel === 3).length;
+    const totalStdAmount = forecastRows.filter(r => r.breakLevel <= 4 && r.stdAmount > 0).reduce((s, r) => s + r.stdAmount, 0);
+    const totalRevenue = forecastRows.reduce((s, r) => s + r.forecastRevenue, 0);
+    const overallRatio = totalRevenue > 0 ? totalStdAmount / totalRevenue : 0;
+    const bomHitCount = forecastRows.filter(r => r.hasBom).length;
+
+    // ── 커버리지 보정: 단가 누락 품목의 표준비를 비율 기반 추정 ──
+    const matchedRows = forecastRows.filter(r => r.stdAmount > 0);
+    const matchedRevenue = matchedRows.reduce((s, r) => s + r.forecastRevenue, 0);
+    const matchedStd = matchedRows.reduce((s, r) => s + r.stdAmount, 0);
+    const avgMatchedRatio = matchedRevenue > 0 ? matchedStd / matchedRevenue : 0;
+
+    const unmatchedRows = forecastRows.filter(r => r.stdAmount === 0 && r.forecastRevenue > 0);
+    const unmatchedRevenue = unmatchedRows.reduce((s, r) => s + r.forecastRevenue, 0);
+    const extrapolatedStd = unmatchedRevenue * avgMatchedRatio;
+    const correctedStdAmount = totalStdAmount + extrapolatedStd;
+    const correctedRatio = totalRevenue > 0 ? correctedStdAmount / totalRevenue : 0;
+
+    // ── BOM/단가 누락 세부 분류 ──
+    // 진정한 BOM 누락: breakLevel === 3 (자작인데 BOM 없음, 또는 단가 없음)
+    const noBomRows = forecastRows.filter(r => r.breakLevel === 3 && r.breakPoint.includes('BOM'));
+    const noCostRows = forecastRows.filter(r => r.breakLevel === 3 && r.breakPoint.includes('단가'));
+    // 구매/외주 BOM불요 정상 품목 (breakLevel 0, BOM 없지만 정상)
+    const noBomOkRows = forecastRows.filter(r => r.breakLevel === 0 && !r.hasBom && r.hasUnitCost);
+    const noBomBySupply = { '자작': 0, '외주': 0, '구매': 0, '미분류': 0 };
+    const allNoBomRows = forecastRows.filter(r => r.hasPnMapping && !r.hasBom);
+    allNoBomRows.forEach(r => {
+      const st = r.supplyType;
+      if (st.includes('자작')) noBomBySupply['자작']++;
+      else if (st.includes('외주')) noBomBySupply['외주']++;
+      else if (st === '구매') noBomBySupply['구매']++;
+      else noBomBySupply['미분류']++;
+    });
+
+    console.log(`[BOM진단] P/N브릿지: ${custToInt.size}건 (1:N ${custToInts.size}건), BOM: ${bomRelations.size}개 모품번, 매출: ${forecastRows.length}개 품목`);
+    console.log(`[BOM진단] BOM매칭: ${bomHitCount}/${forecastRows.length} (${forecastRows.length > 0 ? (bomHitCount / forecastRows.length * 100).toFixed(0) : 0}%), P/N미매핑: ${pnMissCount}, 진짜 누락: ${costMissCount} (BOM필요인데없음 ${noBomRows.length} + 단가없음 ${noCostRows.length}), BOM불요정상: ${noBomOkRows.length}, 비율이상: ${ratioIssueCount}, 정상: ${okCount}`);
+    console.log(`[BOM진단] BOM없는 전체 ${allNoBomRows.length}건 조달구분: 자작 ${noBomBySupply['자작']}, 외주 ${noBomBySupply['외주']}, 구매 ${noBomBySupply['구매']}, 미분류 ${noBomBySupply['미분류']}`);
+    if (noBomRows.length > 0) {
+      console.log(`[BOM진단] 진짜 BOM누락 품목 샘플:`, noBomRows.slice(0, 10).map(r => `${r.customerPn} → ${r.internalCode} (${r.supplyType})`));
+    }
+    console.log(`[BOM진단] 커버리지 보정: 산출가능 ${matchedRows.length}건 (평균비율 ${(avgMatchedRatio * 100).toFixed(1)}%), 미매칭 매출 ₩${unmatchedRevenue.toLocaleString()} → 추정 +₩${Math.round(extrapolatedStd).toLocaleString()}`);
+    console.log(`[BOM진단] 원래: ${(overallRatio * 100).toFixed(1)}% (₩${Math.round(totalStdAmount).toLocaleString()}) → 보정: ${(correctedRatio * 100).toFixed(1)}% (₩${Math.round(correctedStdAmount).toLocaleString()})`);
 
     return {
       rows,
       totalProducts: rows.length,
+      forecastProducts: forecastRows.length,
       okCount,
+      ratioIssueCount,
       forecastMissCount,
       pnMissCount,
       costMissCount,
+      noBomCount: noBomRows.length,
+      noCostCount: noCostRows.length,
+      noBomBySupply,
+      bomHitCount,
       totalStdAmount,
-      coverageRate: rows.length > 0 ? (okCount / rows.length) * 100 : 0,
+      totalRevenue,
+      overallRatio,
+      correctedStdAmount,
+      correctedRatio,
+      extrapolatedStd,
+      unmatchedCount: unmatchedRows.length,
+      coverageRate: forecastRows.length > 0 ? (okCount / forecastRows.length) * 100 : 0,
     };
-  }, [forecastData, pnMapping, excelData, selectedMonth]);
+  }, [forecastData, pnMapping, masterRefInfo, bomData, purchaseData, excelData, selectedMonth, selectedYear]);
 
   // Filtered diagnostic rows
   const filteredDiagRows = useMemo(() => {
@@ -1929,7 +2495,11 @@ const StandardMaterialCostView: React.FC = () => {
     if (diagFilterStatus === '정상') filtered = filtered.filter(r => r.breakLevel === 0);
     else if (diagFilterStatus === '매출계획없음') filtered = filtered.filter(r => r.breakLevel === 1);
     else if (diagFilterStatus === 'P/N미매핑') filtered = filtered.filter(r => r.breakLevel === 2);
-    else if (diagFilterStatus === '단가없음') filtered = filtered.filter(r => r.breakLevel === 3);
+    else if (diagFilterStatus === '단가/BOM없음') filtered = filtered.filter(r => r.breakLevel === 3);
+    else if (diagFilterStatus === 'BOM없음') filtered = filtered.filter(r => r.breakLevel === 3 && r.hasPnMapping && !r.hasBom);
+    else if (diagFilterStatus === '단가없음') filtered = filtered.filter(r => r.breakLevel === 3 && r.hasBom && !r.hasUnitCost);
+    else if (diagFilterStatus === '비율이상') filtered = filtered.filter(r => r.breakLevel === 4);
+    else if (diagFilterStatus === '매출있음') filtered = filtered.filter(r => r.hasForecast);
 
     // 검색
     if (searchText) {
@@ -2377,6 +2947,33 @@ const StandardMaterialCostView: React.FC = () => {
         }
       }
 
+      // ── 참조 데이터 3개 테이블 Supabase 저장 ──
+      const savePromises: Promise<void>[] = [];
+      if (parsed.purchasePrices && parsed.purchasePrices.length > 0) {
+        savePromises.push(purchasePriceService.saveAll(parsed.purchasePrices).then(() => {
+          console.log(`[표준재료비] 구매단가 ${parsed.purchasePrices!.length}건 Supabase 저장 완료`);
+        }));
+      }
+      if (parsed.outsourcePrices && parsed.outsourcePrices.length > 0) {
+        savePromises.push(outsourceInjPriceService.saveAll(parsed.outsourcePrices).then(() => {
+          console.log(`[표준재료비] 외주사출판매가 ${parsed.outsourcePrices!.length}건 Supabase 저장 완료`);
+        }));
+      }
+      if (parsed.paintMixRatios && parsed.paintMixRatios.length > 0) {
+        savePromises.push(paintMixRatioService.saveAll(parsed.paintMixRatios).then(() => {
+          console.log(`[표준재료비] 도료배합비율 ${parsed.paintMixRatios!.length}건 Supabase 저장 완료`);
+        }));
+      }
+      if (parsed.itemStandardCosts && parsed.itemStandardCosts.length > 0) {
+        savePromises.push(itemStandardCostService.saveAll(parsed.itemStandardCosts).then(() => {
+          setMasterItemStandardCosts(parsed.itemStandardCosts!);
+          console.log(`[표준재료비] 품목별원가 ${parsed.itemStandardCosts!.length}건 Supabase 저장 완료`);
+        }));
+      }
+      if (savePromises.length > 0) {
+        Promise.all(savePromises).catch(err => console.warn('[표준재료비] 참조데이터 저장 오류:', err));
+      }
+
       setViewMode('summary');
       setPage(0);
     } catch (err) {
@@ -2455,7 +3052,7 @@ const StandardMaterialCostView: React.FC = () => {
 
   const handleAutoDownload = () => {
     if (!filteredAutoRows.length) return;
-    const headers = ['자재품번', '자재명', '협력업체', '재료유형', '표준소요량', '평균단가', '표준재료비', '실투입수량', '실적재료비', '차이', '차이율(%)'];
+    const headers = ['자재품번', '자재명', '협력업체', '재료유형', '표준소요량', '평균단가', '표준재료비', '실투입수량', '매입재료비', '차이', '차이율(%)'];
     const rows = filteredAutoRows.map(r => [
       r.childPn, r.childName, r.supplier, r.materialType,
       r.standardReq, r.avgUnitPrice, r.standardCost,
@@ -2493,15 +3090,15 @@ const StandardMaterialCostView: React.FC = () => {
 
   const handleComparisonDownload = () => {
     if (!filteredComparisonRows.length) return;
-    const headers = ['품목코드', '품목명', '조달구분', '표준수량', '표준단가', '표준금액', '실적수량', '실적단가', '실적금액', '차이금액', '차이율(%)', '매칭상태'];
+    const headers = ['품목코드', '품목명', '조달구분', '표준수량', '표준단가', '표준금액', '매입수량', '매입단가', '매입금액', '차이금액', '차이율(%)', '매칭상태'];
     const csvRows = filteredComparisonRows.map(r => [
       r.itemCode, r.itemName, r.supplyType,
       r.stdQty, Math.round(r.stdUnitPrice), Math.round(r.stdAmount),
       r.actQty, Math.round(r.actUnitPrice), Math.round(r.actAmount),
       Math.round(r.diffAmount), r.diffRate.toFixed(1),
-      r.matchStatus === 'matched' ? '매칭' : r.matchStatus === 'std-only' ? '표준만' : '실적만',
+      r.matchStatus === 'matched' ? '매칭' : r.matchStatus === 'std-only' ? '표준만' : '매입만',
     ]);
-    downloadCSV('표준vs실적_비교', headers, csvRows);
+    downloadCSV('표준vs매입_비교', headers, csvRows);
   };
 
   // 통합BOM Excel 다운로드
@@ -2512,32 +3109,29 @@ const StandardMaterialCostView: React.FC = () => {
 
     // --- Sheet 1: 품목마스터 ---
     const masterRows: any[][] = [
-      ['고객사P/N', '내부코드', '품목명', '조달구분', '공정유형', '사출재료비', '도장재료비', '구매단가', '합계단가/EA', '매출수량', '표준재료비', '파이프라인', '진단메시지'],
+      ['고객사P/N', '내부코드', '품목명', '조달구분', 'BOM리프', '매출수량', '매출금액', '합계단가/EA', '표준재료비', '재료비율%', '진단', '진단메시지'],
     ];
-    // Union merge: diagnosticData.rows 기반 (forecastData + pnMapping 전체)
     for (const r of diagnosticData.rows) {
       masterRows.push([
         r.customerPn,
         r.internalCode,
         r.itemName,
         r.supplyType,
-        r.processType,
-        r.injectionCost,
-        r.paintCost,
-        r.purchasePrice,
-        r.unitCostPerEa,
+        r.bomChildCount || '',
         r.forecastQty,
+        Math.round(r.forecastRevenue),
+        r.unitCostPerEa,
         Math.round(r.stdAmount),
-        r.breakLevel === 0 ? 'OK' : 'NG',
+        r.materialRatio > 0 ? Math.round(r.materialRatio * 1000) / 10 : '',
+        r.breakLevel <= 0 ? 'OK' : 'NG',
         r.breakPoint,
       ]);
     }
     const ws1 = XLSX.utils.aoa_to_sheet(masterRows);
-    // 컬럼 너비 설정
     ws1['!cols'] = [
       { wch: 18 }, { wch: 18 }, { wch: 25 }, { wch: 8 }, { wch: 8 },
-      { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 },
-      { wch: 14 }, { wch: 8 }, { wch: 16 },
+      { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 10 },
+      { wch: 6 }, { wch: 16 },
     ];
     XLSX.utils.book_append_sheet(wb, ws1, '품목마스터');
 
@@ -2558,7 +3152,7 @@ const StandardMaterialCostView: React.FC = () => {
 
     // --- Sheet 3: 파이프라인진단 ---
     const diagRows: any[][] = [
-      ['고객사P/N', '내부코드', '품목명', '매출수량', 'P/N매핑', '단가유무', '단가/EA', '표준재료비', '진단'],
+      ['고객사P/N', '내부코드', '품목명', '매출수량', '매출금액', 'P/N매핑', 'BOM', '단가유무', '단가/EA', '표준재료비', '재료비율%', '진단'],
     ];
     for (const r of diagnosticData.rows) {
       diagRows.push([
@@ -2566,19 +3160,158 @@ const StandardMaterialCostView: React.FC = () => {
         r.internalCode,
         r.itemName,
         r.forecastQty,
+        Math.round(r.forecastRevenue),
         r.hasPnMapping ? 'O' : 'X',
+        r.hasBom ? 'O' : 'X',
         r.hasUnitCost ? 'O' : 'X',
         r.unitCostPerEa,
         Math.round(r.stdAmount),
+        r.materialRatio > 0 ? Math.round(r.materialRatio * 1000) / 10 : '',
         r.breakPoint,
       ]);
     }
     const ws3 = XLSX.utils.aoa_to_sheet(diagRows);
     ws3['!cols'] = [
-      { wch: 18 }, { wch: 18 }, { wch: 25 }, { wch: 10 }, { wch: 8 },
-      { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+      { wch: 18 }, { wch: 18 }, { wch: 25 }, { wch: 10 }, { wch: 14 },
+      { wch: 8 }, { wch: 6 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 16 },
     ];
     XLSX.utils.book_append_sheet(wb, ws3, '파이프라인진단');
+
+    // --- Sheet 4: 조치목록 (문제 품목별 구체적 해소 방안) ---
+    const actionRows: any[][] = [
+      ['No', '우선순위', '고객사P/N', '내부코드', '품목명', '조달구분', '문제유형', '현재상태', '조치사항', '담당부서', '매출금액', '영향도'],
+    ];
+    let actionNo = 0;
+    // NG 품목만 (breakLevel >= 2) 매출금액 내림차순
+    const ngRows = diagnosticData.rows
+      .filter(r => r.hasForecast && r.breakLevel >= 2)
+      .sort((a, b) => b.forecastRevenue - a.forecastRevenue);
+
+    for (const r of ngRows) {
+      actionNo++;
+      let problemType = '';
+      let currentState = '';
+      let action = '';
+      let dept = '';
+      let priority = '';
+
+      if (r.breakLevel === 2) {
+        // P/N 미매핑
+        problemType = 'P/N 미매핑';
+        currentState = `고객P/N "${r.customerPn}"에 대응하는 내부 품목코드 없음`;
+        action = '자재마스터(품목코드 매핑 시트)에 고객사P/N ↔ 내부코드 매핑 추가 등록';
+        dept = '생산관리/영업';
+        priority = '상';
+      } else if (r.breakLevel === 3 && r.hasPnMapping && !r.hasBom) {
+        // BOM 없음
+        const st = r.supplyType;
+        problemType = 'BOM 없음';
+        if (st.includes('구매')) {
+          currentState = `완제품 구매 품목 — BOM 구조 불필요`;
+          action = '① 자재마스터에 구매단가(purchaseUnitPrice) 직접 등록 또는\n② 입고현황에서 해당 품목의 입고단가 데이터 확보';
+          dept = '구매/자재';
+          priority = '중';
+        } else if (st.includes('외주')) {
+          currentState = `외주 생산 품목 — BOM이 협력업체에 있거나 미등록`;
+          action = '① 협력업체로부터 BOM 수령 후 BOM마스터 등록 또는\n② 자재마스터에 외주단가(purchaseUnitPrice) 직접 등록';
+          dept = '외주관리/구매';
+          priority = '중';
+        } else if (st.includes('자작')) {
+          currentState = `자작 품목이나 BOM이 등록되지 않음 — 재료비 산출 불가`;
+          action = '① BOM마스터에 해당 품목의 모품번-자품번 등록 (필수)\n② 생산기술팀에서 BOM 구조 확인 후 시스템 반영';
+          dept = '생산기술/생산관리';
+          priority = '상';
+        } else {
+          currentState = `조달구분 미분류 + BOM 미등록`;
+          action = '① 먼저 조달구분 확정 (자작/구매/외주)\n② 자작이면 BOM 등록, 구매/외주면 단가 직접 등록';
+          dept = '생산관리';
+          priority = '상';
+        }
+      } else if (r.breakLevel === 3 && r.hasBom && !r.hasUnitCost) {
+        // BOM 있으나 단가 없음
+        problemType = '단가 없음';
+        currentState = `BOM 전개 가능하나 리프 자재의 입고단가/마스터단가 모두 없음`;
+        action = '① 자재마스터에 사출재료비/도장재료비/구매단가 등록 또는\n② 입고현황에 해당 자재의 구매 입고 데이터 확보\n③ 표준재료비 Excel 업로드로 단가 일괄 반영';
+        dept = '원가/구매';
+        priority = '중';
+      } else if (r.breakLevel === 4) {
+        // 비율 이상
+        if (r.materialRatio > 0.70) {
+          problemType = '비율 과다';
+          currentState = `재료비율 ${(r.materialRatio * 100).toFixed(0)}% (목표 45~50%)`;
+          action = '① BOM 소요량 과다 여부 확인 (BOM마스터에서 qty 검증)\n② 단가 이상 여부 확인 (최근 입고단가와 마스터단가 비교)\n③ 매출단가 하락 여부 확인';
+          dept = '원가/생산기술';
+          priority = '하';
+        } else {
+          problemType = '비율 과소';
+          currentState = `재료비율 ${(r.materialRatio * 100).toFixed(0)}% (목표 45~50%) — ${r.breakPoint}`;
+          const missing: string[] = [];
+          if (r.injectionCost === 0) missing.push('사출재료비');
+          if (r.paintCost === 0) missing.push('도장재료비');
+          if (r.purchasePrice === 0 && !r.supplyType?.includes('자작')) missing.push('구매단가');
+          action = missing.length > 0
+            ? `누락 단가 등록 필요: ${missing.join(', ')}\n① 자재마스터 또는 표준재료비 Excel에 해당 단가 추가\n② 입고현황 데이터로 보완 가능 여부 확인`
+            : '① 단가 구성 요소 확인 (사출+도장+구매 합산이 낮은 원인 분석)\n② BOM 누락 자재 여부 확인';
+          dept = '원가/생산기술';
+          priority = '중';
+        }
+      }
+
+      // 영향도: 매출금액 기준
+      const impact = r.forecastRevenue > 5e8 ? '대 (5억↑)' : r.forecastRevenue > 1e8 ? '중 (1~5억)' : '소 (1억↓)';
+
+      actionRows.push([
+        actionNo,
+        priority,
+        r.customerPn,
+        r.internalCode,
+        r.itemName,
+        r.supplyType || '미분류',
+        problemType,
+        currentState,
+        action,
+        dept,
+        Math.round(r.forecastRevenue),
+        impact,
+      ]);
+    }
+
+    const ws4 = XLSX.utils.aoa_to_sheet(actionRows);
+    ws4['!cols'] = [
+      { wch: 5 }, { wch: 8 }, { wch: 18 }, { wch: 18 }, { wch: 28 }, { wch: 8 },
+      { wch: 12 }, { wch: 40 }, { wch: 55 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+    ];
+    // 줄바꿈 활성화
+    for (let i = 1; i <= actionRows.length; i++) {
+      ['H', 'I'].forEach(col => {
+        const cell = ws4[`${col}${i + 1}`];
+        if (cell) cell.s = { alignment: { wrapText: true } };
+      });
+    }
+    XLSX.utils.book_append_sheet(wb, ws4, '조치목록');
+
+    // --- Sheet 5: 요약 ---
+    const summaryRows: any[][] = [
+      ['구분', '건수', '매출비중', '설명'],
+      ['매출 품목 (전체)', diagnosticData.forecastProducts, '100%', '매출계획에 등록된 품목 수'],
+      ['정상 (45~50%)', diagnosticData.okCount, '', '재료비율이 목표 범위 내'],
+      ['비율 이상', diagnosticData.ratioIssueCount, '', '재료비율 <20% 또는 >70%'],
+      ['P/N 미매핑', diagnosticData.pnMissCount, '', '고객P/N → 내부코드 매핑 없음'],
+      ['BOM 누락 (자작/미분류)', diagnosticData.noBomCount, '',
+        `자작+BOM없음은 필수 등록 대상 (전체 BOM없음: 자작 ${diagnosticData.noBomBySupply['자작']} / 외주 ${diagnosticData.noBomBySupply['외주']} / 구매 ${diagnosticData.noBomBySupply['구매']} / 미분류 ${diagnosticData.noBomBySupply['미분류']})`],
+      ['단가 없음', diagnosticData.noCostCount, '', 'BOM 존재하나 자재 단가 미등록 또는 구매/외주 단가 미등록'],
+      [],
+      ['전체 재료비율 (산출)', `${(diagnosticData.overallRatio * 100).toFixed(1)}%`, `₩${Math.round(diagnosticData.totalStdAmount).toLocaleString()}`, '실제 데이터 기반 산출'],
+      ['전체 재료비율 (보정)', `${(diagnosticData.correctedRatio * 100).toFixed(1)}%`, `₩${Math.round(diagnosticData.correctedStdAmount).toLocaleString()}`, `미매칭 ${diagnosticData.unmatchedCount}건 추정분 포함`],
+      [],
+      ['[조치 우선순위 가이드]'],
+      ['상 (즉시)', '', '', '자작인데 BOM 없음 / P/N 미매핑 / 조달구분 미분류 → 데이터 등록 필요'],
+      ['중 (계획)', '', '', '구매/외주 단가 미등록 / BOM 있으나 단가 없음 / 비율 과소(누락단가)'],
+      ['하 (검토)', '', '', '비율 과다 → BOM 소요량 또는 단가 이상 여부 검토'],
+    ];
+    const ws5 = XLSX.utils.aoa_to_sheet(summaryRows);
+    ws5['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 22 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws5, '요약');
 
     // 다운로드
     XLSX.writeFile(wb, `통합BOM_마스터_${selectedYear}-${monthLabel}.xlsx`);
@@ -2612,15 +3345,9 @@ const StandardMaterialCostView: React.FC = () => {
           <div>
             <h2 className="text-xl font-black text-slate-800">표준재료비 (Standard Material Cost)</h2>
             <p className="text-sm text-slate-500">
-              {dataMode === 'excel'
-                ? (excelData ? `${excelData.year}년 ${excelData.month} 엑셀 데이터` : '엑셀 업로드 모드')
-                : dataMode === 'master'
-                ? `BOM 마스터 + MRP 기준 자동 산출 (기준정보 + 재질코드)`
-                : (calc?.debug?.calcSource?.startsWith('Excel') || calc?.debug?.calcSource?.startsWith('RefCalc')
-                    ? `통합엔진 (${excelData?.items?.length || 0}개 품목, ${calc?.debug?.calcSource}) 기반 산출`
-                    : calc?.debug?.calcSource === 'Master'
-                    ? `자재마스터 (${pnMapping.filter(m => m.materialCost).length}개 품목) + 매출실적 기반 자동 산출`
-                    : `매출계획 + BOM + 입고현황 기반 자동 산출`)
+              {dataMode === 'master'
+                ? `BOM 마스터 + 기준정보 + 재질코드 기반 자동 산출`
+                : `매출계획 + BOM + 입고현황 기반 자동 산출`
               }
             </p>
           </div>
@@ -2644,55 +3371,28 @@ const StandardMaterialCostView: React.FC = () => {
                 className={`px-3 py-1.5 text-xs font-bold transition-colors ${dataMode === 'master' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
                 마스터 기준
               </button>
-              <button onClick={() => setDataMode('excel')}
-                className={`px-3 py-1.5 text-xs font-bold transition-colors ${dataMode === 'excel' ? 'bg-blue-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}>
-                엑셀 업로드
-              </button>
             </div>
 
-            {dataMode !== 'excel' && (
-              <>
-                {dataMode === 'auto' && (
-                  <>
-                    <label className={`text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg cursor-pointer transition-colors ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700'}`} title="재료비.xlsx 업로드 (12시트 통합 산출)">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                      {uploading ? '처리 중...' : '재료비'}
-                      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleUpload} className="hidden" disabled={uploading} />
-                    </label>
-                    <label className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg cursor-pointer text-emerald-600 hover:bg-emerald-50 border border-emerald-200 transition-colors" title="자재마스터 업로드 (조달구분/재료비 포함)">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                      자재마스터
-                      <input ref={masterInputRef} type="file" accept=".xlsx,.xls" onChange={handleMasterUpload} className="hidden" />
-                    </label>
-                  </>
-                )}
-                {dataMode === 'master' && (
-                  <span className="text-xs text-blue-600 font-medium px-2">BOM 마스터 + MRP 기준 자동 산출</span>
-                )}
-                <button onClick={loadAllData} className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors" title="데이터 새로고침">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                  새로고침
-                </button>
-                {diagnosticData && diagnosticData.rows.length > 0 && (
-                  <button onClick={handleBomDownload} className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg text-violet-600 hover:bg-violet-50 border border-violet-200 transition-colors" title="통합BOM 마스터 Excel 다운로드 (품목마스터 + BOM구조 + 진단)">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    통합BOM
-                  </button>
-                )}
-              </>
+            {dataMode === 'master' && (
+              <span className="text-xs text-blue-600 font-medium px-2">
+                {`기준정보 ${masterRefInfo.length}건 | 재질코드 ${masterMaterialCodes.length}건 | BOM ${bomData.length}건`}
+              </span>
             )}
-            {dataMode === 'excel' && (
-              <label className={`text-xs font-bold flex items-center gap-1 px-4 py-2 rounded-lg transition-colors cursor-pointer ${uploading ? 'bg-slate-100 text-slate-400' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                {uploading ? '처리 중...' : '업로드'}
-                <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleUpload} className="hidden" disabled={uploading} />
-              </label>
+            <button onClick={loadAllData} className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors" title="데이터 새로고침">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              새로고침
+            </button>
+            {diagnosticData && diagnosticData.rows.length > 0 && (
+              <button onClick={handleBomDownload} className="text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg text-violet-600 hover:bg-violet-50 border border-violet-200 transition-colors" title="통합BOM 마스터 Excel 다운로드 (품목마스터 + BOM구조 + 진단)">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                통합BOM
+              </button>
             )}
           </div>
         </div>
 
-        {/* Data availability info (auto/master mode) */}
-        {dataMode !== 'excel' && (
+        {/* Data availability info */}
+        {(
           <div className={`flex flex-wrap items-center gap-4 px-4 py-3 rounded-xl mb-4 text-xs ${hasAutoData ? 'bg-emerald-50' : 'bg-amber-50'}`}>
             <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${forecastData.length > 0 || itemRevenueData.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
@@ -2706,13 +3406,9 @@ const StandardMaterialCostView: React.FC = () => {
               <span className={bomData.length > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'}>BOM {bomData.length.toLocaleString()}건</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${pnMapping.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-              <span className={pnMapping.length > 0 ? 'text-emerald-700 font-bold' : 'text-slate-400'}>
-                P/N 매핑 {pnMapping.length.toLocaleString()}건
-                {(() => {
-                  const withCost = pnMapping.filter(m => m.materialCost && m.materialCost > 0).length;
-                  return withCost > 0 ? ` (재료비 ${withCost.toLocaleString()})` : '';
-                })()}
+              <span className={`w-2 h-2 rounded-full ${(pnMapping.length > 0 || masterRefInfo.length > 0) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+              <span className={(pnMapping.length > 0 || masterRefInfo.length > 0) ? 'text-emerald-700 font-bold' : 'text-slate-400'}>
+                P/N 브릿지 {masterRefInfo.length > 0 ? `기준정보 ${masterRefInfo.length.toLocaleString()}건` : `매핑 ${pnMapping.length.toLocaleString()}건`}
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -2747,7 +3443,7 @@ const StandardMaterialCostView: React.FC = () => {
             {([
               { id: 'summary', label: '종합현황' },
               { id: 'items', label: dataMode !== 'excel' ? '자재별 상세' : '품목별 상세' },
-              ...(dataMode !== 'excel' ? [{ id: 'comparison' as ViewMode, label: '표준vs실적' }] : []),
+              ...(dataMode !== 'excel' ? [{ id: 'comparison' as ViewMode, label: '표준vs매입' }] : []),
               ...(dataMode !== 'excel' ? [{ id: 'diagnostic' as ViewMode, label: 'BOM진단' }] : []),
               { id: 'analysis', label: '분석' },
             ] as { id: ViewMode; label: string }[]).map(tab => (
@@ -2760,33 +3456,15 @@ const StandardMaterialCostView: React.FC = () => {
         )}
       </div>
 
-      {/* No Data - BOM이 없을 때만 */}
+      {/* No Data — Supabase 자동 로드 중 또는 데이터 없음 */}
       {dataMode !== 'excel' && !hasAutoData && (
         <div className="bg-white p-12 rounded-3xl border border-slate-200 shadow-sm text-center">
-          <h3 className="text-lg font-bold text-slate-600 mb-3">BOM 데이터가 필요합니다</h3>
-          <p className="text-sm text-slate-400 mb-4">구매 &gt; 자재수율에서 BOM을 업로드한 후 <span className="font-bold text-blue-600 cursor-pointer" onClick={loadAllData}>새로고침</span>을 눌러주세요.</p>
-          <div className="flex justify-center gap-6 text-xs">
-            <div className={`px-4 py-3 rounded-xl border ${bomData.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
-              {bomData.length > 0 ? '✓' : '!'} 구매 &gt; 자재수율 &gt; BOM 업로드 (필수)
-            </div>
-            <div className={`px-4 py-3 rounded-xl border ${forecastData.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-              {forecastData.length > 0 ? '✓' : '-'} 영업 &gt; 매출계획 (수량 기반 산출용)
-            </div>
-            <div className={`px-4 py-3 rounded-xl border ${purchaseData.length > 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-              {purchaseData.length > 0 ? '✓' : '-'} 구매 &gt; 입고현황 (실적 비교용)
-            </div>
-          </div>
-          <button onClick={loadAllData} className="mt-4 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors">
-            데이터 새로고침
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-200 border-t-blue-600 mb-4" />
+          <h3 className="text-lg font-bold text-slate-600 mb-2">데이터 로드 중...</h3>
+          <p className="text-sm text-slate-400 mb-4">Supabase에서 BOM, 매출계획, 입고현황을 자동 로드합니다.</p>
+          <button onClick={loadAllData} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors">
+            수동 새로고침
           </button>
-        </div>
-      )}
-
-      {dataMode === 'excel' && !hasExcelData && (
-        <div className="bg-white p-16 rounded-3xl border border-slate-200 shadow-sm text-center">
-          <div className="text-6xl mb-4 opacity-30">📊</div>
-          <h3 className="text-lg font-bold text-slate-600 mb-2">데이터가 없습니다</h3>
-          <p className="text-sm text-slate-400">상단에서 표준재료비 엑셀 파일(.xlsx)을 업로드하세요.</p>
         </div>
       )}
 
@@ -2798,19 +3476,19 @@ const StandardMaterialCostView: React.FC = () => {
               subValue={`${selectedMonth === 'All' ? '연간' : selectedMonth} 계획`} />
             <MetricCard label="표준재료비" value={`₩${formatWon(calc.totalStandard)}`} color="slate"
               subValue={`비율 ${formatPercent(calc.standardRatio)}`} />
-            <MetricCard label="실적재료비" value={`₩${formatWon(calc.totalActual)}`} color="emerald"
+            <MetricCard label="매입재료비" value={`₩${formatWon(calc.totalActual)}`} color="emerald"
               subValue={`비율 ${formatPercent(calc.actualRatio)}`}
               percentage={calc.totalStandard > 0 ? ((calc.totalActual - calc.totalStandard) / calc.totalStandard) * 100 : 0}
               trend={calc.totalActual <= calc.totalStandard ? 'up' : 'down'} />
-            <MetricCard label="표준-실적 차이" value={`₩${formatWon(calc.totalStandard - calc.totalActual)}`}
+            <MetricCard label="표준-매입 차이" value={`₩${formatWon(calc.totalStandard - calc.totalActual)}`}
               color={calc.totalActual <= calc.totalStandard ? 'emerald' : 'rose'}
-              subValue={calc.totalActual <= calc.totalStandard ? '실적 <= 표준 (양호)' : '실적 > 표준 (주의)'} />
+              subValue={calc.totalActual <= calc.totalStandard ? '매입 <= 표준 (양호)' : '매입 > 표준 (주의)'} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* 재료유형별 표준 vs 실적 */}
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 실적</h3>
+              <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 매입</h3>
               <ResponsiveContainer minWidth={0} width="100%" height={280}>
                 <BarChart data={calc.byType} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -2819,7 +3497,7 @@ const StandardMaterialCostView: React.FC = () => {
                   <Tooltip formatter={(v: number) => `₩${Math.round(v).toLocaleString()}`} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="standard" name="표준" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="actual" name="실적" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="actual" name="매입" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -2856,16 +3534,16 @@ const StandardMaterialCostView: React.FC = () => {
                   <YAxis yAxisId="right" orientation="right" tickFormatter={v => `${((v as number) * 100).toFixed(0)}%`} tick={{ fontSize: 10 }} domain={[0, 'auto']} />
                   <Tooltip
                     formatter={(v: number, name: string) => {
-                      if (name === '표준비율' || name === '실적비율') return [`${(v * 100).toFixed(1)}%`, name];
+                      if (name === '표준비율' || name === '매입비율') return [`${(v * 100).toFixed(1)}%`, name];
                       return [`₩${Math.round(v).toLocaleString()}`, name];
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar yAxisId="left" dataKey="revenue" name="매출액" fill="#e2e8f0" radius={[4, 4, 0, 0]} barSize={20} />
                   <Bar yAxisId="left" dataKey="standardCost" name="표준재료비" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={20} />
-                  <Bar yAxisId="left" dataKey="actualCost" name="실적재료비" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar yAxisId="left" dataKey="actualCost" name="매입재료비" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                   <Line yAxisId="right" type="monotone" dataKey="standardRatio" name="표준비율" stroke="#6366f1" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
-                  <Line yAxisId="right" type="monotone" dataKey="actualRatio" name="실적비율" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
+                  <Line yAxisId="right" type="monotone" dataKey="actualRatio" name="매입비율" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
                 </ComposedChart>
               </ResponsiveContainer>
 
@@ -2894,10 +3572,33 @@ const StandardMaterialCostView: React.FC = () => {
                       ))}
                     </tr>
                     <tr className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-2 py-2 font-bold text-emerald-700">실적재료비</td>
+                      <td className="px-2 py-2 font-bold text-emerald-700">매입재료비</td>
                       {monthlySummary.map(r => (
                         <td key={r.month} className="px-2 py-2 text-right font-mono text-emerald-600">{r.actualCost > 0 ? formatWon(r.actualCost) : '-'}</td>
                       ))}
+                    </tr>
+                    <tr className="border-b border-slate-200 bg-amber-50/40 hover:bg-amber-50/60">
+                      <td className="px-2 py-2 font-bold text-amber-700">마감재료비</td>
+                      {monthlySummary.map((r, mi) => {
+                        const cc = getClosingCost(selectedYear, mi);
+                        return (
+                          <td key={r.month} className="px-2 py-2 text-right">
+                            <input
+                              type="text"
+                              className="w-full text-right font-mono text-xs bg-transparent focus:outline-none focus:bg-white focus:ring-1 focus:ring-amber-400 focus:rounded px-1 py-0.5 text-amber-700 font-bold cursor-text placeholder:text-slate-300"
+                              placeholder="-"
+                              value={cc > 0 ? formatWon(cc) : ''}
+                              onFocus={e => { if (cc > 0) e.target.value = Math.round(cc).toLocaleString(); }}
+                              onBlur={e => { if (cc > 0) e.target.value = formatWon(cc); }}
+                              onChange={e => {
+                                const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.-]/g, '');
+                                const num = parseFloat(raw);
+                                updateClosingCost(selectedYear, mi, isNaN(num) ? 0 : num);
+                              }}
+                            />
+                          </td>
+                        );
+                      })}
                     </tr>
                     <tr className="border-b-2 border-slate-300 hover:bg-slate-50">
                       <td className="px-2 py-2 font-bold text-slate-700">차이금액</td>
@@ -2930,10 +3631,26 @@ const StandardMaterialCostView: React.FC = () => {
                       ))}
                     </tr>
                     <tr className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-2 py-2 font-bold text-emerald-700">실적재료비율</td>
+                      <td className="px-2 py-2 font-bold text-emerald-700">매입재료비율</td>
                       {monthlySummary.map(r => (
                         <td key={r.month} className="px-2 py-2 text-right font-mono text-emerald-600">{r.revenue > 0 ? `${(r.actualRatio * 100).toFixed(1)}%` : '-'}</td>
                       ))}
+                    </tr>
+                    <tr className="border-b border-slate-200 bg-amber-50/40">
+                      <td className="px-2 py-2 font-bold text-amber-700">마감재료비율</td>
+                      {monthlySummary.map((r, mi) => {
+                        const cc = getClosingCost(selectedYear, mi);
+                        const ratio = r.revenue > 0 && cc > 0 ? (cc / r.revenue) * 100 : 0;
+                        return (
+                          <td key={r.month} className={`px-2 py-2 text-right font-mono font-bold ${
+                            ratio === 0 ? 'text-slate-300' :
+                            ratio >= 45 && ratio <= 50 ? 'text-emerald-600' :
+                            ratio >= 20 && ratio <= 70 ? 'text-amber-600' : 'text-rose-600'
+                          }`}>
+                            {ratio > 0 ? `${ratio.toFixed(1)}%` : '-'}
+                          </td>
+                        );
+                      })}
                     </tr>
                     <tr className="border-b-2 border-slate-300 hover:bg-slate-50">
                       <td className="px-2 py-2 font-bold text-slate-700">달성율</td>
@@ -3007,7 +3724,7 @@ const StandardMaterialCostView: React.FC = () => {
 
           <div className="flex gap-6 px-4 py-3 bg-slate-50 rounded-xl mb-4 text-xs">
             <div><span className="text-slate-500">표준재료비:</span> <span className="font-bold text-indigo-700">₩{Math.round(filteredAutoRows.reduce((s, r) => s + r.standardCost, 0)).toLocaleString()}</span></div>
-            <div><span className="text-slate-500">실적재료비:</span> <span className="font-bold text-emerald-700">₩{Math.round(filteredAutoRows.reduce((s, r) => s + r.actualCost, 0)).toLocaleString()}</span></div>
+            <div><span className="text-slate-500">매입재료비:</span> <span className="font-bold text-emerald-700">₩{Math.round(filteredAutoRows.reduce((s, r) => s + r.actualCost, 0)).toLocaleString()}</span></div>
             <div><span className="text-slate-500">차이:</span> <span className="font-bold text-slate-800">₩{Math.round(filteredAutoRows.reduce((s, r) => s + r.diff, 0)).toLocaleString()}</span></div>
           </div>
 
@@ -3023,7 +3740,7 @@ const StandardMaterialCostView: React.FC = () => {
                   <SortableHeader label="평균단가" sortKey="avgUnitPrice" align="right" />
                   <SortableHeader label="표준재료비" sortKey="standardCost" align="right" />
                   <SortableHeader label="실투입량" sortKey="actualQty" align="right" />
-                  <SortableHeader label="실적재료비" sortKey="actualCost" align="right" />
+                  <SortableHeader label="매입재료비" sortKey="actualCost" align="right" />
                   <SortableHeader label="차이" sortKey="diff" align="right" />
                   <SortableHeader label="차이율" sortKey="diffRate" align="right" />
                 </tr>
@@ -3082,23 +3799,23 @@ const StandardMaterialCostView: React.FC = () => {
             <div className="bg-white px-5 py-4 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs text-slate-500 mb-1">비교 품목수</p>
               <p className="text-xl font-black text-slate-800">{comparisonData.totalRows.toLocaleString()}건</p>
-              <p className="text-[11px] text-emerald-600 font-bold">매칭 {comparisonData.totalMatched}건 / 표준만 {comparisonData.rows.filter(r => r.matchStatus === 'std-only').length}건 / 실적만 {comparisonData.rows.filter(r => r.matchStatus === 'act-only').length}건</p>
+              <p className="text-[11px] text-emerald-600 font-bold">매칭 {comparisonData.totalMatched}건 / 표준만 {comparisonData.rows.filter(r => r.matchStatus === 'std-only').length}건 / 매입만 {comparisonData.rows.filter(r => r.matchStatus === 'act-only').length}건</p>
             </div>
             <div className="bg-white px-5 py-4 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs text-slate-500 mb-1">총 표준금액</p>
               <p className="text-xl font-black text-indigo-700">₩{formatWon(comparisonData.totalStd)}</p>
             </div>
             <div className="bg-white px-5 py-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-xs text-slate-500 mb-1">총 실적금액</p>
+              <p className="text-xs text-slate-500 mb-1">총 매입금액</p>
               <p className="text-xl font-black text-emerald-700">₩{formatWon(comparisonData.totalAct)}</p>
             </div>
             <div className="bg-white px-5 py-4 rounded-2xl border border-slate-200 shadow-sm">
-              <p className="text-xs text-slate-500 mb-1">총 차이 (표준-실적)</p>
+              <p className="text-xs text-slate-500 mb-1">총 차이 (표준-매입)</p>
               <p className={`text-xl font-black ${comparisonData.totalGap >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
                 ₩{formatWon(comparisonData.totalGap)}
               </p>
               <p className={`text-[11px] font-bold ${comparisonData.totalGap >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>
-                {comparisonData.totalGap >= 0 ? '절감 (표준 > 실적)' : '과다지출 (실적 > 표준)'}
+                {comparisonData.totalGap >= 0 ? '절감 (표준 > 매입)' : '과다지출 (매입 > 표준)'}
               </p>
             </div>
           </div>
@@ -3133,9 +3850,9 @@ const StandardMaterialCostView: React.FC = () => {
                     <SortableHeader label="표준수량" sortKey="stdQty" align="right" />
                     <SortableHeader label="표준단가" sortKey="stdUnitPrice" align="right" />
                     <SortableHeader label="표준금액" sortKey="stdAmount" align="right" />
-                    <SortableHeader label="실적수량" sortKey="actQty" align="right" />
-                    <SortableHeader label="실적단가" sortKey="actUnitPrice" align="right" />
-                    <SortableHeader label="실적금액" sortKey="actAmount" align="right" />
+                    <SortableHeader label="매입수량" sortKey="actQty" align="right" />
+                    <SortableHeader label="매입단가" sortKey="actUnitPrice" align="right" />
+                    <SortableHeader label="매입금액" sortKey="actAmount" align="right" />
                     <SortableHeader label="차이금액" sortKey="diffAmount" align="right" />
                     <SortableHeader label="차이율" sortKey="diffRate" align="right" />
                     <th className="px-3 py-2.5 text-center whitespace-nowrap">매칭</th>
@@ -3172,7 +3889,7 @@ const StandardMaterialCostView: React.FC = () => {
                           row.matchStatus === 'std-only' ? 'bg-orange-50 text-orange-700' :
                           'bg-violet-50 text-violet-700'
                         }`}>
-                          {row.matchStatus === 'matched' ? '매칭' : row.matchStatus === 'std-only' ? '표준만' : '실적만'}
+                          {row.matchStatus === 'matched' ? '매칭' : row.matchStatus === 'std-only' ? '표준만' : '매입만'}
                         </span>
                       </td>
                     </tr>
@@ -3201,32 +3918,84 @@ const StandardMaterialCostView: React.FC = () => {
       {/* ===== AUTO MODE: BOM DIAGNOSTIC ===== */}
       {dataMode !== 'excel' && viewMode === 'diagnostic' && diagnosticData && (
         <div className="space-y-4">
-          {/* 요약 카드 */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="text-xs text-slate-500 mb-1">총 품목</div>
-              <div className="text-xl font-black text-slate-800">{diagnosticData.totalProducts.toLocaleString()}</div>
-              <div className="text-xs text-emerald-600 font-bold mt-1">정상 {diagnosticData.okCount}개 ({diagnosticData.coverageRate.toFixed(1)}%)</div>
+          {/* 재료비율 게이지 */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-slate-700">전체 재료비율 (표준재료비 / 매출액)</h3>
+                <p className="text-xs text-slate-400 mt-0.5">경험치 목표: 45~50% | 매출계획 {diagnosticData.forecastProducts}개 품목 기준</p>
+              </div>
+              <div className="text-right">
+                <div className={`text-3xl font-black ${
+                  diagnosticData.correctedRatio >= TARGET_RATIO_IDEAL_MIN && diagnosticData.correctedRatio <= TARGET_RATIO_IDEAL_MAX ? 'text-emerald-600' :
+                  diagnosticData.correctedRatio >= TARGET_RATIO_MIN && diagnosticData.correctedRatio <= TARGET_RATIO_MAX ? 'text-amber-600' : 'text-rose-600'
+                }`}>
+                  {(diagnosticData.correctedRatio * 100).toFixed(1)}%
+                </div>
+                <div className="text-xs text-slate-400">
+                  ₩{formatWon(diagnosticData.correctedStdAmount)} / ₩{formatWon(diagnosticData.totalRevenue)}
+                </div>
+                {diagnosticData.unmatchedCount > 0 && (
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    산출 {(diagnosticData.overallRatio * 100).toFixed(1)}% + 미매칭 {diagnosticData.unmatchedCount}건 추정 {formatWon(diagnosticData.extrapolatedStd)}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className={`bg-white p-4 rounded-2xl border shadow-sm ${diagnosticData.forecastMissCount > 0 ? 'border-yellow-300' : 'border-slate-200'}`}>
-              <div className="text-xs text-slate-500 mb-1">매출계획 누락</div>
-              <div className={`text-xl font-black ${diagnosticData.forecastMissCount > 0 ? 'text-yellow-600' : 'text-slate-300'}`}>{diagnosticData.forecastMissCount}</div>
-              <div className="text-xs text-slate-400 mt-1">P/N 매핑은 있으나 매출 없음</div>
+            {/* 비율 바 */}
+            <div className="relative h-6 bg-slate-100 rounded-full overflow-hidden">
+              {/* 목표 범위 표시 */}
+              <div className="absolute h-full bg-emerald-100 rounded-full" style={{ left: `${TARGET_RATIO_IDEAL_MIN * 100}%`, width: `${(TARGET_RATIO_IDEAL_MAX - TARGET_RATIO_IDEAL_MIN) * 100}%` }} />
+              <div className="absolute h-full bg-amber-50" style={{ left: `${TARGET_RATIO_MIN * 100}%`, width: `${(TARGET_RATIO_IDEAL_MIN - TARGET_RATIO_MIN) * 100}%` }} />
+              <div className="absolute h-full bg-amber-50" style={{ left: `${TARGET_RATIO_IDEAL_MAX * 100}%`, width: `${(TARGET_RATIO_MAX - TARGET_RATIO_IDEAL_MAX) * 100}%` }} />
+              {/* 현재 비율 마커 (보정) */}
+              <div className={`absolute top-0 h-full w-1 rounded-full ${
+                diagnosticData.correctedRatio >= TARGET_RATIO_IDEAL_MIN && diagnosticData.correctedRatio <= TARGET_RATIO_IDEAL_MAX ? 'bg-emerald-600' :
+                diagnosticData.correctedRatio >= TARGET_RATIO_MIN && diagnosticData.correctedRatio <= TARGET_RATIO_MAX ? 'bg-amber-500' : 'bg-rose-500'
+              }`} style={{ left: `${Math.min(diagnosticData.correctedRatio * 100, 100)}%` }} />
+              {/* 라벨 */}
+              <div className="absolute inset-0 flex items-center justify-between px-3 text-[10px] font-bold text-slate-400">
+                <span>0%</span>
+                <span className="text-emerald-600">45%</span>
+                <span className="text-emerald-600">50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 요약 카드 */}
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-xs text-slate-500 mb-1">매출 품목</div>
+              <div className="text-xl font-black text-slate-800">{diagnosticData.forecastProducts}</div>
+              <div className="text-xs text-emerald-600 font-bold mt-1">정상 {diagnosticData.okCount}개 ({diagnosticData.coverageRate.toFixed(0)}%)</div>
             </div>
             <div className={`bg-white p-4 rounded-2xl border shadow-sm ${diagnosticData.pnMissCount > 0 ? 'border-orange-300' : 'border-slate-200'}`}>
               <div className="text-xs text-slate-500 mb-1">P/N 미매핑</div>
               <div className={`text-xl font-black ${diagnosticData.pnMissCount > 0 ? 'text-orange-600' : 'text-slate-300'}`}>{diagnosticData.pnMissCount}</div>
-              <div className="text-xs text-slate-400 mt-1">고객사P/N → 내부코드 연결 필요</div>
-            </div>
-            <div className={`bg-white p-4 rounded-2xl border shadow-sm ${diagnosticData.costMissCount > 0 ? 'border-rose-300' : 'border-slate-200'}`}>
-              <div className="text-xs text-slate-500 mb-1">단가 없음</div>
-              <div className={`text-xl font-black ${diagnosticData.costMissCount > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{diagnosticData.costMissCount}</div>
-              <div className="text-xs text-slate-400 mt-1">재료비.xlsx 단가 미등록</div>
+              <div className="text-xs text-slate-400 mt-1">고객P/N → 내부코드 필요</div>
             </div>
             <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-              <div className="text-xs text-slate-500 mb-1">정상 표준재료비</div>
-              <div className="text-lg font-black text-blue-700">{(diagnosticData.totalStdAmount / 1e8).toFixed(2)}억</div>
-              <div className="text-xs text-slate-400 mt-1">{Math.round(diagnosticData.totalStdAmount).toLocaleString()}원</div>
+              <div className="text-xs text-slate-500 mb-1">BOM 매칭</div>
+              <div className="text-xl font-black text-blue-700">{diagnosticData.bomHitCount}</div>
+              <div className="text-xs text-slate-400 mt-1">/ {diagnosticData.forecastProducts} ({diagnosticData.forecastProducts > 0 ? (diagnosticData.bomHitCount / diagnosticData.forecastProducts * 100).toFixed(0) : 0}%)</div>
+            </div>
+            <div className={`bg-white p-4 rounded-2xl border shadow-sm ${diagnosticData.costMissCount > 0 ? 'border-rose-300' : 'border-slate-200'}`}>
+              <div className="text-xs text-slate-500 mb-1">BOM/단가 누락</div>
+              <div className={`text-xl font-black ${diagnosticData.costMissCount > 0 ? 'text-rose-600' : 'text-slate-300'}`}>{diagnosticData.costMissCount}</div>
+              <div className="text-xs text-slate-400 mt-1">
+                BOM누락 {diagnosticData.noBomCount} ({Object.entries(diagnosticData.noBomBySupply).filter(([,v]) => (v as number) > 0).map(([k,v]) => `${k}${v}`).join(' ')}) · 단가없음 {diagnosticData.noCostCount}
+              </div>
+            </div>
+            <div className={`bg-white p-4 rounded-2xl border shadow-sm ${diagnosticData.ratioIssueCount > 0 ? 'border-violet-300' : 'border-slate-200'}`}>
+              <div className="text-xs text-slate-500 mb-1">비율 이상</div>
+              <div className={`text-xl font-black ${diagnosticData.ratioIssueCount > 0 ? 'text-violet-600' : 'text-slate-300'}`}>{diagnosticData.ratioIssueCount}</div>
+              <div className="text-xs text-slate-400 mt-1">&lt;20% 또는 &gt;70%</div>
+            </div>
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="text-xs text-slate-500 mb-1">표준재료비 합계</div>
+              <div className="text-lg font-black text-blue-700">{formatWon(diagnosticData.correctedStdAmount)}</div>
+              <div className="text-xs text-slate-400 mt-1">산출 {formatWon(diagnosticData.totalStdAmount)}{diagnosticData.extrapolatedStd > 0 ? ` + 추정 ${formatWon(diagnosticData.extrapolatedStd)}` : ''}</div>
             </div>
           </div>
 
@@ -3237,11 +4006,15 @@ const StandardMaterialCostView: React.FC = () => {
                 className="flex-1 min-w-[200px] px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <select value={diagFilterStatus} onChange={e => { setDiagFilterStatus(e.target.value); setPage(0); }}
                 className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
-                <option value="All">전체 진단상태</option>
-                <option value="정상">정상</option>
-                <option value="매출계획없음">매출계획 없음</option>
-                <option value="P/N미매핑">P/N 미매핑</option>
-                <option value="단가없음">단가 없음</option>
+                <option value="All">전체 ({diagnosticData.rows.length})</option>
+                <option value="매출있음">매출 있음 ({diagnosticData.forecastProducts})</option>
+                <option value="정상">정상 ({diagnosticData.okCount})</option>
+                <option value="비율이상">비율 이상 ({diagnosticData.ratioIssueCount})</option>
+                <option value="P/N미매핑">P/N 미매핑 ({diagnosticData.pnMissCount})</option>
+                <option value="단가/BOM없음">BOM/단가 누락 ({diagnosticData.costMissCount})</option>
+                <option value="BOM없음">└ BOM 누락-자작 ({diagnosticData.noBomCount})</option>
+                <option value="단가없음">└ 단가 없음 ({diagnosticData.noCostCount})</option>
+                <option value="매출계획없음">매출계획 없음 ({diagnosticData.forecastMissCount})</option>
               </select>
               <button onClick={handleBomDownload} className="text-xs font-bold flex items-center gap-1 px-3 py-2 rounded-lg text-violet-600 hover:bg-violet-50 border border-violet-200 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -3260,24 +4033,30 @@ const StandardMaterialCostView: React.FC = () => {
                     <SortableHeader label="고객사P/N" sortKey="customerPn" />
                     <SortableHeader label="내부코드" sortKey="internalCode" />
                     <SortableHeader label="품목명" sortKey="itemName" />
-                    <SortableHeader label="조달구분" sortKey="supplyType" />
+                    <SortableHeader label="조달" sortKey="supplyType" />
+                    <SortableHeader label="BOM" sortKey="bomChildCount" align="right" />
                     <SortableHeader label="매출수량" sortKey="forecastQty" align="right" />
-                    <SortableHeader label="사출재료비" sortKey="injectionCost" align="right" />
-                    <SortableHeader label="도장재료비" sortKey="paintCost" align="right" />
-                    <SortableHeader label="구매단가" sortKey="purchasePrice" align="right" />
+                    <SortableHeader label="매출금액" sortKey="forecastRevenue" align="right" />
                     <SortableHeader label="합계단가" sortKey="unitCostPerEa" align="right" />
                     <SortableHeader label="표준재료비" sortKey="stdAmount" align="right" />
+                    <SortableHeader label="재료비율" sortKey="materialRatio" align="right" />
                     <th className="px-3 py-2.5 text-center min-w-[80px]">진단</th>
-                    <th className="px-3 py-2.5 text-center min-w-[90px]">BOM확인</th>
+                    <th className="px-3 py-2.5 text-center min-w-[60px]">확인</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {pagedDiagRows.map((r, i) => (
+                  {pagedDiagRows.map((r, i) => {
+                    const ratioColor = r.materialRatio > 0 ? (
+                      r.materialRatio >= TARGET_RATIO_IDEAL_MIN && r.materialRatio <= TARGET_RATIO_IDEAL_MAX ? 'text-emerald-600' :
+                      r.materialRatio >= TARGET_RATIO_MIN && r.materialRatio <= TARGET_RATIO_MAX ? 'text-amber-600' : 'text-rose-600'
+                    ) : 'text-slate-300';
+                    return (
                     <tr key={`${r.customerPn}-${i}`}
                       className={`hover:bg-slate-50 transition-colors ${
+                        r.breakLevel === 4 ? 'bg-violet-50/50' :
                         r.breakLevel === 3 ? 'bg-rose-50/50' :
                         r.breakLevel === 2 ? 'bg-orange-50/50' :
-                        r.breakLevel === 1 ? 'bg-yellow-50/50' : ''
+                        r.breakLevel === 1 ? 'bg-yellow-50/30' : ''
                       }`}>
                       <td className="px-3 py-2 font-mono text-xs">
                         <button onClick={() => setBomPopupPn({ customerPn: r.customerPn, internalCode: r.internalCode, itemName: r.itemName })}
@@ -3286,34 +4065,39 @@ const StandardMaterialCostView: React.FC = () => {
                         </button>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">{r.internalCode}</td>
-                      <td className="px-3 py-2 text-xs max-w-[180px] truncate" title={r.itemName}>{r.itemName}</td>
+                      <td className="px-3 py-2 text-xs max-w-[160px] truncate" title={r.itemName}>{r.itemName}</td>
                       <td className="px-3 py-2 text-xs">{r.supplyType}</td>
+                      <td className="px-3 py-2 text-xs text-right font-mono">
+                        {r.hasBom ? <span className="text-blue-600 font-bold">{r.bomChildCount}</span> : <span className="text-slate-300">-</span>}
+                      </td>
                       <td className="px-3 py-2 text-xs text-right font-mono">{r.forecastQty > 0 ? r.forecastQty.toLocaleString() : <span className="text-slate-300">-</span>}</td>
-                      <td className="px-3 py-2 text-xs text-right font-mono">{r.injectionCost > 0 ? Math.round(r.injectionCost).toLocaleString() : <span className="text-slate-300">-</span>}</td>
-                      <td className="px-3 py-2 text-xs text-right font-mono">{r.paintCost > 0 ? Math.round(r.paintCost).toLocaleString() : <span className="text-slate-300">-</span>}</td>
-                      <td className="px-3 py-2 text-xs text-right font-mono">{r.purchasePrice > 0 ? Math.round(r.purchasePrice).toLocaleString() : <span className="text-slate-300">-</span>}</td>
+                      <td className="px-3 py-2 text-xs text-right font-mono">{r.forecastRevenue > 0 ? formatWon(r.forecastRevenue) : <span className="text-slate-300">-</span>}</td>
                       <td className="px-3 py-2 text-xs text-right font-bold font-mono">{r.unitCostPerEa > 0 ? Math.round(r.unitCostPerEa).toLocaleString() : <span className="text-slate-300">0</span>}</td>
-                      <td className="px-3 py-2 text-xs text-right font-bold font-mono">{r.stdAmount > 0 ? Math.round(r.stdAmount).toLocaleString() : <span className="text-slate-300">0</span>}</td>
+                      <td className="px-3 py-2 text-xs text-right font-bold font-mono">{r.stdAmount > 0 ? formatWon(r.stdAmount) : <span className="text-slate-300">0</span>}</td>
+                      <td className={`px-3 py-2 text-xs text-right font-bold font-mono ${ratioColor}`}>
+                        {r.materialRatio > 0 ? `${(r.materialRatio * 100).toFixed(1)}%` : <span className="text-slate-300">-</span>}
+                      </td>
                       <td className="px-3 py-2 text-center">
                         {r.breakLevel === 0 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">OK</span>}
-                        {r.breakLevel === 1 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700">매출계획</span>}
+                        {r.breakLevel === 1 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-700">매출</span>}
                         {r.breakLevel === 2 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700">P/N</span>}
-                        {r.breakLevel === 3 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">단가</span>}
+                        {r.breakLevel === 3 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700">BOM</span>}
+                        {r.breakLevel === 4 && <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">비율</span>}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {confirmedBomPns[r.customerPn] ? (
-                          <button onClick={() => handleBomConfirm(r.customerPn)} className="inline-flex flex-col items-center gap-0.5 group" title={`확인일: ${confirmedBomPns[r.customerPn]} (클릭하여 해제)`}>
+                          <button onClick={() => handleBomConfirm(r.customerPn)} className="inline-flex flex-col items-center gap-0.5 group" title={`확인일: ${confirmedBomPns[r.customerPn]}`}>
                             <span className="text-emerald-600 text-sm">&#10003;</span>
-                            <span className="text-[9px] text-slate-400 group-hover:text-rose-400">{confirmedBomPns[r.customerPn]}</span>
                           </button>
                         ) : (
-                          <button onClick={() => handleBomConfirm(r.customerPn)} className="w-4 h-4 border border-slate-300 rounded hover:border-blue-400 hover:bg-blue-50 transition-colors mx-auto block" title="BOM 확인 완료 체크" />
+                          <button onClick={() => handleBomConfirm(r.customerPn)} className="w-4 h-4 border border-slate-300 rounded hover:border-blue-400 hover:bg-blue-50 transition-colors mx-auto block" title="확인" />
                         )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   {pagedDiagRows.length === 0 && (
-                    <tr><td colSpan={12} className="px-6 py-12 text-center text-slate-400 text-sm">진단 데이터가 없습니다. 매출계획과 재료비.xlsx를 업로드해주세요.</td></tr>
+                    <tr><td colSpan={12} className="px-6 py-12 text-center text-slate-400 text-sm">진단 데이터가 없습니다.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -3351,7 +4135,7 @@ const StandardMaterialCostView: React.FC = () => {
                         <span className="font-bold text-slate-600">{item.name}</span>
                         <div className="flex gap-3">
                           <span className="text-indigo-500">표준 {stdPct.toFixed(1)}% (₩{formatWon(item.standard)})</span>
-                          <span className="text-emerald-500">실적 {actPct.toFixed(1)}% (₩{formatWon(item.actual)})</span>
+                          <span className="text-emerald-500">매입 {actPct.toFixed(1)}% (₩{formatWon(item.actual)})</span>
                         </div>
                       </div>
                       <div className="flex gap-1 h-3">
@@ -3374,7 +4158,7 @@ const StandardMaterialCostView: React.FC = () => {
                   <Tooltip formatter={(v: number) => `₩${Math.round(v).toLocaleString()}`} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar dataKey="standard" name="표준" fill="#6366f1" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="actual" name="실적" fill="#10b981" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="actual" name="매입" fill="#10b981" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3389,11 +4173,11 @@ const StandardMaterialCostView: React.FC = () => {
             <MetricCard label="ABC 매출액" value={`₩${formatWon(exSummary.abcSales)}`} color="blue" />
             <MetricCard label="표준재료비" value={`₩${formatWon(exSummary.standardTotal)}`} color="slate"
               subValue={`비율 ${formatPercent(exSummary.standardRatio)}`} />
-            <MetricCard label="실적재료비" value={`₩${formatWon(exSummary.actualTotal)}`} color="emerald"
+            <MetricCard label="매입재료비" value={`₩${formatWon(exSummary.actualTotal)}`} color="emerald"
               subValue={`비율 ${formatPercent(exSummary.actualRatio)}`}
               percentage={exSummary.standardTotal > 0 ? ((exSummary.actualTotal - exSummary.standardTotal) / exSummary.standardTotal) * 100 : 0}
               trend={exSummary.actualTotal <= exSummary.standardTotal ? 'up' : 'down'} />
-            <MetricCard label="표준-실적 차이" value={`₩${formatWon(exSummary.standardTotal - exSummary.actualTotal)}`}
+            <MetricCard label="표준-매입 차이" value={`₩${formatWon(exSummary.standardTotal - exSummary.actualTotal)}`}
               color={exSummary.actualTotal <= exSummary.standardTotal ? 'emerald' : 'rose'} />
           </div>
 
@@ -3413,7 +4197,7 @@ const StandardMaterialCostView: React.FC = () => {
                       <span className="font-bold text-slate-600">{item.label}</span>
                       <div className="flex gap-3">
                         <span className="text-slate-400">표준 {formatPercent(item.standard)}</span>
-                        <span className="font-bold" style={{ color: item.color }}>실적 {formatPercent(item.actual)}</span>
+                        <span className="font-bold" style={{ color: item.color }}>매입 {formatPercent(item.actual)}</span>
                         {item.target !== null && <span className="text-rose-400">목표 {formatPercent(item.target)}</span>}
                       </div>
                     </div>
@@ -3428,13 +4212,13 @@ const StandardMaterialCostView: React.FC = () => {
             </div>
 
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 실적</h3>
+              <h3 className="text-sm font-bold text-slate-700 mb-4">재료유형별 표준 vs 매입</h3>
               <ResponsiveContainer minWidth={0} width="100%" height={280}>
                 <BarChart data={[
-                  { name: 'RESIN', 표준: exSummary.standardResin, 실적: exSummary.actualResin },
-                  { name: 'PAINT', 표준: exSummary.standardPaint, 실적: exSummary.actualPaint },
-                  { name: '구매', 표준: exSummary.standardPurchase, 실적: exSummary.actualPurchase },
-                  { name: '외주', 표준: exSummary.standardOutsource, 실적: exSummary.actualOutsource },
+                  { name: 'RESIN', 표준: exSummary.standardResin, 매입: exSummary.actualResin },
+                  { name: 'PAINT', 표준: exSummary.standardPaint, 매입: exSummary.actualPaint },
+                  { name: '구매', 표준: exSummary.standardPurchase, 매입: exSummary.actualPurchase },
+                  { name: '외주', 표준: exSummary.standardOutsource, 매입: exSummary.actualOutsource },
                 ]} barGap={4}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="name" tick={{ fontSize: 12, fontWeight: 600 }} />
@@ -3442,7 +4226,7 @@ const StandardMaterialCostView: React.FC = () => {
                   <Tooltip formatter={(v: number) => `₩${Math.round(v).toLocaleString()}`} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="표준" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="실적" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="매입" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

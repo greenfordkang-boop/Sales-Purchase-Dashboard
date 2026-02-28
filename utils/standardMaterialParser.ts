@@ -177,6 +177,32 @@ export interface PaintMixRatio {
   thinnerPrice: number;    // 신너 단가 (원/kg)
 }
 
+/** 품목별 표준원가 (품목별재료비 시트에서 임포트) */
+export interface ItemStandardCost {
+  item_code: string;
+  customer_pn: string;
+  item_name: string;
+  customer_name: string;
+  variety: string;
+  item_type: string;
+  supply_type: string;
+  resin_cost_per_ea: number;
+  paint_cost_per_ea: number;
+  material_cost_per_ea: number;
+  purchase_price_per_ea: number;
+  injection_price_per_ea: number;
+  jan_qty: number; feb_qty: number; mar_qty: number;
+  apr_qty: number; may_qty: number; jun_qty: number;
+  jul_qty: number; aug_qty: number; sep_qty: number;
+  oct_qty: number; nov_qty: number; dec_qty: number;
+  jan_amt: number; feb_amt: number; mar_amt: number;
+  apr_amt: number; may_amt: number; jun_amt: number;
+  jul_amt: number; aug_amt: number; sep_amt: number;
+  oct_amt: number; nov_amt: number; dec_amt: number;
+  total_qty: number;
+  total_amt: number;
+}
+
 /** 파싱된 전체 결과 */
 export interface StandardMaterialData {
   summary: StandardMaterialSummary;
@@ -191,6 +217,7 @@ export interface StandardMaterialData {
   purchasePrices?: PurchasePrice[];
   outsourcePrices?: OutsourcePrice[];
   paintMixRatios?: PaintMixRatio[];
+  itemStandardCosts?: ItemStandardCost[];
 }
 
 // ============================================================
@@ -643,6 +670,57 @@ function parsePaintMixSheet(ws: XLSX.WorkSheet): PaintMixRatio[] {
   return items;
 }
 
+/**
+ * 품목별재료비 시트 → ItemStandardCost[]
+ * Pre-computed per-item standard costs with monthly qty/amt
+ */
+function parseItemStandardCostSheet(ws: XLSX.WorkSheet): ItemStandardCost[] {
+  const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const items: ItemStandardCost[] = [];
+
+  // Known column layout (verified):
+  // col3: 품목코드, col4: 고객사P/N, col5: 품목명, col6: 고객사
+  // col7: 품종, col9: 품목유형, col10: 조달구분
+  // col13: 사출판매가/EA, col15: 재료비/EA, col16: 구매단가/EA
+  // col32: 사출 재료비/EA, col67: 도장 재료비/EA
+  // col68-79: 1월~12월 생산량, col81-92: 1월~12월 매입금액
+  // col80: 합계, col93: 합계
+  // Data starts at row 6
+
+  for (let i = 6; i < data.length; i++) {
+    const r = data[i];
+    const itemCode = str(r[3]);
+    if (!itemCode) continue;
+
+    items.push({
+      item_code: itemCode,
+      customer_pn: str(r[4]),
+      item_name: str(r[5]),
+      customer_name: str(r[6]),
+      variety: str(r[7]),
+      item_type: str(r[9]),
+      supply_type: str(r[10]),
+      resin_cost_per_ea: num(r[32]),
+      paint_cost_per_ea: num(r[67]),
+      material_cost_per_ea: num(r[15]),
+      purchase_price_per_ea: num(r[16]),
+      injection_price_per_ea: num(r[13]),
+      jan_qty: num(r[68]), feb_qty: num(r[69]), mar_qty: num(r[70]),
+      apr_qty: num(r[71]), may_qty: num(r[72]), jun_qty: num(r[73]),
+      jul_qty: num(r[74]), aug_qty: num(r[75]), sep_qty: num(r[76]),
+      oct_qty: num(r[77]), nov_qty: num(r[78]), dec_qty: num(r[79]),
+      jan_amt: num(r[81]), feb_amt: num(r[82]), mar_amt: num(r[83]),
+      apr_amt: num(r[84]), may_amt: num(r[85]), jun_amt: num(r[86]),
+      jul_amt: num(r[87]), aug_amt: num(r[88]), sep_amt: num(r[89]),
+      oct_amt: num(r[90]), nov_amt: num(r[91]), dec_amt: num(r[92]),
+      total_qty: num(r[80]),
+      total_amt: num(r[93]),
+    });
+  }
+
+  return items;
+}
+
 // ============================================================
 // Main parser
 // ============================================================
@@ -683,9 +761,12 @@ export function parseStandardMaterialExcel(
   const outsourcePrices = outsourcePriceSheet ? parseOutsourcePriceSheet(outsourcePriceSheet) : undefined;
   const paintMixRatios = paintMixSheet ? parsePaintMixSheet(paintMixSheet) : undefined;
 
-  const refCounts = [productInfo, materialPrices, purchasePrices, outsourcePrices, paintMixRatios].filter(Boolean);
+  // 품목별 표준원가 파싱 (품목별재료비 시트 재사용)
+  const itemStandardCosts = itemsSheet ? parseItemStandardCostSheet(itemsSheet) : undefined;
+
+  const refCounts = [productInfo, materialPrices, purchasePrices, outsourcePrices, paintMixRatios, itemStandardCosts].filter(Boolean);
   if (refCounts.length > 0) {
-    console.log(`[표준재료비 파서] 참조시트 파싱: 품목정보 ${productInfo?.length ?? 0}건, 재질단가 ${materialPrices?.length ?? 0}건, 구매단가 ${purchasePrices?.length ?? 0}건, 외주사출 ${outsourcePrices?.length ?? 0}건, 도료배합 ${paintMixRatios?.length ?? 0}건`);
+    console.log(`[표준재료비 파서] 참조시트 파싱: 품목정보 ${productInfo?.length ?? 0}건, 재질단가 ${materialPrices?.length ?? 0}건, 구매단가 ${purchasePrices?.length ?? 0}건, 외주사출 ${outsourcePrices?.length ?? 0}건, 도료배합 ${paintMixRatios?.length ?? 0}건, 품목별원가 ${itemStandardCosts?.length ?? 0}건`);
   }
 
   return {
@@ -700,6 +781,7 @@ export function parseStandardMaterialExcel(
     purchasePrices,
     outsourcePrices,
     paintMixRatios,
+    itemStandardCosts,
   };
 }
 
