@@ -9,6 +9,7 @@ import BomMasterUploadView from './BomMasterUploadView';
 import BomExplosionView from './BomExplosionView';
 import MRPView from './MRPView';
 import ProductMaterialCostView from './ProductMaterialCostView';
+import DataQualityGuide from './DataQualityGuide';
 import CRView from './CRView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
@@ -55,7 +56,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'bomExplosion' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'bomExplosion' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard' | 'dataGuide'>('inbound');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -526,6 +527,7 @@ const PurchaseView: React.FC = () => {
     { id: 'cr', label: 'CR현황' },
     { id: 'supplier', label: '협력사현황' },
     { id: 'standard', label: '표준재료비' },
+    { id: 'dataGuide', label: '데이터 품질 가이드' },
   ];
 
   // Helper component for table headers
@@ -982,6 +984,11 @@ const PurchaseView: React.FC = () => {
           7. STANDARD MATERIAL COST TAB (표준재료비)
          ================================================================================= */}
       {activeSubTab === 'standard' && <StandardMaterialCostView />}
+
+      {/* =================================================================================
+          8. DATA QUALITY GUIDE (데이터 품질 가이드)
+         ================================================================================= */}
+      {activeSubTab === 'dataGuide' && <DataQualityGuide />}
     </div>
   );
 };

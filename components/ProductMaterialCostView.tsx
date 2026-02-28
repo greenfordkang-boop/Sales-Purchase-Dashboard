@@ -3,7 +3,7 @@ import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '..
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
-import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService } from '../services/supabaseService';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService } from '../services/supabaseService';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import { downloadCSV } from '../utils/csvExport';
@@ -46,6 +46,8 @@ interface ProductRow {
   hasStdCost: boolean;
   forecastMonthlyQty: number[];     // 월별 계획 수량 [0..11]
   forecastMonthlyRevenue: number[]; // 월별 계획 매출 [0..11]
+  dataQuality: 'high' | 'medium' | 'low'; // 데이터 품질
+  paintCost: number;               // 도장재료비 (기준정보 기반)
 }
 
 // ============================================================
@@ -211,13 +213,14 @@ const ProductMaterialCostView: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData] = await Promise.all([
+      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts] = await Promise.all([
         forecastService.getItems('current'),
         bomMasterService.getAll(),
         productCodeService.getAll(),
         referenceInfoService.getAll(),
         materialCodeService.getAll(),
         itemRevenueService.getAll(),
+        itemStandardCostService.getAll(),
       ]);
 
       setActualRevenue(revenueData || []);
@@ -285,12 +288,27 @@ const ProductMaterialCostView: React.FC = () => {
         if (mc.unit) unitMap.set(k, mc.unit);
       }
 
-      // 표준재료비 맵
+      // 재질 타입 맵 (PAINT/RESIN 구분)
+      const materialTypeMap = new Map<string, string>();
+      for (const mc of mergedMat) {
+        materialTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
+      }
+
+      // 표준재료비 맵 (JSON fallback + DB 우선)
       const stdCostMap = new Map<string, { eaCost: number; processType: string; productName: string }>();
       for (const sc of fallbackStandardCosts) {
         if (sc.eaCost > 0) {
           stdCostMap.set(normalizePn(sc.productCode), sc);
           if (sc.customerPn) stdCostMap.set(normalizePn(sc.customerPn), sc);
+        }
+      }
+      // DB item_standard_cost 우선 적용 (사용자가 재료비.xlsx 업로드 시 반영)
+      for (const sc of dbStdCosts) {
+        const costVal = (sc as unknown as Record<string, unknown>).material_cost_per_ea as number || 0;
+        if (costVal > 0) {
+          const entry = { eaCost: costVal, processType: sc.item_type || '', productName: sc.item_name || '' };
+          stdCostMap.set(normalizePn(sc.item_code), entry);
+          if (sc.customer_pn) stdCostMap.set(normalizePn(sc.customer_pn), entry);
         }
       }
 
@@ -364,7 +382,7 @@ const ProductMaterialCostView: React.FC = () => {
             return {
               childPn: l.childPn,
               childName: l.childName || '',
-              qty: 0, // simplified
+              qty: 0,
               totalQty: l.totalRequired,
               unitPrice: price,
               cost: l.totalRequired * price,
@@ -376,6 +394,38 @@ const ProductMaterialCostView: React.FC = () => {
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
         }
 
+        // [프로그램 수정] 도장재료비 자동 산입: 기준정보 paintQty × 재질단가
+        let paintCost = 0;
+        const productRef = refInfoMap.get(forecastPn)
+          || refInfoMap.get(custToInternal.get(forecastPn) || '')
+          || refInfoMap.get(internalToCust.get(forecastPn) || '');
+        if (productRef && /도장/i.test(productRef.processType || '')) {
+          const rawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4].filter(Boolean) as string[];
+          const paintQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4];
+          let paintIdx = 0;
+          for (const rawCode of rawCodes) {
+            const matType = materialTypeMap.get(normalizePn(rawCode)) || '';
+            if (/PAINT|도료/i.test(matType)) {
+              const paintPrice = priceMap.get(normalizePn(rawCode)) || 0;
+              const pqty = paintQtys[paintIdx] || 0;
+              if (paintPrice > 0 && pqty > 0) {
+                const cost = paintPrice * pqty / 1000; // g→kg 변환
+                paintCost += cost;
+                bomLeaves.push({
+                  childPn: rawCode,
+                  childName: `도장재료 ${paintIdx + 1}도`,
+                  qty: pqty, totalQty: pqty / 1000,
+                  unitPrice: paintPrice, cost,
+                  priceSource: `도장 paintQty${paintIdx + 1}`,
+                  depth: 0, partType: '도장',
+                });
+              }
+              paintIdx++;
+            }
+          }
+          bomMaterialCost += paintCost;
+        }
+
         // 표준재료비
         const stdEntry = stdCostMap.get(forecastPn)
           || stdCostMap.get(custToInternal.get(forecastPn) || '')
@@ -383,9 +433,13 @@ const ProductMaterialCostView: React.FC = () => {
         const stdMaterialCost = stdEntry?.eaCost || 0;
         const hasStdCost = stdMaterialCost > 0;
 
-        // 최종 재료비: 표준재료비 우선, 없으면 BOM 전개
+        // 최종 재료비: 표준재료비 우선, 없으면 BOM+도장
         const materialCost = stdMaterialCost > 0 ? stdMaterialCost : bomMaterialCost;
         const materialRatio = f.unitPrice > 0 && materialCost > 0 ? (materialCost / f.unitPrice) * 100 : 0;
+
+        // 데이터 품질 판정
+        const dataQuality: 'high' | 'medium' | 'low' =
+          hasStdCost ? 'high' : (hasBom && bomMaterialCost > 0) ? 'medium' : 'low';
 
         result.push({
           customer: f.customer,
@@ -409,6 +463,8 @@ const ProductMaterialCostView: React.FC = () => {
           hasStdCost,
           forecastMonthlyQty: f.monthlyQty || new Array(12).fill(0),
           forecastMonthlyRevenue: f.monthlyRevenue || new Array(12).fill(0),
+          dataQuality,
+          paintCost,
         });
       }
 
@@ -672,6 +728,7 @@ const ProductMaterialCostView: React.FC = () => {
                 <SortHeader label="재료비율" k="materialRatio" align="right" />
                 <SortHeader label={`${periodLabel} 수량`} k="yearlyQty" align="right" />
                 <SortHeader label={`${periodLabel} 재료비`} k="yearlyMaterialCost" align="right" />
+                <th className="px-2 py-2.5 text-center whitespace-nowrap text-[10px]">품질</th>
               </tr>
             </thead>
             <tbody>
@@ -714,6 +771,15 @@ const ProductMaterialCostView: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.yearlyQty)}</td>
                     <td className="px-3 py-2 text-right font-mono">{r.yearlyMaterialCost > 0 ? `₩${fmtWon(r.yearlyMaterialCost)}` : '-'}</td>
+                    <td className="px-2 py-2 text-center">
+                      <span className={`inline-block w-2 h-2 rounded-full ${
+                        r.dataQuality === 'high' ? 'bg-emerald-500' :
+                        r.dataQuality === 'medium' ? 'bg-amber-400' : 'bg-red-400'
+                      }`} title={
+                        r.dataQuality === 'high' ? '표준재료비 등록' :
+                        r.dataQuality === 'medium' ? 'BOM 전개만 (표준재료비 미등록)' : '재료비 데이터 없음'
+                      } />
+                    </td>
                   </tr>
                 );
               })}
