@@ -162,7 +162,7 @@ export function calculateMRP(
   }
 
   // 4-1. 매입단가 맵 구축 (partNo → 최신 단가)
-  const purchasePriceMap = new Map<string, { price: number; unit: string; name: string }>();
+  const purchasePriceMap = new Map<string, { price: number; unit: string; name: string; supplier: string }>();
   if (purchaseData && purchaseData.length > 0) {
     for (const row of purchaseData) {
       if (!row.partNo || row.unitPrice <= 0) continue;
@@ -174,6 +174,7 @@ export function calculateMRP(
           price: row.unitPrice,
           unit: row.unit || '',
           name: row.partName || '',
+          supplier: row.supplier || '',
         });
       }
     }
@@ -329,7 +330,7 @@ export function calculateMRP(
             monthlyQty: mq,
             parents: new Set([forecastPn]),
             unitPrice: initPrice,
-            supplier: leaf.supplier || '',
+            supplier: leaf.supplier || ri?.supplier || '',
           });
         }
       }
@@ -513,6 +514,10 @@ export function calculateMRP(
       }
     }
 
+    // 구입처 보강: BOM → 기준정보 → 매입단가 순으로 fallback
+    const pp = purchasePriceMap.get(code);
+    const supplier = agg.supplier || ri?.supplier || pp?.supplier || '';
+
     materials.push({
       materialCode: code,
       materialName,
@@ -523,7 +528,7 @@ export function calculateMRP(
       totalCost: totalQty * unitPrice,
       parentProducts: Array.from(agg.parents),
       monthlyQty: agg.monthlyQty,
-      supplier: agg.supplier,
+      supplier,
     });
   }
 
