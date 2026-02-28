@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { normalizePn } from '../utils/bomDataParser';
 import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService } from '../services/supabaseService';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import { downloadCSV } from '../utils/csvExport';
+import * as XLSX from 'xlsx';
 
 // ============================================================
 // Types
@@ -43,6 +44,12 @@ const DataQualityGuide: React.FC = () => {
   const [sections, setSections] = useState<IssueSection[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [revenueCount, setRevenueCount] = useState(0);
+  const uploadFileRef = useRef<HTMLInputElement>(null);
+  const pendingSectionRef = useRef<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadMsg, setUploadMsg] = useState<{ id: string; text: string; ok: boolean } | null>(null);
+
+  const UPLOADABLE_SECTIONS = ['stdCost', 'refInfo', 'matPrice'];
 
   useEffect(() => { analyzeData(); }, []);
 
@@ -326,6 +333,179 @@ const DataQualityGuide: React.FC = () => {
     downloadCSV(`데이터품질_${section.id}_${new Date().toISOString().slice(0, 10)}.csv`, headers, csvRows);
   };
 
+  const handleTemplateDownload = async (section: IssueSection) => {
+    if (section.items.length === 0) return;
+    const wb = XLSX.utils.book_new();
+    const dateSuffix = new Date().toISOString().slice(0, 10);
+
+    if (section.id === 'stdCost') {
+      const headers = ['품목코드', '고객P/N', '거래선', '품명', 'EA당재료비(원)'];
+      const rows = section.items.map(item => [
+        item.partNo, item.newPartNo, item.customer, item.partName, '',
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 30 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, ws, '표준재료비_입력');
+    } else if (section.id === 'refInfo') {
+      const allRefInfo = await referenceInfoService.getAll();
+      const riMap = new Map<string, (typeof allRefInfo)[0]>();
+      for (const ri of allRefInfo) riMap.set(normalizePn(ri.itemCode), ri);
+
+      const headers = [
+        '품목코드', '고객P/N', '품명', '공정유형',
+        '순중량(g)', '원재료코드1', '원재료코드2', '원재료코드3', '원재료코드4',
+        '1도도장량(g)', '2도도장량(g)', '3도도장량(g)', '4도도장량(g)',
+      ];
+      const rows = section.items.map(item => {
+        const ri = riMap.get(normalizePn(item.partNo));
+        return [
+          item.partNo, item.newPartNo, item.partName, item.processType || '',
+          ri?.netWeight || '', ri?.rawMaterialCode1 || '', ri?.rawMaterialCode2 || '',
+          ri?.rawMaterialCode3 || '', ri?.rawMaterialCode4 || '',
+          ri?.paintQty1 || '', ri?.paintQty2 || '', ri?.paintQty3 || '', ri?.paintQty4 || '',
+        ];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = headers.map(() => ({ wch: 15 }));
+      XLSX.utils.book_append_sheet(wb, ws, '기준정보_입력');
+    } else if (section.id === 'matPrice') {
+      const allMat = await materialCodeService.getAll();
+      const mcMap = new Map<string, (typeof allMat)[0]>();
+      for (const mc of allMat) mcMap.set(normalizePn(mc.materialCode), mc);
+
+      const headers = ['재질코드', '재질명', '재질분류', '단위', '현재단가(원/kg)'];
+      const rows = section.items.map(item => {
+        const mc = mcMap.get(normalizePn(item.partNo));
+        return [item.partNo, item.partName, item.customer, mc?.unit || '', mc?.currentPrice || ''];
+      });
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      ws['!cols'] = [{ wch: 20 }, { wch: 25 }, { wch: 15 }, { wch: 10 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(wb, ws, '재질단가_입력');
+    }
+
+    XLSX.writeFile(wb, `데이터품질_${section.id}_템플릿_${dateSuffix}.xlsx`);
+  };
+
+  const handleUpload = async (sectionId: string, file: File) => {
+    setUploadingId(sectionId);
+    setUploadMsg(null);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+      const num = (v: unknown) => {
+        if (v === null || v === undefined || v === '') return 0;
+        const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[,\s]/g, ''));
+        return isNaN(n) ? 0 : n;
+      };
+      const str = (v: unknown) => String(v ?? '').trim();
+
+      if (sectionId === 'stdCost') {
+        const existing = await itemStandardCostService.getAll();
+        const costMap = new Map<string, (typeof existing)[0]>();
+        for (const sc of existing) costMap.set(normalizePn(sc.item_code), sc);
+
+        let updated = 0;
+        for (const row of rows) {
+          const itemCode = normalizePn(str(row['품목코드']));
+          const costVal = num(row['EA당재료비(원)']);
+          if (!itemCode || costVal <= 0) continue;
+
+          const ex = costMap.get(itemCode);
+          if (ex) {
+            ex.material_cost_per_ea = costVal;
+          } else {
+            costMap.set(itemCode, {
+              item_code: itemCode, customer_pn: str(row['고객P/N']),
+              item_name: str(row['품명']), customer_name: str(row['거래선']),
+              variety: '', item_type: '', supply_type: '',
+              resin_cost_per_ea: 0, paint_cost_per_ea: 0,
+              material_cost_per_ea: costVal,
+              purchase_price_per_ea: 0, injection_price_per_ea: 0,
+              jan_qty: 0, feb_qty: 0, mar_qty: 0, apr_qty: 0, may_qty: 0, jun_qty: 0,
+              jul_qty: 0, aug_qty: 0, sep_qty: 0, oct_qty: 0, nov_qty: 0, dec_qty: 0,
+              jan_amt: 0, feb_amt: 0, mar_amt: 0, apr_amt: 0, may_amt: 0, jun_amt: 0,
+              jul_amt: 0, aug_amt: 0, sep_amt: 0, oct_amt: 0, nov_amt: 0, dec_amt: 0,
+              total_qty: 0, total_amt: 0,
+            });
+          }
+          updated++;
+        }
+        await itemStandardCostService.saveAll(Array.from(costMap.values()));
+        setUploadMsg({ id: sectionId, text: `표준재료비 ${updated}건 업데이트 완료`, ok: true });
+
+      } else if (sectionId === 'refInfo') {
+        const allRefInfo = await referenceInfoService.getAll();
+        const riMap = new Map<string, (typeof allRefInfo)[0]>();
+        for (const ri of allRefInfo) riMap.set(normalizePn(ri.itemCode), ri);
+
+        let updated = 0;
+        for (const row of rows) {
+          const itemCode = normalizePn(str(row['품목코드']));
+          if (!itemCode) continue;
+          const ri = riMap.get(itemCode);
+          if (!ri) continue;
+
+          let changed = false;
+          if (row['순중량(g)'] !== undefined && row['순중량(g)'] !== '') {
+            ri.netWeight = num(row['순중량(g)']); changed = true;
+          }
+          for (const [col, key] of [
+            ['원재료코드1', 'rawMaterialCode1'], ['원재료코드2', 'rawMaterialCode2'],
+            ['원재료코드3', 'rawMaterialCode3'], ['원재료코드4', 'rawMaterialCode4'],
+          ] as const) {
+            const v = str(row[col]);
+            if (v) { (ri as Record<string, unknown>)[key] = v; changed = true; }
+          }
+          for (const [col, key] of [
+            ['1도도장량(g)', 'paintQty1'], ['2도도장량(g)', 'paintQty2'],
+            ['3도도장량(g)', 'paintQty3'], ['4도도장량(g)', 'paintQty4'],
+          ] as const) {
+            if (row[col] !== undefined && row[col] !== '') {
+              (ri as Record<string, unknown>)[key] = num(row[col]); changed = true;
+            }
+          }
+          if (changed) updated++;
+        }
+        await referenceInfoService.saveAll(Array.from(riMap.values()));
+        setUploadMsg({ id: sectionId, text: `기준정보 ${updated}건 업데이트 완료`, ok: true });
+
+      } else if (sectionId === 'matPrice') {
+        const allMat = await materialCodeService.getAll();
+        const mcMap = new Map<string, (typeof allMat)[0]>();
+        for (const mc of allMat) mcMap.set(normalizePn(mc.materialCode), mc);
+
+        let updated = 0;
+        for (const row of rows) {
+          const code = normalizePn(str(row['재질코드']));
+          const price = num(row['현재단가(원/kg)']);
+          if (!code || price <= 0) continue;
+          const mc = mcMap.get(code);
+          if (mc) { mc.currentPrice = price; updated++; }
+        }
+        await materialCodeService.saveAll(Array.from(mcMap.values()));
+        setUploadMsg({ id: sectionId, text: `재질단가 ${updated}건 업데이트 완료`, ok: true });
+      }
+
+      window.dispatchEvent(new Event('dashboard-data-updated'));
+      await analyzeData();
+    } catch (err) {
+      console.error('업로드 실패:', err);
+      setUploadMsg({ id: sectionId, text: '업로드 실패: ' + (err instanceof Error ? err.message : String(err)), ok: false });
+    } finally {
+      setUploadingId(null);
+    }
+  };
+
+  const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const sectionId = pendingSectionRef.current;
+    if (!file || !sectionId) return;
+    await handleUpload(sectionId, file);
+    e.target.value = '';
+  };
+
   const sevColor = (s: string) =>
     s === 'critical' ? 'border-red-300 bg-red-50' :
     s === 'warning' ? 'border-amber-300 bg-amber-50' :
@@ -342,6 +522,7 @@ const DataQualityGuide: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      <input type="file" ref={uploadFileRef} accept=".xlsx,.xls,.csv" className="hidden" onChange={onFileChange} />
       {/* 총평 카드 */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <div className="flex items-center gap-6">
@@ -443,18 +624,45 @@ const DataQualityGuide: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 누락 목록 다운로드 + 미리보기 */}
+                {/* 누락 목록 다운로드 + 업로드 */}
                 {section.items.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-xs font-semibold text-slate-600">누락 목록 ({section.items.length}건)</div>
-                      <button
-                        onClick={() => handleDownload(section)}
-                        className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 transition-colors font-medium"
-                      >
-                        CSV 다운로드
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {UPLOADABLE_SECTIONS.includes(section.id) ? (
+                          <>
+                            <button
+                              onClick={() => handleTemplateDownload(section)}
+                              className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                            >
+                              1. 입력 템플릿 다운로드
+                            </button>
+                            <button
+                              onClick={() => { pendingSectionRef.current = section.id; uploadFileRef.current?.click(); }}
+                              disabled={uploadingId === section.id}
+                              className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 transition-colors font-medium disabled:opacity-50"
+                            >
+                              {uploadingId === section.id ? '업로드 중...' : '2. 입력완료 업로드'}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => handleDownload(section)}
+                            className="px-3 py-1.5 bg-emerald-500 text-white text-xs rounded-lg hover:bg-emerald-600 transition-colors font-medium"
+                          >
+                            CSV 다운로드
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {uploadMsg && uploadMsg.id === section.id && (
+                      <div className={`mb-2 px-3 py-2 rounded-lg text-xs font-medium ${
+                        uploadMsg.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+                      }`}>
+                        {uploadMsg.text}
+                      </div>
+                    )}
                     <div className="overflow-x-auto max-h-[200px] overflow-y-auto border border-slate-200 rounded-lg">
                       <table className="w-full text-xs">
                         <thead className="bg-slate-50 sticky top-0">
