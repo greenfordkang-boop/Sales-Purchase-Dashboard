@@ -201,9 +201,9 @@ const BomExplosionView: React.FC = () => {
   };
 
   // --- Render: Tree Rows (재귀적 flat rendering) ---
-  const renderTreeRows = (node: BomTreeNode, parentKey = ''): React.ReactNode[] => {
+  const renderTreeRows = (node: BomTreeNode, parentKey = '', siblingIdx = 0): React.ReactNode[] => {
     const rows: React.ReactNode[] = [];
-    const nodeKey = `${parentKey}/${node.pn}-${node.level}`;
+    const nodeKey = `${parentKey}/${node.pn}-${node.level}:${siblingIdx}`;
     const hasChildren = node.children.length > 0;
     const isCollapsed = collapsedNodes.has(nodeKey);
 
@@ -254,8 +254,8 @@ const BomExplosionView: React.FC = () => {
     );
 
     if (hasChildren && !isCollapsed) {
-      for (const child of node.children) {
-        rows.push(...renderTreeRows(child, nodeKey));
+      for (let ci = 0; ci < node.children.length; ci++) {
+        rows.push(...renderTreeRows(node.children[ci], nodeKey, ci));
       }
     }
 

@@ -315,7 +315,11 @@ export const parseMaterialMasterExcel = (buffer: ArrayBuffer): PnMapping[] => {
 /** 모품번별로 BOM 레코드를 그루핑 */
 export const buildBomRelations = (records: BomRecord[]): Map<string, BomRecord[]> => {
   const map = new Map<string, BomRecord[]>();
+  const seen = new Set<string>();
   for (const rec of records) {
+    const dedupKey = `${normalizePn(rec.parentPn)}|${normalizePn(rec.childPn)}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
     const list = map.get(rec.parentPn) || [];
     list.push(rec);
     map.set(rec.parentPn, list);
@@ -335,12 +339,14 @@ interface LeafResult {
 export const normalizePn = (pn: string): string =>
   pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
-/** 모품번에서 최하위 leaf 자재까지 재귀 전개 (누적 소요량 곱셈) */
+/** 모품번에서 leaf 자재까지 재귀 전개 (누적 소요량 곱셈, maxDepth 제한) */
 export const expandBomToLeaves = (
   parentPn: string,
   parentQty: number,
   bomRelations: Map<string, BomRecord[]>,
-  visited?: Set<string>
+  visited?: Set<string>,
+  depth: number = 0,
+  maxDepth: number = 10,
 ): LeafResult[] => {
   const seen = visited || new Set<string>();
   const normalizedParent = normalizePn(parentPn);
@@ -358,8 +364,10 @@ export const expandBomToLeaves = (
     const normalizedChild = normalizePn(child.childPn);
     const grandChildren = bomRelations.get(normalizedChild);
 
-    if (!grandChildren || grandChildren.length === 0) {
-      // leaf 노드
+    // 원재료/구매 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
+    const isLeafType = /원재료|구매/.test(child.partType || '');
+    if (!grandChildren || grandChildren.length === 0 || depth + 1 >= maxDepth || isLeafType) {
+      // leaf 노드 또는 최대 깊이 도달
       results.push({
         childPn: child.childPn,
         childName: child.childName,
@@ -369,7 +377,7 @@ export const expandBomToLeaves = (
       });
     } else {
       // 중간 노드: 재귀 전개
-      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen));
+      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth);
       results.push(...subLeaves.map(leaf => ({
         ...leaf,
         parentPn,

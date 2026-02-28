@@ -24,39 +24,89 @@ export interface ProductCodeRecord {
 }
 
 export interface ReferenceInfoRecord {
-  itemCode: string;
-  customerPn: string;
-  itemName: string;
-  supplyType: string;
-  processType: string;
-  netWeight: number;
-  runnerWeight: number;
-  cavity: number;
-  lossRate: number;
-  paintQty1: number;
-  paintQty2: number;
-  paintQty3: number;
-  rawMaterialCode1: string;
-  rawMaterialCode2: string;
-  rawMaterialCode3: string;
-  rawMaterialCode4: string;
+  itemCode: string;          // 품목코드
+  customerPn: string;        // 고객사 P/N
+  itemName: string;          // 품목명
+  spec: string;              // 규격
+  customerName: string;      // 고객사명
+  variety: string;           // 품종
+  itemStatus: string;        // 품목상태
+  itemCategory: string;      // 품목구분
+  processType: string;       // 품목유형
+  inspectionType: string;    // 검사유형
+  productGroup: string;      // 제품군분류
+  supplyType: string;        // 조달구분
+  supplier: string;          // 협력업체
+  priorityLine1: string;     // 우선배정라인1
+  priorityLine2: string;     // 우선배정라인2
+  priorityLine3: string;     // 우선배정라인3
+  priorityLine4: string;     // 우선배정라인4
+  safetyStock: number;       // 안전재고
+  safetyStockDays: number;   // 안전재고일수
+  lotQty: number;            // LOT수량
+  productionPerHour: number; // 시간당생산수량
+  defectAllowance: number;   // 불량허용기준
+  workers: number;           // 투입인원(명)
+  processingTime: string;    // 가공시간
+  standardCT: number;        // 표준C/T
+  standardManHours: number;  // 표준공수
+  qtyPerBox: number;         // BOX당수량
+  rawMaterialCode1: string;  // 원재료코드1
+  rawMaterialCode2: string;  // 원재료코드2
+  rawMaterialCode3: string;  // 원재료코드3
+  rawMaterialCode4: string;  // 원재료코드4
+  netWeight: number;         // NET중량1
+  runnerWeight: number;      // Runner중량1
+  netWeight2: number;        // NET중량2
+  runnerWeight2: number;     // Runner중량2
+  paintQty1: number;         // 1도 표준 Paint량
+  paintQty2: number;         // 2도 표준 Paint량
+  paintQty3: number;         // 3도 표준 Paint량
+  paintQty4: number;         // 4도 표준 Paint량
+  lossRate: number;          // 재료 Loss율
+  cavity: number;            // 금형Cavity
+  useCavity: number;         // 사용Cavity
+  productSizeType: string;   // 제품크기종류
+  glossType: string;         // 광택종류
+  useYn: string;             // 사용여부
   extraData?: Record<string, unknown>;
 }
 
 export interface EquipmentRecord {
-  equipmentCode: string;
-  equipmentName: string;
-  tonnage: number;
+  equipmentCode: string;     // 설비코드
+  equipmentName: string;     // 설비명
+  site: string;              // 사업장
+  industry: string;          // 업종
+  variety: string;           // 품종
+  line: string;              // LINE
+  directIndirect: string;    // 직/간접구분
+  tonnage: string;           // 설비톤수
+  dailyHours: number;        // 일가동시간(HR)
+  dailyMinutes: number;      // 일가동시간(분)
+  dailySeconds: number;      // 일가동시간(초)
+  managementNo: string;      // 설비관리번호
+  equipmentNo: string;       // 설비번호
+  useYn: string;             // 사용여부
   extraData?: Record<string, unknown>;
 }
 
 export interface MaterialCodeRecord {
-  materialCode: string;
-  materialName: string;
-  materialType: string;
-  unit: string;
-  lossRate: number;
-  currentPrice: number;
+  industryCode: string;      // 업종코드
+  materialType: string;      // 업종명 (= 재질분류로도 사용)
+  materialCode: string;      // 재질코드
+  materialName: string;      // 재질명
+  materialCategory: string;  // 재질분류
+  paintCategory: string;     // 도료구분
+  color: string;             // 색상
+  unit: string;              // 단위
+  safetyStock: number;       // 안전재고량
+  dailyAvgUsage: number;     // 일평균사용량
+  lossRate: number;          // Loss율(%)
+  validDays: number;         // 유효기간(일)
+  orderSize: string;         // 발주 SIZE
+  useYn: string;             // 사용여부
+  protectedItem: string;     // 보호항목
+  currentPrice: number;      // 단가 (기존 유지)
   extraData?: Record<string, unknown>;
 }
 
@@ -118,33 +168,83 @@ const REFERENCE_INFO_HEADERS: Record<string, RegExp> = {
   itemCode: /품목코드|item.*code|제품코드/i,
   customerPn: /고객사.*p.?n|customer.*p.?n/i,
   itemName: /품목명|item.*name|품명/i,
-  supplyType: /조달구분|supply.*type|조달/i,
+  spec: /^규격$|spec/i,
+  customerName: /고객사명|customer.*name/i,
+  variety: /^품종$|variety/i,
+  itemStatus: /품목상태|item.*status/i,
+  itemCategory: /품목구분|item.*category/i,
   processType: /품목유형|process.*type|유형/i,
-  netWeight: /net.*중량|net.*weight|순중량|제품중량/i,
-  runnerWeight: /runner.*중량|runner.*weight|런너/i,
-  cavity: /cavity|캐비티|cav/i,
-  lossRate: /loss.*율|loss.*rate|로스율|손실율/i,
-  paintQty1: /paint.*1도|도장량.*1|1도.*도장|도장량1/i,
-  paintQty2: /paint.*2도|도장량.*2|2도.*도장|도장량2/i,
-  paintQty3: /paint.*3도|도장량.*3|3도.*도장|도장량3/i,
+  inspectionType: /검사유형|inspection/i,
+  productGroup: /제품군분류|product.*group/i,
+  supplyType: /조달구분|supply.*type|조달/i,
+  supplier: /^협력업체$|^vendor$|^supplier$/i,
+  priorityLine1: /우선배정라인1|priority.*line.*1/i,
+  priorityLine2: /우선배정라인2|priority.*line.*2/i,
+  priorityLine3: /우선배정라인3|priority.*line.*3/i,
+  priorityLine4: /우선배정라인4|priority.*line.*4/i,
+  safetyStock: /^안전재고$|safety.*stock$/i,
+  safetyStockDays: /안전재고일수|safety.*stock.*day/i,
+  lotQty: /lot.*수량|lot.*qty/i,
+  productionPerHour: /시간당생산수량|production.*per.*hour/i,
+  defectAllowance: /불량허용기준|defect.*allow/i,
+  workers: /투입인원|workers|인원/i,
+  processingTime: /가공시간|processing.*time/i,
+  standardCT: /표준c.?t|standard.*c.?t/i,
+  standardManHours: /표준공수|standard.*man/i,
+  qtyPerBox: /box당수량|qty.*per.*box/i,
   rawMaterialCode1: /원재료코드1|raw.*material.*1|원재료1/i,
   rawMaterialCode2: /원재료코드2|raw.*material.*2|원재료2/i,
   rawMaterialCode3: /원재료코드3|raw.*material.*3|원재료3/i,
   rawMaterialCode4: /원재료코드4|raw.*material.*4|원재료4/i,
+  netWeight: /net.*중량1|net.*weight.*1/i,
+  runnerWeight: /runner.*중량1|runner.*weight.*1/i,
+  netWeight2: /net.*중량2|net.*weight.*2/i,
+  runnerWeight2: /runner.*중량2|runner.*weight.*2/i,
+  paintQty1: /1도.*표준.*paint|paint.*1도|도장량.*1|1도.*도장|도장량1/i,
+  paintQty2: /2도.*표준.*paint|paint.*2도|도장량.*2|2도.*도장|도장량2/i,
+  paintQty3: /3도.*표준.*paint|paint.*3도|도장량.*3|3도.*도장|도장량3/i,
+  paintQty4: /4도.*표준.*paint|paint.*4도|도장량.*4|4도.*도장|도장량4/i,
+  lossRate: /loss.*율|loss.*rate|로스율|손실율/i,
+  cavity: /금형.*cavity|금형캐비티/i,
+  useCavity: /사용.*cavity|사용캐비티|^사용cavity$/i,
+  productSizeType: /제품크기종류|product.*size/i,
+  glossType: /광택종류|gloss/i,
+  useYn: /사용여부|use.*yn|사용유무/i,
 };
 
 const EQUIPMENT_HEADERS: Record<string, RegExp> = {
-  equipmentCode: /설비코드|equipment.*code|설비번호/i,
-  equipmentName: /설비명|equipment.*name|설비/i,
-  tonnage: /톤수|tonnage|ton|톤/i,
+  equipmentCode: /^설비코드$|equipment.*code/i,
+  equipmentName: /^설비명$|equipment.*name/i,
+  site: /^사업장$|site/i,
+  industry: /^업종$|industry/i,
+  variety: /^품종$|variety/i,
+  line: /^line$/i,
+  directIndirect: /직.?간접구분|direct.*indirect/i,
+  tonnage: /설비톤수|tonnage|ton/i,
+  dailyHours: /일가동시간.*hr|daily.*hour/i,
+  dailyMinutes: /일가동시간.*분|daily.*min/i,
+  dailySeconds: /일가동시간.*초|daily.*sec/i,
+  managementNo: /설비관리번호|management.*no/i,
+  equipmentNo: /^설비번호$|equipment.*no/i,
+  useYn: /^사용여부$|use.*yn/i,
 };
 
 const MATERIAL_CODE_HEADERS: Record<string, RegExp> = {
+  industryCode: /^업종코드$|industry.*code/i,
+  materialType: /^업종명$|industry.*name/i,
   materialCode: /^재질코드$|material.*code/i,
   materialName: /^재질명$|material.*name/i,
-  materialType: /^재질분류$|^재질구분$|material.*type/i,
+  materialCategory: /^재질분류$|material.*category/i,
+  paintCategory: /^도료구분$|paint.*category/i,
+  color: /^색상$|^color$/i,
   unit: /^단위$|^unit$/i,
+  safetyStock: /^안전재고량$|safety.*stock/i,
+  dailyAvgUsage: /일평균사용량|daily.*avg/i,
   lossRate: /loss.*율|loss.*rate|^로스율/i,
+  validDays: /유효기간|valid.*day/i,
+  orderSize: /발주.*size|order.*size/i,
+  useYn: /^사용여부$|use.*yn/i,
+  protectedItem: /보호항목|protected/i,
   currentPrice: /단가|가격|price/i,
 };
 
@@ -249,23 +349,55 @@ export function parseReferenceInfoSheet(rows: unknown[][]): ReferenceInfoRecord[
     const itemCode = strVal(r[m.itemCode]);
     if (!itemCode) continue;
 
+    const s = (field: string) => m[field] !== undefined ? strVal(r[m[field]]) : '';
+    const n = (field: string, fallback = 0) => m[field] !== undefined ? parseNumVal(r[m[field]]) : fallback;
+
     results.push({
       itemCode,
-      customerPn: m.customerPn !== undefined ? strVal(r[m.customerPn]) : '',
-      itemName: m.itemName !== undefined ? strVal(r[m.itemName]) : '',
-      supplyType: m.supplyType !== undefined ? strVal(r[m.supplyType]) : '',
-      processType: m.processType !== undefined ? strVal(r[m.processType]) : '',
-      netWeight: m.netWeight !== undefined ? parseNumVal(r[m.netWeight]) : 0,
-      runnerWeight: m.runnerWeight !== undefined ? parseNumVal(r[m.runnerWeight]) : 0,
-      cavity: m.cavity !== undefined ? parseNumVal(r[m.cavity]) || 1 : 1,
-      lossRate: m.lossRate !== undefined ? parseNumVal(r[m.lossRate]) : 0,
-      paintQty1: m.paintQty1 !== undefined ? parseNumVal(r[m.paintQty1]) : 0,
-      paintQty2: m.paintQty2 !== undefined ? parseNumVal(r[m.paintQty2]) : 0,
-      paintQty3: m.paintQty3 !== undefined ? parseNumVal(r[m.paintQty3]) : 0,
-      rawMaterialCode1: m.rawMaterialCode1 !== undefined ? strVal(r[m.rawMaterialCode1]) : '',
-      rawMaterialCode2: m.rawMaterialCode2 !== undefined ? strVal(r[m.rawMaterialCode2]) : '',
-      rawMaterialCode3: m.rawMaterialCode3 !== undefined ? strVal(r[m.rawMaterialCode3]) : '',
-      rawMaterialCode4: m.rawMaterialCode4 !== undefined ? strVal(r[m.rawMaterialCode4]) : '',
+      customerPn: s('customerPn'),
+      itemName: s('itemName'),
+      spec: s('spec'),
+      customerName: s('customerName'),
+      variety: s('variety'),
+      itemStatus: s('itemStatus'),
+      itemCategory: s('itemCategory'),
+      processType: s('processType'),
+      inspectionType: s('inspectionType'),
+      productGroup: s('productGroup'),
+      supplyType: s('supplyType'),
+      supplier: s('supplier'),
+      priorityLine1: s('priorityLine1'),
+      priorityLine2: s('priorityLine2'),
+      priorityLine3: s('priorityLine3'),
+      priorityLine4: s('priorityLine4'),
+      safetyStock: n('safetyStock'),
+      safetyStockDays: n('safetyStockDays'),
+      lotQty: n('lotQty'),
+      productionPerHour: n('productionPerHour'),
+      defectAllowance: n('defectAllowance'),
+      workers: n('workers'),
+      processingTime: s('processingTime'),
+      standardCT: n('standardCT'),
+      standardManHours: n('standardManHours'),
+      qtyPerBox: n('qtyPerBox'),
+      rawMaterialCode1: s('rawMaterialCode1'),
+      rawMaterialCode2: s('rawMaterialCode2'),
+      rawMaterialCode3: s('rawMaterialCode3'),
+      rawMaterialCode4: s('rawMaterialCode4'),
+      netWeight: n('netWeight'),
+      runnerWeight: n('runnerWeight'),
+      netWeight2: n('netWeight2'),
+      runnerWeight2: n('runnerWeight2'),
+      paintQty1: n('paintQty1'),
+      paintQty2: n('paintQty2'),
+      paintQty3: n('paintQty3'),
+      paintQty4: n('paintQty4'),
+      lossRate: n('lossRate'),
+      cavity: n('cavity', 1) || 1,
+      useCavity: n('useCavity'),
+      productSizeType: s('productSizeType'),
+      glossType: s('glossType'),
+      useYn: s('useYn'),
     });
   }
   return results;
@@ -285,10 +417,24 @@ export function parseEquipmentSheet(rows: unknown[][]): EquipmentRecord[] {
     const equipmentCode = strVal(r[m.equipmentCode]);
     if (!equipmentCode) continue;
 
+    const s = (field: string) => m[field] !== undefined ? strVal(r[m[field]]) : '';
+    const n = (field: string) => m[field] !== undefined ? parseNumVal(r[m[field]]) : 0;
+
     results.push({
       equipmentCode,
-      equipmentName: m.equipmentName !== undefined ? strVal(r[m.equipmentName]) : '',
-      tonnage: m.tonnage !== undefined ? parseNumVal(r[m.tonnage]) : 0,
+      equipmentName: s('equipmentName'),
+      site: s('site'),
+      industry: s('industry'),
+      variety: s('variety'),
+      line: s('line'),
+      directIndirect: s('directIndirect'),
+      tonnage: s('tonnage'),
+      dailyHours: n('dailyHours'),
+      dailyMinutes: n('dailyMinutes'),
+      dailySeconds: n('dailySeconds'),
+      managementNo: s('managementNo'),
+      equipmentNo: s('equipmentNo'),
+      useYn: s('useYn'),
     });
   }
   return results;
@@ -310,13 +456,26 @@ export function parseMaterialCodeSheet(rows: unknown[][]): MaterialCodeRecord[] 
     const materialCode = strVal(r[m.materialCode]);
     if (!materialCode) continue;
 
+    const s = (field: string) => m[field] !== undefined ? strVal(r[m[field]]) : '';
+    const n = (field: string) => m[field] !== undefined ? parseNumVal(r[m[field]]) : 0;
+
     results.push({
+      industryCode: s('industryCode'),
+      materialType: s('materialType'),
       materialCode,
-      materialName: m.materialName !== undefined ? strVal(r[m.materialName]) : '',
-      materialType: m.materialType !== undefined ? strVal(r[m.materialType]) : '',
-      unit: m.unit !== undefined ? strVal(r[m.unit]) : '',
-      lossRate: m.lossRate !== undefined ? parseNumVal(r[m.lossRate]) : 0,
-      currentPrice: m.currentPrice !== undefined ? parseNumVal(r[m.currentPrice]) : 0,
+      materialName: s('materialName'),
+      materialCategory: s('materialCategory'),
+      paintCategory: s('paintCategory'),
+      color: s('color'),
+      unit: s('unit'),
+      safetyStock: n('safetyStock'),
+      dailyAvgUsage: n('dailyAvgUsage'),
+      lossRate: n('lossRate'),
+      validDays: n('validDays'),
+      orderSize: s('orderSize'),
+      useYn: s('useYn'),
+      protectedItem: s('protectedItem'),
+      currentPrice: n('currentPrice'),
     });
   }
   return results;

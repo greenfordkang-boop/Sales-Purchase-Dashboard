@@ -1,12 +1,13 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import MetricCard from './MetricCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { BomRecord } from '../utils/bomDataParser';
+import { BomRecord, normalizePn, buildBomRelations } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
 import { downloadCSV } from '../utils/csvExport';
+import { safeSetItem } from '../utils/safeStorage';
 import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService } from '../services/supabaseService';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import fallbackPurchasePrices from '../data/purchasePrices.json';
@@ -22,7 +23,24 @@ const TYPE_COLORS: Record<string, string> = {
   PAINT: '#10b981',
   '구매': '#f59e0b',
   '외주': '#8b5cf6',
+  '제품': '#6366f1',
 };
+
+interface TreeRow {
+  key: string;
+  pn: string;
+  name: string;
+  type: string;
+  unitQty: number;
+  totalQty: number;
+  supplier: string;
+  depth: number;
+  hasChildren: boolean;
+  isExpanded: boolean;
+  unitPrice: number;
+  unit: string;
+  childCount: number;
+}
 
 // ============================================================
 // Component
@@ -37,6 +55,18 @@ const MRPView: React.FC = () => {
   const [filterText, setFilterText] = useState('');
   const [selectedMaterial, setSelectedMaterial] = useState<MRPMaterialRow | null>(null);
   const [tableOpen, setTableOpen] = useState(true);
+  const [manualPriceCount, setManualPriceCount] = useState(() => {
+    try {
+      const stored = localStorage.getItem('dashboard_manualPrices');
+      return stored ? (JSON.parse(stored) as any[]).length : 0;
+    } catch { return 0; }
+  });
+  const priceFileRef = useRef<HTMLInputElement>(null);
+  const [viewMode, setViewMode] = useState<'flat' | 'tree'>('flat');
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const bomRelationsRef = useRef<Map<string, BomRecord[]>>(new Map());
+  const bomRootsRef = useRef<string[]>([]);
+  const bomNameMapRef = useRef<Map<string, string>>(new Map());
 
   // --- 데이터 로드 + MRP 계산 ---
   useEffect(() => {
@@ -76,6 +106,41 @@ const MRPView: React.FC = () => {
         partType: r.partType,
       }));
 
+      // BOM 트리 뷰용 데이터 구축
+      const bomDedupKey = new Set<string>();
+      const dedupedForTree: BomRecord[] = [];
+      for (const r of bomRecords) {
+        const k = `${normalizePn(r.parentPn)}|${normalizePn(r.childPn)}`;
+        if (!bomDedupKey.has(k)) { bomDedupKey.add(k); dedupedForTree.push(r); }
+      }
+      const bomRel = buildBomRelations(dedupedForTree);
+      bomRelationsRef.current = bomRel;
+
+      const nMap = new Map<string, string>();
+      for (const r of bomRecords) {
+        const cn = normalizePn(r.childPn);
+        if (r.childName && !nMap.has(cn)) nMap.set(cn, r.childName);
+      }
+      for (const pc of productCodes) {
+        const n = normalizePn(pc.productCode);
+        if (pc.productName && !nMap.has(n)) nMap.set(n, pc.productName);
+        if (pc.customerPn) { const cn2 = normalizePn(pc.customerPn); if (pc.productName && !nMap.has(cn2)) nMap.set(cn2, pc.productName); }
+      }
+      for (const ri of refInfo) {
+        const n = normalizePn(ri.itemCode);
+        if (ri.itemName && !nMap.has(n)) nMap.set(n, ri.itemName);
+      }
+      bomNameMapRef.current = nMap;
+
+      const allChildNorms = new Set(bomRecords.map(r => normalizePn(r.childPn)));
+      const seenR = new Set<string>();
+      const rootArr: string[] = [];
+      for (const r of bomRecords) {
+        const pn = normalizePn(r.parentPn);
+        if (!allChildNorms.has(pn) && !seenR.has(pn)) { rootArr.push(r.parentPn); seenR.add(pn); }
+      }
+      bomRootsRef.current = rootArr;
+
       if (forecastData.length === 0 || bomRecords.length === 0) {
         console.warn(`MRP 데이터 부족: forecast=${forecastData.length}, bom=${bomRecords.length}`);
         setMrpResult(null);
@@ -92,7 +157,7 @@ const MRPView: React.FC = () => {
         for (const fb of fallbackMaterialCodes) {
           const key = fb.materialCode.trim().toUpperCase();
           if (!existingCodes.has(key)) {
-            merged.push(fb);
+            merged.push(fb as MaterialCodeRecord);
             existingCodes.add(key);
           } else if (fb.currentPrice > 0) {
             // 기존 항목에 단가만 업데이트
@@ -118,6 +183,33 @@ const MRPView: React.FC = () => {
           } as any);
           existingPartNos.add(key);
         }
+      }
+
+      // 수동 단가 병합 (최우선 적용 - 기존 항목 덮어쓰기)
+      try {
+        const manualRaw = localStorage.getItem('dashboard_manualPrices');
+        if (manualRaw) {
+          const manualPrices: { partNo: string; unitPrice: number; partName?: string }[] = JSON.parse(manualRaw);
+          for (const mp of manualPrices) {
+            if (!mp.partNo || mp.unitPrice <= 0) continue;
+            const key = mp.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+            // 기존 항목에서 같은 partNo 찾아 단가 덮어쓰기
+            const existIdx = mergedPurchaseData.findIndex(
+              p => p.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === key
+            );
+            if (existIdx >= 0) {
+              mergedPurchaseData[existIdx] = { ...mergedPurchaseData[existIdx], unitPrice: mp.unitPrice };
+            } else {
+              mergedPurchaseData.push({
+                partNo: mp.partNo, partName: mp.partName || '', unit: 'EA', unitPrice: mp.unitPrice,
+                year: 2026, month: '1월', supplier: '', spec: '', salesQty: 0, closingQty: 0,
+                amount: 0, location: '', costType: '', purchaseType: '구매', materialType: '', process: '', customer: '',
+              } as any);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('수동 단가 로드 실패:', e);
       }
 
       const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData, fallbackStandardCosts);
@@ -201,6 +293,87 @@ const MRPView: React.FC = () => {
     );
   };
 
+  // --- BOM 트리 뷰 ---
+  const visibleTreeRows = useMemo((): TreeRow[] => {
+    if (viewMode !== 'tree' || !mrpResult) return [];
+    const bomRel = bomRelationsRef.current;
+    const nameMap = bomNameMapRef.current;
+    let roots = bomRootsRef.current;
+
+    // 루트 필터링 (검색어)
+    if (filterText) {
+      const f = filterText.toLowerCase();
+      roots = roots.filter(root => {
+        const norm = normalizePn(root);
+        return root.toLowerCase().includes(f) || (nameMap.get(norm) || '').toLowerCase().includes(f);
+      });
+    }
+
+    // 가격 맵 (MRP 결과에서)
+    const priceMap = new Map<string, { unitPrice: number; unit: string }>();
+    for (const m of mrpResult.materials) {
+      priceMap.set(normalizePn(m.materialCode), { unitPrice: m.unitPrice, unit: m.unit });
+    }
+
+    const rows: TreeRow[] = [];
+    const MAX_ROWS = 1000;
+
+    function addChildren(parentPn: string, parentTotalQty: number, depth: number, parentKey: string) {
+      if (rows.length >= MAX_ROWS) return;
+      const children = bomRel.get(normalizePn(parentPn));
+      if (!children) return;
+      for (let ci = 0; ci < children.length; ci++) {
+        if (rows.length >= MAX_ROWS) return;
+        const child = children[ci];
+        const childNorm = normalizePn(child.childPn);
+        const childKey = `${parentKey}/${childNorm}:${ci}`;
+        const grandChildren = bomRel.get(childNorm);
+        const hasChildren = !!grandChildren && grandChildren.length > 0;
+        const isExpanded = expandedNodes.has(childKey);
+        const totalQty = parentTotalQty * child.qty;
+        const price = priceMap.get(childNorm);
+        rows.push({
+          key: childKey, pn: child.childPn,
+          name: child.childName || nameMap.get(childNorm) || '',
+          type: child.partType || '', unitQty: child.qty, totalQty,
+          supplier: child.supplier || '', depth, hasChildren, isExpanded,
+          unitPrice: price?.unitPrice || 0, unit: price?.unit || '',
+          childCount: grandChildren?.length || 0,
+        });
+        if (isExpanded) addChildren(child.childPn, totalQty, depth + 1, childKey);
+      }
+    }
+
+    for (const root of roots) {
+      if (rows.length >= MAX_ROWS) break;
+      const rootNorm = normalizePn(root);
+      const children = bomRel.get(rootNorm);
+      const hasChildren = !!children && children.length > 0;
+      const isExpanded = expandedNodes.has(rootNorm);
+      rows.push({
+        key: rootNorm, pn: root, name: nameMap.get(rootNorm) || '',
+        type: '제품', unitQty: 1, totalQty: 1, supplier: '', depth: 0,
+        hasChildren, isExpanded, unitPrice: 0, unit: '',
+        childCount: children?.length || 0,
+      });
+      if (isExpanded) addChildren(root, 1, 1, rootNorm);
+    }
+    return rows;
+  }, [viewMode, mrpResult, expandedNodes, filterText]);
+
+  const toggleTreeNode = (key: string) => {
+    setExpandedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        // 접기: 하위 노드도 모두 접기
+        for (const k of prev) { if (k === key || k.startsWith(key + '/')) next.delete(k); }
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
   const handleDownload = () => {
     if (!filteredMaterials.length) return;
     const headers = ['자재코드', '자재명', '유형', '구입처', '총소요량', '단가', '총원가', '관련제품수', ...Array.from({ length: 12 }, (_, i) => `${i + 1}월`)];
@@ -222,7 +395,7 @@ const MRPView: React.FC = () => {
     if (!mrpResult) return;
     const noPriceItems = mrpResult.materials.filter(m => m.unitPrice <= 0);
     if (noPriceItems.length === 0) return;
-    const headers = ['파트넘버', '부품명', '자재유형', '구입처', '단위', '총소요량', '관련제품'];
+    const headers = ['파트넘버', '부품명', '자재유형', '구입처', '단가', '단위', '총소요량', '관련제품'];
     const rows = noPriceItems
       .sort((a, b) => b.requiredQty - a.requiredQty)
       .map(m => [
@@ -230,11 +403,106 @@ const MRPView: React.FC = () => {
         m.materialName,
         m.materialType,
         m.supplier || '',
+        '',
         m.unit || '',
         String(m.requiredQty),
         m.parentProducts.join('; '),
       ]);
     downloadCSV(`MRP_단가미등록_자재_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
+
+  const handlePriceUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const buf = ev.target?.result as ArrayBuffer;
+        // 인코딩 감지: EUC-KR / UTF-8
+        let text: string;
+        const bytes = new Uint8Array(buf);
+        if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+          text = new TextDecoder('utf-8').decode(buf);
+        } else {
+          text = new TextDecoder('utf-8').decode(buf);
+          if (text.includes('�')) {
+            text = new TextDecoder('euc-kr').decode(buf);
+          }
+        }
+
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { alert('CSV에 데이터가 없습니다.'); return; }
+
+        // 헤더 파싱
+        const headerLine = lines[0];
+        const headers = headerLine.split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const partNoIdx = headers.findIndex(h => /파트|partno|자재코드|materialcode/i.test(h));
+        const priceIdx = headers.findIndex(h => /단가|unitprice|price/i.test(h));
+        const nameIdx = headers.findIndex(h => /부품명|자재명|partname|materialname/i.test(h));
+
+        if (partNoIdx < 0 || priceIdx < 0) {
+          alert('CSV에 "파트넘버"와 "단가" 컬럼이 필요합니다.');
+          return;
+        }
+
+        // 기존 수동 단가 로드
+        let existing: { partNo: string; unitPrice: number; partName?: string }[] = [];
+        try {
+          const stored = localStorage.getItem('dashboard_manualPrices');
+          if (stored) existing = JSON.parse(stored);
+        } catch { /* ignore */ }
+        const priceMap = new Map(existing.map(p => [p.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, ''), p]));
+
+        // CSV 파싱
+        let imported = 0;
+        for (let i = 1; i < lines.length; i++) {
+          // 간단한 CSV 파싱 (쉼표 구분, 따옴표 처리)
+          const cells: string[] = [];
+          let current = '';
+          let inQuote = false;
+          for (const ch of lines[i]) {
+            if (ch === '"') { inQuote = !inQuote; }
+            else if (ch === ',' && !inQuote) { cells.push(current.trim()); current = ''; }
+            else { current += ch; }
+          }
+          cells.push(current.trim());
+
+          const partNo = cells[partNoIdx]?.replace(/^"|"$/g, '').trim();
+          const priceStr = cells[priceIdx]?.replace(/^"|"$/g, '').replace(/,/g, '').trim();
+          const price = parseFloat(priceStr);
+          if (!partNo || isNaN(price) || price <= 0) continue;
+
+          const partName = nameIdx >= 0 ? cells[nameIdx]?.replace(/^"|"$/g, '').trim() : undefined;
+          const key = partNo.toUpperCase().replace(/[\s\-_\.]+/g, '');
+          priceMap.set(key, { partNo, unitPrice: price, partName });
+          imported++;
+        }
+
+        if (imported === 0) {
+          alert('유효한 단가 데이터가 없습니다. 단가 > 0인 항목이 필요합니다.');
+          return;
+        }
+
+        const merged = Array.from(priceMap.values());
+        safeSetItem('dashboard_manualPrices', JSON.stringify(merged));
+        setManualPriceCount(merged.length);
+        calculateMRPData();
+        alert(`${imported}건 단가 등록 완료 (총 ${merged.length}건 수동단가)`);
+      } catch (err) {
+        console.error('단가 CSV 파싱 실패:', err);
+        alert('CSV 파싱에 실패했습니다. 파일 형식을 확인해주세요.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    // 같은 파일 재업로드 허용
+    e.target.value = '';
+  };
+
+  const handleManualPriceReset = () => {
+    if (!confirm('수동 등록 단가를 모두 초기화하시겠습니까?')) return;
+    localStorage.removeItem('dashboard_manualPrices');
+    setManualPriceCount(0);
+    calculateMRPData();
   };
 
   // No data state
@@ -370,29 +638,79 @@ const MRPView: React.FC = () => {
             Excel 내보내기
           </button>
           {mrpResult && summary.noPriceMaterials > 0 && (
-            <button
-              onClick={handleNoPriceExport}
-              className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
-            >
-              단가없음 리스트 ({summary.noPriceMaterials}건)
-            </button>
+            <>
+              <button
+                onClick={handleNoPriceExport}
+                className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
+              >
+                단가없음 리스트 ({summary.noPriceMaterials}건)
+              </button>
+              <button
+                onClick={() => priceFileRef.current?.click()}
+                className="px-3 py-1 bg-orange-500 text-white rounded text-xs hover:bg-orange-600"
+              >
+                단가 업로드
+              </button>
+              <input
+                ref={priceFileRef}
+                type="file"
+                accept=".csv"
+                onChange={handlePriceUpload}
+                className="hidden"
+              />
+            </>
+          )}
+          {manualPriceCount > 0 && (
+            <span className="flex items-center gap-1">
+              <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-medium">
+                수동단가 {manualPriceCount}건
+              </span>
+              <button
+                onClick={handleManualPriceReset}
+                className="text-[10px] text-gray-400 hover:text-red-500"
+                title="수동단가 초기화"
+              >
+                ✕
+              </button>
+            </span>
           )}
         </div>
       </div>
 
       {/* 상세 테이블 */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <button
-          onClick={() => setTableOpen(!tableOpen)}
-          className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100"
-        >
-          <span className="text-sm font-semibold text-gray-700">
-            자재별 소요량 상세 ({filteredMaterials.length.toLocaleString()}건)
-          </span>
-          <span className="text-gray-400 text-xs">{tableOpen ? '접기' : '펼치기'}</span>
-        </button>
+        <div className="w-full flex items-center justify-between px-4 py-2 bg-gray-50">
+          <button
+            onClick={() => setTableOpen(!tableOpen)}
+            className="flex items-center gap-2 hover:bg-gray-100 -m-1 p-1 rounded"
+          >
+            <span className="text-sm font-semibold text-gray-700">
+              {viewMode === 'tree'
+                ? `BOM 트리 (${bomRootsRef.current.length}개 제품)`
+                : `자재별 소요량 상세 (${filteredMaterials.length.toLocaleString()}건)`}
+            </span>
+            <span className="text-gray-400 text-xs">{tableOpen ? '▲' : '▼'}</span>
+          </button>
+          <div className="flex items-center gap-2">
+            {viewMode === 'tree' && expandedNodes.size > 0 && (
+              <button
+                onClick={() => setExpandedNodes(new Set())}
+                className="text-[10px] text-gray-400 hover:text-gray-600"
+              >
+                전체접기
+              </button>
+            )}
+            <button
+              onClick={() => { setViewMode(v => v === 'flat' ? 'tree' : 'flat'); setExpandedNodes(new Set()); }}
+              className="px-2 py-0.5 text-[10px] border border-gray-300 rounded hover:bg-gray-100"
+            >
+              {viewMode === 'flat' ? 'BOM 트리' : '테이블'}
+            </button>
+          </div>
+        </div>
 
-        {tableOpen && (
+        {/* Flat 테이블 */}
+        {tableOpen && viewMode === 'flat' && (
           <div className="max-h-[500px] overflow-y-auto">
             <table className="min-w-full text-xs">
               <thead className="bg-gray-50 sticky top-0">
@@ -470,6 +788,87 @@ const MRPView: React.FC = () => {
             {filteredMaterials.length > 300 && (
               <div className="px-3 py-2 text-xs text-gray-400 bg-gray-50">
                 {filteredMaterials.length - 300}건 더 있음
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* BOM 트리 테이블 */}
+        {tableOpen && viewMode === 'tree' && (
+          <div className="max-h-[600px] overflow-y-auto">
+            <table className="min-w-full text-xs">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left text-gray-600 font-medium min-w-[280px]">품번</th>
+                  <th className="px-3 py-2 text-left text-gray-600 font-medium">품명</th>
+                  <th className="px-3 py-2 text-left text-gray-600 font-medium">유형</th>
+                  <th className="px-3 py-2 text-right text-gray-600 font-medium">BOM수량</th>
+                  <th className="px-3 py-2 text-right text-gray-600 font-medium">누적소요량</th>
+                  <th className="px-3 py-2 text-left text-gray-600 font-medium">구입처</th>
+                  <th className="px-3 py-2 text-right text-gray-600 font-medium">단가</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {visibleTreeRows.map((row, rowIdx) => (
+                  <tr
+                    key={`${row.key}_${rowIdx}`}
+                    className={`hover:bg-blue-50 ${row.depth === 0 ? 'bg-indigo-50/50' : ''} ${!row.hasChildren && row.unitPrice <= 0 ? 'bg-red-50/30' : ''}`}
+                  >
+                    <td className="px-3 py-1.5 font-mono text-gray-700 whitespace-nowrap">
+                      <span style={{ paddingLeft: `${row.depth * 20}px` }} className="inline-flex items-center">
+                        {row.hasChildren ? (
+                          <button
+                            onClick={() => toggleTreeNode(row.key)}
+                            className="mr-1 text-gray-400 hover:text-gray-700 w-4 text-center flex-shrink-0"
+                          >
+                            {row.isExpanded ? '▼' : '▶'}
+                          </button>
+                        ) : (
+                          <span className="mr-1 w-4 text-center text-gray-300 flex-shrink-0">·</span>
+                        )}
+                        <span>{row.pn}</span>
+                        {row.hasChildren && (
+                          <span className="ml-1 text-[9px] text-gray-400">({row.childCount})</span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-600 max-w-48 truncate">{row.name}</td>
+                    <td className="px-3 py-1.5">
+                      {row.type && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{
+                          backgroundColor: `${TYPE_COLORS[row.type] || '#94a3b8'}20`,
+                          color: TYPE_COLORS[row.type] || '#94a3b8',
+                        }}>
+                          {row.type}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-gray-600 font-mono">
+                      {row.depth === 0 ? '-' : (
+                        Number.isInteger(row.unitQty) ? row.unitQty.toLocaleString() : row.unitQty.toFixed(row.unitQty < 0.01 ? 4 : 3)
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-gray-700 font-mono font-medium">
+                      {row.depth === 0 ? '-' : (
+                        Number.isInteger(row.totalQty) ? row.totalQty.toLocaleString() : row.totalQty.toFixed(row.totalQty < 0.01 ? 4 : 3)
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-gray-500 max-w-24 truncate">{row.supplier || '-'}</td>
+                    <td className="px-3 py-1.5 text-right text-gray-600">
+                      {row.unitPrice > 0 ? `₩${Math.round(row.unitPrice).toLocaleString()}` : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {visibleTreeRows.length === 0 && (
+              <div className="px-4 py-6 text-center text-xs text-gray-400">
+                {filterText ? '검색 결과가 없습니다' : 'BOM 데이터가 없습니다'}
+              </div>
+            )}
+            {visibleTreeRows.length >= 1000 && (
+              <div className="px-3 py-2 text-xs text-gray-400 bg-gray-50">
+                표시 제한 (1,000행). 일부 노드를 접어서 범위를 줄여주세요.
               </div>
             )}
           </div>

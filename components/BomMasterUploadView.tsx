@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
 import {
@@ -252,6 +253,338 @@ const BomMasterUploadView: React.FC = () => {
       action: '기준정보에 입력된 원재료코드가 재질코드 시트에 없습니다. 재질코드 시트에 해당 코드/단가를 추가 등록하세요.',
     },
   };
+
+  const handleBomExcelDownload = useCallback(async () => {
+    if (assembledBom.length === 0) return;
+
+    const [bomData, pcData, riData, eqData, mcData] = await Promise.all([
+      bomMasterService.getAll(),
+      productCodeService.getAll(),
+      referenceInfoService.getAll(),
+      equipmentService.getAll(),
+      materialCodeService.getAll(),
+    ]);
+
+    const normalizePn = (pn: string) => pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+
+    const refMap = new Map<string, ReferenceInfoRecord>();
+    for (const ri of riData) {
+      refMap.set(normalizePn(ri.itemCode), ri);
+      if (ri.customerPn) refMap.set(normalizePn(ri.customerPn), ri);
+    }
+
+    const priceMap = new Map<string, number>();
+    const matNameMap = new Map<string, string>();
+    for (const mc of mcData) {
+      const key = normalizePn(mc.materialCode);
+      if (mc.currentPrice > 0) priceMap.set(key, mc.currentPrice);
+      if (mc.materialName) matNameMap.set(key, mc.materialName);
+    }
+
+    // 제품코드 맵 (제품번호 → 제품정보)
+    const pcMap = new Map<string, ProductCodeRecord>();
+    for (const pc of pcData) pcMap.set(normalizePn(pc.productCode), pc);
+
+    const wb = XLSX.utils.book_new();
+    const v = (val: unknown) => (val === 0 || val === '' || val == null) ? '' : val;
+    const matName = (code: string) => code ? (matNameMap.get(normalizePn(code)) || '') : '';
+
+    // --- Sheet 1: BOM (원본: 전체 행 포함, 원재료 포함) ---
+    {
+      const hdr = ['No', '제품번호', '레벨', '모품번', '자품번', '고객사 P/N', '자품명', '규격', '부품유형', '단위', '소요량', '협력업체'];
+      const rows: unknown[][] = [hdr];
+      let prevProduct = '';
+      let curProduct = '';
+      bomData.forEach((b, i) => {
+        if (b.level === 1) curProduct = b.parentPn;
+        const showProduct = curProduct !== prevProduct;
+        if (showProduct) prevProduct = curProduct;
+        const ref = refMap.get(normalizePn(b.childPn));
+        rows.push([
+          i + 1,
+          showProduct ? curProduct : '',
+          b.level, b.parentPn, b.childPn,
+          ref?.customerPn || '',
+          b.childName, '',
+          b.partType || '', 'EA', b.qty, b.supplier || '',
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 18 }, { wch: 5 }, { wch: 18 }, { wch: 18 },
+        { wch: 16 }, { wch: 35 }, { wch: 10 }, { wch: 8 }, { wch: 5 }, { wch: 8 }, { wch: 14 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'BOM');
+    }
+
+    // --- Sheet 2: 제품코드 ---
+    {
+      const hdr = ['No', '제품코드', '고객사 PART NO', '제품명', '고객사', '품목유형', '사용여부'];
+      const rows: unknown[][] = [hdr];
+      pcData.forEach((p, i) => {
+        rows.push([i + 1, p.productCode, p.customerPn, p.productName, p.customer, p.model, 'Y']);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 18 }, { wch: 16 }, { wch: 35 }, { wch: 14 }, { wch: 10 }, { wch: 8 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '제품코드');
+    }
+
+    // --- Sheet 3: 기준정보 (원본 46컬럼 전체) ---
+    {
+      const hdr = [
+        'No', '품목코드', '고객사 P/N', '품목명', '규격', '고객사명',
+        '품종', '품목상태', '품목구분', '품목유형', '검사유형', '제품군분류',
+        '조달구분', '협력업체',
+        '우선배정라인1', '우선배정라인2', '우선배정라인3', '우선배정라인4',
+        '안전재고', '안전재고일수', 'LOT수량', '시간당생산수량',
+        '불량허용기준', '투입인원(명)', '가공시간', '표준C/T', '표준공수', 'BOX당수량',
+        '원재료코드1', '원재료코드2', '원재료코드3', '원재료코드4',
+        'NET중량1', 'Runner중량1', 'NET중량2', 'Runner중량2',
+        '1도 표준 Paint량', '2도 표준 Paint량', '3도 표준 Paint량', '4도 표준 Paint량',
+        '재료 Loss율', '금형Cavity', '사용Cavity',
+        '제품크기종류', '광택종류', '사용여부',
+      ];
+      const rows: unknown[][] = [hdr];
+      riData.forEach((ri, i) => {
+        rows.push([
+          i + 1, ri.itemCode, ri.customerPn, ri.itemName, ri.spec, ri.customerName,
+          ri.variety, ri.itemStatus, ri.itemCategory, ri.processType, ri.inspectionType, ri.productGroup,
+          ri.supplyType, ri.supplier,
+          ri.priorityLine1, ri.priorityLine2, ri.priorityLine3, ri.priorityLine4,
+          v(ri.safetyStock), v(ri.safetyStockDays), v(ri.lotQty), v(ri.productionPerHour),
+          v(ri.defectAllowance), v(ri.workers), ri.processingTime, v(ri.standardCT), v(ri.standardManHours), v(ri.qtyPerBox),
+          ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || '',
+          v(ri.netWeight), v(ri.runnerWeight), v(ri.netWeight2), v(ri.runnerWeight2),
+          v(ri.paintQty1), v(ri.paintQty2), v(ri.paintQty3), v(ri.paintQty4),
+          v(ri.lossRate), v(ri.cavity), v(ri.useCavity),
+          ri.productSizeType, ri.glossType, ri.useYn,
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 18 }, { wch: 16 }, { wch: 30 }, { wch: 14 }, { wch: 14 },
+        { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 },
+        { wch: 8 }, { wch: 14 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 },
+        { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 10 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 },
+        { wch: 12 }, { wch: 10 }, { wch: 8 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '기준정보');
+    }
+
+    // --- Sheet 4: 설비코드 (원본 15컬럼 전체) ---
+    {
+      const hdr = [
+        'No', '설비코드', '설비명', '사업장', '업종', '품종', 'LINE',
+        '직/간접구분', '설비톤수', '일가동시간(HR)', '일가동시간(분)', '일가동시간(초)',
+        '설비관리번호', '설비번호', '사용여부',
+      ];
+      const rows: unknown[][] = [hdr];
+      eqData.forEach((eq, i) => {
+        rows.push([
+          i + 1, eq.equipmentCode, eq.equipmentName, eq.site, eq.industry, eq.variety, eq.line,
+          eq.directIndirect, eq.tonnage, v(eq.dailyHours), v(eq.dailyMinutes), v(eq.dailySeconds),
+          eq.managementNo, eq.equipmentNo, eq.useYn,
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 8 }, { wch: 14 }, { wch: 14 },
+        { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 14 }, { wch: 10 }, { wch: 8 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '설비코드');
+    }
+
+    // --- Sheet 5: 재질코드 (원본 16컬럼 전체) ---
+    {
+      const hdr = [
+        'No', '업종코드', '업종명', '재질코드', '재질명', '재질분류',
+        '도료구분', '색상', '단위', '안전재고량', '일평균사용량',
+        'Loss율(%)', '유효기간(일)', '발주 SIZE', '사용여부', '보호항목',
+      ];
+      const rows: unknown[][] = [hdr];
+      mcData.forEach((mc, i) => {
+        rows.push([
+          i + 1, mc.industryCode, mc.materialType, mc.materialCode, mc.materialName, mc.materialCategory,
+          mc.paintCategory, mc.color, mc.unit, v(mc.safetyStock), v(mc.dailyAvgUsage),
+          v(mc.lossRate), v(mc.validDays), mc.orderSize, mc.useYn, mc.protectedItem,
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 10 }, { wch: 8 }, { wch: 16 }, { wch: 28 }, { wch: 14 },
+        { wch: 8 }, { wch: 8 }, { wch: 6 }, { wch: 10 }, { wch: 12 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '재질코드');
+    }
+
+    // --- Sheet 6: BOM정보 (원본형식: 원재료행 제외, 제품정보 병합, 원재료명, +재질단가) ---
+    {
+      const hdr = [
+        'No', '제품번호', '고객사', '제품코드', '고객사 P/N(제품)', '제품명', '제품유형',
+        '레벨', '모품번', '자품번', '고객사 P/N', '자품명', '규격',
+        '부품유형', '단위', '소요량', '협력업체', '조달구분',
+        '적용설비명', '표준C/T',
+        '원재료명1', '원재료명2', '원재료명3',
+        'NET중량1', 'Runner중량1', 'NET중량2', 'Runner중량2',
+        '1도 표준 Paint량', '2도 표준 Paint량', '3도 표준 Paint량',
+        '재질단가',
+      ];
+      const rows: unknown[][] = [hdr];
+      let curProductCode = '';
+      let prevProductCode = '';
+      let curPc: ProductCodeRecord | undefined;
+      let curProductType = '';
+      let no = 0;
+
+      for (const b of bomData) {
+        // 원재료 행 제외 (원본 BOM정보와 동일)
+        if (b.partType === '원재료') continue;
+
+        // 제품번호 추적
+        if (b.level === 1) {
+          curProductCode = b.parentPn;
+          curPc = pcMap.get(normalizePn(b.parentPn));
+          const prodRef = refMap.get(normalizePn(b.parentPn));
+          curProductType = prodRef?.processType || '';
+        }
+
+        // 제품번호: 제품이 변경될 때만 표시 (원본과 동일)
+        const showProduct = curProductCode !== prevProductCode;
+        if (showProduct) prevProductCode = curProductCode;
+
+        const ref = refMap.get(normalizePn(b.childPn)) || refMap.get(normalizePn(b.parentPn));
+        const price = ref?.rawMaterialCode1
+          ? (priceMap.get(normalizePn(ref.rawMaterialCode1)) || 0) : 0;
+
+        no++;
+        rows.push([
+          no,
+          showProduct ? curProductCode : '',
+          curPc?.customer || '',
+          curProductCode,
+          curPc?.customerPn || '',
+          curPc?.productName || '',
+          curProductType,
+          b.level, b.parentPn, b.childPn,
+          ref?.customerPn || '',
+          b.childName || ref?.itemName || '',
+          ref?.spec || '',
+          b.partType || '', 'EA', b.qty,
+          b.supplier || '',
+          ref?.supplyType || '',
+          ref?.priorityLine1 || '', v(ref?.standardCT),
+          matName(ref?.rawMaterialCode1 || ''),
+          matName(ref?.rawMaterialCode2 || ''),
+          matName(ref?.rawMaterialCode3 || ''),
+          v(ref?.netWeight), v(ref?.runnerWeight),
+          v(ref?.netWeight2), v(ref?.runnerWeight2),
+          v(ref?.paintQty1), v(ref?.paintQty2), v(ref?.paintQty3),
+          price > 0 ? price : '',
+        ]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 6 }, { wch: 18 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 35 }, { wch: 8 },
+        { wch: 5 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 35 }, { wch: 10 },
+        { wch: 8 }, { wch: 5 }, { wch: 8 }, { wch: 14 }, { wch: 8 },
+        { wch: 16 }, { wch: 8 },
+        { wch: 28 }, { wch: 28 }, { wch: 28 },
+        { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 },
+        { wch: 10 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'BOM정보');
+    }
+
+    // --- Sheet 7: Cavity2이상_사출 ---
+    {
+      const hdr = ['품목코드', '고객사 P/N', '품목명', '사용Cavity', 'NET중량1(g)', 'Runner중량1(g)', 'Runner/Cavity(g)', '재료Loss율(%)', '소요량(Kg)'];
+      const rows: unknown[][] = [hdr];
+      for (const ri of riData) {
+        const cav = ri.useCavity || ri.cavity;
+        if (cav >= 2 && (ri.processType === '사출' || ri.processType?.includes('사출'))) {
+          const runnerPerCav = cav > 0 ? ri.runnerWeight / cav : 0;
+          const usage = ((ri.netWeight + runnerPerCav) * (1 + ri.lossRate / 100)) / 1000;
+          rows.push([
+            ri.itemCode, ri.customerPn, ri.itemName, cav,
+            ri.netWeight, ri.runnerWeight,
+            runnerPerCav > 0 ? Math.round(runnerPerCav * 100) / 100 : '',
+            v(ri.lossRate),
+            usage > 0 ? Math.round(usage * 10000) / 10000 : '',
+          ]);
+        }
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 16 }, { wch: 30 }, { wch: 10 }, { wch: 12 },
+        { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, 'Cavity2이상_사출');
+    }
+
+    // --- Sheet 8: 사출_누락정보 ---
+    {
+      const hdr = ['품목코드', '고객사 P/N', '품목명', '원재료명1', 'NET중량1(g)', 'Runner중량1(g)', '누락사유'];
+      const rows: unknown[][] = [hdr];
+      for (const ri of riData) {
+        if (ri.processType !== '사출' && !ri.processType?.includes('사출')) continue;
+        if (ri.supplyType?.includes('외주') || ri.supplyType?.includes('구매')) continue;
+        const reasons: string[] = [];
+        if (ri.netWeight <= 0 && ri.runnerWeight <= 0) reasons.push('NET/Runner 중량 모두 0');
+        else if (ri.netWeight <= 0) reasons.push('NET중량 0');
+        if (!ri.rawMaterialCode1) reasons.push('원재료코드 없음');
+        if (reasons.length === 0) continue;
+        rows.push([
+          ri.itemCode, ri.customerPn, ri.itemName,
+          matName(ri.rawMaterialCode1),
+          ri.netWeight, ri.runnerWeight, reasons.join(', '),
+        ]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 16 }, { wch: 30 }, { wch: 28 }, { wch: 12 }, { wch: 14 }, { wch: 30 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '사출_누락정보');
+    }
+
+    // --- Sheet 9: 도장_누락정보 ---
+    {
+      const hdr = ['품목코드', '고객사 P/N', '품목명', '1도 원재료명', '2도 원재료명', '3도 원재료명', '1도Paint량(g)', '2도Paint량(g)', '3도Paint량(g)', '누락사유'];
+      const rows: unknown[][] = [hdr];
+      for (const ri of riData) {
+        if (ri.processType !== '도장' && !ri.processType?.includes('도장')) continue;
+        const reasons: string[] = [];
+        if (ri.paintQty1 <= 0 && ri.paintQty2 <= 0 && ri.paintQty3 <= 0) reasons.push('Paint량 모두 0');
+        if (!ri.rawMaterialCode1 && !ri.rawMaterialCode2 && !ri.rawMaterialCode3) reasons.push('원재료 전체 없음');
+        if (reasons.length === 0) continue;
+        rows.push([
+          ri.itemCode, ri.customerPn, ri.itemName,
+          matName(ri.rawMaterialCode1), matName(ri.rawMaterialCode2), matName(ri.rawMaterialCode3),
+          ri.paintQty1, ri.paintQty2, ri.paintQty3, reasons.join(', '),
+        ]);
+      }
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 16 }, { wch: 30 },
+        { wch: 28 }, { wch: 28 }, { wch: 28 },
+        { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 30 },
+      ];
+      XLSX.utils.book_append_sheet(wb, ws, '도장_누락정보');
+    }
+
+    XLSX.writeFile(wb, `BOM마스터_통합_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [assembledBom]);
 
   const handleDownloadQualityExcel = () => {
     const target = filterIssueType === 'All' ? qualityIssues : filteredIssues;
@@ -567,6 +900,13 @@ const BomMasterUploadView: React.FC = () => {
             <span className="text-xs text-gray-400">
               {assembledBom.length.toLocaleString()}건 중 {filteredBom.length}건 표시
             </span>
+            <button
+              onClick={handleBomExcelDownload}
+              disabled={assembledBom.length === 0}
+              className="ml-auto px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Excel 다운로드 ({assembledBom.length.toLocaleString()}건)
+            </button>
           </div>
 
           <div className="bg-white rounded-lg shadow overflow-hidden max-h-96 overflow-y-auto">

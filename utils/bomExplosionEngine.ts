@@ -41,13 +41,17 @@ export interface SearchIndexEntry {
 // Map Builders
 // ============================================
 
-/** parentPn -> children 그루핑 (정전개용) */
+/** parentPn -> children 그루핑 (정전개용, 중복 제거) */
 export function buildForwardMap(
   bomRecords: BomMasterRecord[],
 ): Map<string, BomMasterRecord[]> {
   const map = new Map<string, BomMasterRecord[]>();
+  const seen = new Set<string>();
   for (const rec of bomRecords) {
     const key = normalizePn(rec.parentPn);
+    const dedupKey = `${key}|${normalizePn(rec.childPn)}`;
+    if (seen.has(dedupKey)) continue;
+    seen.add(dedupKey);
     const list = map.get(key) || [];
     list.push(rec);
     map.set(key, list);
@@ -124,15 +128,38 @@ export function expandForwardTree(
 
     const childRef = refInfoMap?.get(childNorm);
 
-    const childNode = expandForwardTree(
-      child.childPn,
-      forwardMap,
-      refInfoMap,
-      cumulativeQty,
-      depth + 1,
-      maxDepth,
-      new Set(visited),
-    );
+    // 원재료/구매 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
+    const isLeafType = /원재료|구매/.test(child.partType || '');
+
+    let childNode: BomTreeNode;
+    if (isLeafType) {
+      childNode = {
+        pn: child.childPn,
+        name: child.childName || childRef?.itemName || '',
+        level: depth + 1,
+        qty: cumulativeQty,
+        unitQty: child.qty,
+        partType: child.partType || '',
+        supplier: child.supplier || '',
+        children: [],
+        ...(childRef ? {
+          netWeight: childRef.netWeight || undefined,
+          cavity: childRef.cavity || undefined,
+          processType: childRef.processType || undefined,
+          supplyType: childRef.supplyType || undefined,
+        } : {}),
+      };
+    } else {
+      childNode = expandForwardTree(
+        child.childPn,
+        forwardMap,
+        refInfoMap,
+        cumulativeQty,
+        depth + 1,
+        maxDepth,
+        new Set(visited),
+      );
+    }
 
     // child 정보 업데이트
     childNode.name = child.childName || childRef?.itemName || childNode.name;
@@ -145,6 +172,11 @@ export function expandForwardTree(
       childNode.cavity = childRef.cavity || undefined;
       childNode.processType = childRef.processType || undefined;
       childNode.supplyType = childRef.supplyType || undefined;
+    }
+
+    // 조달=자작이면 협력업체 공란 처리
+    if (childNode.supplyType && /자작/.test(childNode.supplyType)) {
+      childNode.supplier = '';
     }
 
     node.children.push(childNode);
@@ -427,19 +459,19 @@ export function countTreeMetrics(node: BomTreeNode): {
   leafCount: number;
   maxLevel: number;
 } {
-  let totalParts = 0;
-  let leafCount = 0;
+  const uniqueParts = new Set<string>();
+  const uniqueLeaves = new Set<string>();
   let maxLevel = 0;
 
   function walk(n: BomTreeNode) {
-    if (n.level > 0) totalParts++;
-    if (n.children.length === 0 && n.level > 0) leafCount++;
+    if (n.level > 0) uniqueParts.add(n.pn);
+    if (n.children.length === 0 && n.level > 0) uniqueLeaves.add(n.pn);
     if (n.level > maxLevel) maxLevel = n.level;
     for (const child of n.children) walk(child);
   }
 
   walk(node);
-  return { totalParts, leafCount, maxLevel };
+  return { totalParts: uniqueParts.size, leafCount: uniqueLeaves.size, maxLevel };
 }
 
 // ============================================
