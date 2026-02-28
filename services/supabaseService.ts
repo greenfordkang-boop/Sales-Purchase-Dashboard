@@ -2518,6 +2518,40 @@ export const materialCodeService = {
     await insertInBatches('material_code_master', rows);
     console.log(`✅ material_code_master saved: ${rows.length} rows`);
   },
+
+  /** 개별 재질코드의 current_price만 업데이트 */
+  async updatePrice(materialCode: string, newPrice: number): Promise<boolean> {
+    if (!isSupabaseConfigured() || isTableMissing('material_code_master')) {
+      // localStorage fallback
+      const stored = localStorage.getItem('dashboard_materialCodeMaster');
+      if (stored) {
+        const records: MaterialCodeRecord[] = JSON.parse(stored);
+        const idx = records.findIndex(r => r.materialCode.trim().toUpperCase() === materialCode.trim().toUpperCase());
+        if (idx >= 0) {
+          records[idx].currentPrice = newPrice;
+          try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { /* ignore */ }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    try {
+      const { error } = await supabase!
+        .from('material_code_master')
+        .update({ current_price: newPrice })
+        .eq('material_code', materialCode);
+      if (error) {
+        console.error('재질단가 업데이트 실패:', error.message);
+        return false;
+      }
+      console.log(`✅ 재질단가 업데이트: ${materialCode} → ₩${newPrice}`);
+      return true;
+    } catch (err) {
+      console.error('재질단가 업데이트 오류:', err);
+      return false;
+    }
+  },
 };
 
 // ============================================

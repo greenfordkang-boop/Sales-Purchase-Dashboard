@@ -74,11 +74,53 @@ const MONTH_OPTIONS = [
 // BOM Tree Popup Component
 // ============================================================
 
-const BomTreePopup: React.FC<{ row: ProductRow; onClose: () => void }> = ({ row, onClose }) => {
+const BomTreePopup: React.FC<{
+  row: ProductRow;
+  onClose: () => void;
+  onPriceUpdate: (materialCode: string, newPrice: number) => void;
+}> = ({ row, onClose, onPriceUpdate }) => {
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
+    [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
+  );
+
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
 
-  const totalBomCost = row.bomLeaves.reduce((s, l) => s + l.cost, 0);
+  const totalBomCost = localLeaves.reduce((s, l) => s + l.cost, 0);
   const gapFromStd = row.stdMaterialCost > 0 ? row.stdMaterialCost - totalBomCost : 0;
+
+  const handlePriceClick = (idx: number) => {
+    setEditingIdx(idx);
+    setEditValue(String(Math.round(localLeaves[idx].unitPrice)));
+  };
+
+  const handlePriceSave = (idx: number) => {
+    const newPrice = parseFloat(editValue);
+    if (isNaN(newPrice) || newPrice < 0) {
+      setEditingIdx(null);
+      return;
+    }
+    const leaf = localLeaves[idx];
+    // Update local display immediately
+    const updated = [...localLeaves];
+    updated[idx] = {
+      ...leaf,
+      unitPrice: newPrice,
+      cost: leaf.totalQty * newPrice,
+      priceSource: '수동입력',
+    };
+    setLocalLeaves(updated);
+    setEditingIdx(null);
+    // Supabase material_code_master 업데이트 → 전체 재계산
+    materialCodeService.updatePrice(leaf.childPn, newPrice);
+    onPriceUpdate(leaf.childPn, newPrice);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'Enter') handlePriceSave(idx);
+    else if (e.key === 'Escape') setEditingIdx(null);
+  };
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={onClose}>
@@ -110,7 +152,7 @@ const BomTreePopup: React.FC<{ row: ProductRow; onClose: () => void }> = ({ row,
 
         {/* BOM 트리 테이블 */}
         <div className="overflow-auto max-h-[50vh]">
-          {row.bomLeaves.length > 0 ? (
+          {localLeaves.length > 0 ? (
             <table className="w-full text-xs">
               <thead className="bg-slate-50 sticky top-0">
                 <tr className="text-slate-500">
@@ -118,15 +160,13 @@ const BomTreePopup: React.FC<{ row: ProductRow; onClose: () => void }> = ({ row,
                   <th className="px-3 py-2 text-left">자재명</th>
                   <th className="px-3 py-2 text-left">유형</th>
                   <th className="px-3 py-2 text-right">소요량</th>
-                  <th className="px-3 py-2 text-right">단가</th>
+                  <th className="px-3 py-2 text-right">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭 수정)</span></th>
                   <th className="px-3 py-2 text-right">금액</th>
                   <th className="px-3 py-2 text-left">단가출처</th>
                 </tr>
               </thead>
               <tbody>
-                {row.bomLeaves
-                  .sort((a, b) => b.cost - a.cost)
-                  .map((leaf, i) => (
+                {localLeaves.map((leaf, i) => (
                     <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
                       <td className="px-3 py-1.5 font-mono text-[11px]">{leaf.childPn}</td>
                       <td className="px-3 py-1.5 max-w-[180px] truncate">{leaf.childName}</td>
@@ -138,9 +178,35 @@ const BomTreePopup: React.FC<{ row: ProductRow; onClose: () => void }> = ({ row,
                         }`}>{leaf.partType || '-'}</span>
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono">₩{fmt(leaf.unitPrice)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono">
+                        {editingIdx === i ? (
+                          <input
+                            type="number"
+                            className="w-24 px-1.5 py-0.5 border border-blue-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={e => handleKeyDown(e, i)}
+                            onBlur={() => handlePriceSave(i)}
+                            autoFocus
+                          />
+                        ) : (
+                          <span
+                            className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
+                              leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' : 'text-slate-700 border-b border-dashed border-slate-300'
+                            }`}
+                            onClick={() => handlePriceClick(i)}
+                            title="클릭하여 단가 수정"
+                          >
+                            ₩{fmt(leaf.unitPrice)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-1.5 text-right font-mono font-semibold">₩{fmt(leaf.cost)}</td>
-                      <td className="px-3 py-1.5 text-[10px] text-slate-400">{leaf.priceSource}</td>
+                      <td className="px-3 py-1.5 text-[10px]">
+                        <span className={leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' : 'text-slate-400'}>
+                          {leaf.priceSource}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 {/* BOM 소계 */}
@@ -177,7 +243,7 @@ const BomTreePopup: React.FC<{ row: ProductRow; onClose: () => void }> = ({ row,
 
         {/* 푸터 */}
         <div className="bg-slate-50 border-t px-4 py-2 text-[10px] text-slate-400 flex justify-between">
-          <span>BOM leaf {row.bomLeaves.length}건</span>
+          <span>BOM leaf {localLeaves.length}건 | 단가 클릭 시 수정 가능</span>
           <span>수량 {fmt(row.yearlyQty)} | 재료비 ₩{fmtWon(row.yearlyMaterialCost)}</span>
         </div>
       </div>
@@ -800,7 +866,16 @@ const ProductMaterialCostView: React.FC = () => {
       </div>
 
       {/* BOM 트리 팝업 */}
-      {popupRow && <BomTreePopup row={popupRow} onClose={() => setPopupRow(null)} />}
+      {popupRow && (
+        <BomTreePopup
+          row={popupRow}
+          onClose={() => setPopupRow(null)}
+          onPriceUpdate={() => {
+            // 단가 수정 후 전체 재계산
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 };
