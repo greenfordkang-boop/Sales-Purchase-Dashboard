@@ -418,6 +418,15 @@ const ProductMaterialCostView: React.FC = () => {
         }
       }
 
+      // 구매/외주 품목은 BOM에서 항상 leaf로 처리 (하위 BOM 전개 방지)
+      const forceLeafPns = new Set<string>();
+      for (const ri of refInfo) {
+        if (/구매|외주/.test(ri.supplyType || '')) {
+          forceLeafPns.add(normalizePn(ri.itemCode));
+          if (ri.customerPn) forceLeafPns.add(normalizePn(ri.customerPn));
+        }
+      }
+
       // BOM prefix index (fuzzy 매칭용)
       const bomPrefixIndex = new Map<string, string>();
       for (const bk of bomRelations.keys()) {
@@ -436,9 +445,17 @@ const ProductMaterialCostView: React.FC = () => {
         // 2) 재질코드 직접 (원재료 단가 ₩/kg)
         const dp = priceMap.get(code);
         if (dp && dp > 0) return { price: dp, source: '재질코드' };
-        // 3) 구매단가
+        // 3) 구매단가 (외주품은 구매단가-사출판매가=순재료비)
         const pp = purchasePriceMap.get(code);
-        if (pp && pp > 0) return { price: pp, source: '구매단가' };
+        if (pp && pp > 0) {
+          const riCheck = refInfoMap.get(code);
+          if (riCheck && /외주/.test(riCheck.supplyType || '')) {
+            const op = outsourcePriceMap.get(code) || 0;
+            const netMat = Math.max(0, pp - op);
+            return { price: netMat, source: op > 0 ? '외주(구매-사출)' : '구매단가' };
+          }
+          return { price: pp, source: '구매단가' };
+        }
         // 4) rawMaterialCode + netWeight → 사출재료비 공식 적용
         const ri = refInfoMap.get(code);
         if (ri) {
@@ -484,8 +501,22 @@ const ProductMaterialCostView: React.FC = () => {
         return null;
       }
 
+      // dbStdCosts에서 P/N 매핑 보강: item_code ↔ customerPn → refInfoMap도 보강
+      for (const sc of dbStdCosts) {
+        if (sc.customer_pn && sc.item_code) {
+          const cpn = normalizePn(sc.customer_pn);
+          const icode = normalizePn(sc.item_code);
+          // refInfoMap에 customerPn 키가 없으면 내부코드로 찾아서 추가
+          if (!refInfoMap.has(cpn)) {
+            const ri = refInfoMap.get(icode);
+            if (ri) refInfoMap.set(cpn, ri);
+          }
+        }
+      }
+
       // 제품별 산출
       const result: ProductRow[] = [];
+      let _debugRefMatched = 0, _debugRefMissed = 0;
       for (const f of forecastData) {
         const forecastPn = normalizePn(f.newPartNo || f.partNo);
         const bomParent = findBomParent(forecastPn);
@@ -495,7 +526,7 @@ const ProductMaterialCostView: React.FC = () => {
         let bomLeaves: BomLeaf[] = [];
         let bomMaterialCost = 0;
         if (bomParent) {
-          const leaves = expandBomToLeaves(bomParent, 1, bomRelations);
+          const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns);
           bomLeaves = leaves.map(l => {
             const { price, source } = getLeafPrice(l.childPn);
             // BOM에 유형/구입처가 없으면 기준정보에서 보강
@@ -520,9 +551,14 @@ const ProductMaterialCostView: React.FC = () => {
 
         // [프로그램 수정] 도장재료비 자동 산입: 기준정보 paintQty × 재질단가
         let paintCost = 0;
+        // refInfo 매칭: forecast P/N → 직접 → custToInternal → internalToCust → partNo도 시도
         const productRef = refInfoMap.get(forecastPn)
           || refInfoMap.get(custToInternal.get(forecastPn) || '')
-          || refInfoMap.get(internalToCust.get(forecastPn) || '');
+          || refInfoMap.get(internalToCust.get(forecastPn) || '')
+          || (f.partNo ? refInfoMap.get(normalizePn(f.partNo)) : undefined)
+          || (f.partNo ? refInfoMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined)
+          || (f.newPartNo ? refInfoMap.get(custToInternal.get(normalizePn(f.newPartNo)) || '') : undefined);
+        if (productRef) _debugRefMatched++; else _debugRefMissed++;
         if (productRef && /도장/i.test(productRef.processType || '')) {
           const rawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4].filter(Boolean) as string[];
           const paintQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4];
@@ -669,6 +705,12 @@ const ProductMaterialCostView: React.FC = () => {
         });
       }
 
+      console.log(`[제품별재료비] refInfo 매칭: ${_debugRefMatched}/${_debugRefMatched + _debugRefMissed}건 (${_debugRefMissed}건 미매칭)`);
+      console.log(`[제품별재료비] refInfoMap 키 수: ${refInfoMap.size}, custToInternal: ${custToInternal.size}, internalToCust: ${internalToCust.size}`);
+      if (_debugRefMissed > 0) {
+        const missed = result.filter(r => !r.processType).slice(0, 5);
+        console.log(`[제품별재료비] 미매칭 샘플:`, missed.map(r => ({ partNo: r.partNo, newPartNo: r.newPartNo })));
+      }
       setBaseRows(result);
     } catch (err) {
       console.error('제품별 재료비 계산 실패:', err);
@@ -810,6 +852,15 @@ const ProductMaterialCostView: React.FC = () => {
     const avgRatio = totalRevenue > 0 ? (totalMaterial / totalRevenue) * 100 : 0;
     return { total: rows.length, totalRevenue, totalMaterial, withCost, withBom, avgRatio };
   }, [rows]);
+
+  // 필터된 행 집계 (subtotal)
+  const subtotal = useMemo(() => {
+    const qty = filtered.reduce((s, r) => s + r.yearlyQty, 0);
+    const revenue = filtered.reduce((s, r) => s + r.yearlyRevenue, 0);
+    const material = filtered.reduce((s, r) => s + r.yearlyMaterialCost, 0);
+    const ratio = revenue > 0 ? (material / revenue) * 100 : 0;
+    return { qty, revenue, material, ratio, count: filtered.length };
+  }, [filtered]);
 
   const handleSort = (key: keyof ProductRow) => {
     setSortConfig(prev => prev.key === key
@@ -1044,14 +1095,30 @@ const ProductMaterialCostView: React.FC = () => {
                 <SortHeader label="조달" k="supplyType" />
                 <SortHeader label="협력업체" k="supplier" />
                 <SortHeader label="판매단가" k="unitPrice" align="right" />
-                <SortHeader label="표준재료비" k="materialCost" align="right" />
+                <SortHeader label="재료비/EA" k="materialCost" align="right" />
                 <SortHeader label="재료비율" k="materialRatio" align="right" />
                 <SortHeader label={`${periodLabel} 수량`} k="yearlyQty" align="right" />
+                <SortHeader label={`${periodLabel} 매출액`} k="yearlyRevenue" align="right" />
                 <SortHeader label={`${periodLabel} 재료비`} k="yearlyMaterialCost" align="right" />
                 <th className="px-2 py-2.5 text-center whitespace-nowrap text-[10px]">품질</th>
               </tr>
             </thead>
             <tbody>
+              {/* 집계 행 (subtotal) */}
+              <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                <td colSpan={11} className="px-3 py-2 text-right">
+                  집계 ({subtotal.count}건)
+                </td>
+                <td className="px-3 py-2 text-right font-mono">-</td>
+                <td className="px-3 py-2 text-right font-mono">-</td>
+                <td className={`px-3 py-2 text-right font-mono font-bold ${subtotal.ratio > 50 ? 'text-red-700' : subtotal.ratio > 40 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {subtotal.ratio > 0 ? `${subtotal.ratio.toFixed(1)}%` : '-'}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">{fmt(subtotal.qty)}</td>
+                <td className="px-3 py-2 text-right font-mono">₩{fmtWon(subtotal.revenue)}</td>
+                <td className="px-3 py-2 text-right font-mono">₩{fmtWon(subtotal.material)}</td>
+                <td></td>
+              </tr>
               {paged.map((r, i) => {
                 const ratioColor = r.materialRatio > 60 ? 'text-red-600 bg-red-50'
                   : r.materialRatio > 45 ? 'text-amber-600 bg-amber-50'
@@ -1112,6 +1179,7 @@ const ProductMaterialCostView: React.FC = () => {
                       {fmtPct(r.materialRatio)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.yearlyQty)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{r.yearlyRevenue > 0 ? `₩${fmtWon(r.yearlyRevenue)}` : '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">{r.yearlyMaterialCost > 0 ? `₩${fmtWon(r.yearlyMaterialCost)}` : '-'}</td>
                     <td className="px-2 py-2 text-center">
                       <span className={`inline-block w-2 h-2 rounded-full ${

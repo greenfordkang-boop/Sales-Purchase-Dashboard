@@ -351,6 +351,7 @@ export const expandBomToLeaves = (
   visited?: Set<string>,
   depth: number = 0,
   maxDepth: number = 10,
+  forceLeafPns?: Set<string>,
 ): LeafResult[] => {
   const seen = visited || new Set<string>();
   const normalizedParent = normalizePn(parentPn);
@@ -368,9 +369,11 @@ export const expandBomToLeaves = (
     const normalizedChild = normalizePn(child.childPn);
     const grandChildren = bomRelations.get(normalizedChild);
 
-    // 원재료/구매 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
-    const isLeafType = /원재료|구매/.test(child.partType || '');
-    if (!grandChildren || grandChildren.length === 0 || depth + 1 >= maxDepth || isLeafType) {
+    // 원재료/구매/외주 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
+    const isLeafType = /원재료|구매|외주/.test(child.partType || '');
+    // 기준정보에서 구매/외주로 확인된 품번도 leaf로 처리 (외주 도장품 등)
+    const isForcedLeaf = forceLeafPns?.has(normalizedChild) || false;
+    if (!grandChildren || grandChildren.length === 0 || depth + 1 >= maxDepth || isLeafType || isForcedLeaf) {
       // leaf 노드 또는 최대 깊이 도달
       results.push({
         childPn: child.childPn,
@@ -382,7 +385,7 @@ export const expandBomToLeaves = (
       });
     } else {
       // 중간 노드: 재귀 전개
-      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth);
+      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns);
       results.push(...subLeaves.map(leaf => ({
         ...leaf,
         parentPn,
