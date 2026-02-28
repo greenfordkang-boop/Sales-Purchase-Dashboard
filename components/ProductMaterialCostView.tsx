@@ -22,6 +22,7 @@ interface BomLeaf {
   priceSource: string;
   depth: number;
   partType: string;
+  supplier: string;  // 구입처/협력업체
 }
 
 interface ProductRow {
@@ -124,7 +125,7 @@ const BomTreePopup: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-2xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4">
           <div className="flex justify-between items-start">
@@ -159,6 +160,7 @@ const BomTreePopup: React.FC<{
                   <th className="px-3 py-2 text-left">자재코드</th>
                   <th className="px-3 py-2 text-left">자재명</th>
                   <th className="px-3 py-2 text-left">유형</th>
+                  <th className="px-3 py-2 text-left">구입처</th>
                   <th className="px-3 py-2 text-right">소요량</th>
                   <th className="px-3 py-2 text-right">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭 수정)</span></th>
                   <th className="px-3 py-2 text-right">금액</th>
@@ -169,13 +171,17 @@ const BomTreePopup: React.FC<{
                 {localLeaves.map((leaf, i) => (
                     <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
                       <td className="px-3 py-1.5 font-mono text-[11px]">{leaf.childPn}</td>
-                      <td className="px-3 py-1.5 max-w-[180px] truncate">{leaf.childName}</td>
+                      <td className="px-3 py-1.5 max-w-[160px] truncate">{leaf.childName}</td>
                       <td className="px-3 py-1.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
-                          /구매/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
-                          'bg-slate-100 text-slate-600'
+                          /구매|외주/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
+                          /도장/.test(leaf.partType) ? 'bg-purple-100 text-purple-700' :
+                          leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
                         }`}>{leaf.partType || '-'}</span>
+                      </td>
+                      <td className="px-3 py-1.5 text-[10px] text-slate-500 max-w-[100px] truncate" title={leaf.supplier}>
+                        {/구매|외주/.test(leaf.partType) && leaf.supplier ? leaf.supplier : '-'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
                       <td className="px-3 py-1.5 text-right font-mono">
@@ -211,21 +217,21 @@ const BomTreePopup: React.FC<{
                   ))}
                 {/* BOM 소계 */}
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <td colSpan={5} className="px-3 py-2 text-right">BOM 전개 소계</td>
+                  <td colSpan={6} className="px-3 py-2 text-right">BOM 전개 소계</td>
                   <td className="px-3 py-2 text-right font-mono">₩{fmt(totalBomCost)}</td>
                   <td></td>
                 </tr>
                 {/* 가공비 (표준-BOM 차이) */}
                 {gapFromStd > 0 && (
                   <tr className="bg-amber-50 text-amber-700">
-                    <td colSpan={5} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
+                    <td colSpan={6} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
                     <td className="px-3 py-2 text-right font-mono font-semibold">₩{fmt(gapFromStd)}</td>
                     <td className="px-3 py-2 text-[10px]">추정치</td>
                   </tr>
                 )}
                 {/* 최종 합계 */}
                 <tr className="bg-blue-50 font-bold text-blue-800">
-                  <td colSpan={5} className="px-3 py-2 text-right">표준재료비 합계</td>
+                  <td colSpan={6} className="px-3 py-2 text-right">표준재료비 합계</td>
                   <td className="px-3 py-2 text-right font-mono">₩{fmt(row.materialCost)}</td>
                   <td></td>
                 </tr>
@@ -454,7 +460,8 @@ const ProductMaterialCostView: React.FC = () => {
               cost: l.totalRequired * price,
               priceSource: source,
               depth: 0,
-              partType: '',
+              partType: l.partType || '',
+              supplier: l.supplier || '',
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
@@ -483,7 +490,7 @@ const ProductMaterialCostView: React.FC = () => {
                   qty: pqty, totalQty: pqty / 1000,
                   unitPrice: paintPrice, cost,
                   priceSource: `도장 paintQty${paintIdx + 1}`,
-                  depth: 0, partType: '도장',
+                  depth: 0, partType: '도장', supplier: '',
                 });
               }
               paintIdx++;

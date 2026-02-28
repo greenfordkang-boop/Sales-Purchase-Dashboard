@@ -334,6 +334,7 @@ interface LeafResult {
   childPn: string;
   childName: string;
   supplier: string;
+  partType: string;
   totalRequired: number;
   parentPn: string;
 }
@@ -375,6 +376,7 @@ export const expandBomToLeaves = (
         childPn: child.childPn,
         childName: child.childName,
         supplier: child.supplier,
+        partType: child.partType || '',
         totalRequired: requiredQty,
         parentPn,
       });
