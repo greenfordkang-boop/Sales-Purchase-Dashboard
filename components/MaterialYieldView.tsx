@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { BomRecord, YieldRow, PnMapping, parseBomCSV, parseBomExcel, parsePnMappingFromExcel, parseMaterialMasterExcel, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { PurchaseItem } from '../utils/purchaseDataParser';
@@ -41,6 +41,7 @@ const MaterialYieldView: React.FC = () => {
   const [filterName, setFilterName] = useState('');
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterProcessType, setFilterProcessType] = useState<string>('All');
   const [tableOpen, setTableOpen] = useState(true);
 
   // --- Load BOM + 품번 매핑: bom_master 우선 → 기존 bom_data 폴백 ---
@@ -216,6 +217,18 @@ const MaterialYieldView: React.FC = () => {
   // --- 품번 정규화 (공백, 하이픈, 대소문자 통일) ---
   const normalizePn = (pn: string): string =>
     pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+
+  // --- 공정유형 Lookup (품번 → processType) ---
+  const processTypeLookup = useMemo(() => {
+    const map = new Map<string, string>();
+    pnMapping.forEach(m => {
+      if (m.processType) {
+        if (m.internalCode) map.set(normalizePn(m.internalCode), m.processType);
+        if (m.customerPn) map.set(normalizePn(m.customerPn), m.processType);
+      }
+    });
+    return map;
+  }, [pnMapping]);
 
   // --- 수율 계산 (핵심 로직) ---
   const { yieldRows, bomMissingCount, debugInfo } = useMemo(() => {
@@ -528,6 +541,7 @@ const MaterialYieldView: React.FC = () => {
         yieldRate: Math.round(yieldRate * 10) / 10,
         diff: Math.round((inputQty - standardReq) * 100) / 100,
         status,
+        processType: processTypeLookup.get(normalized) || processTypeLookup.get(childPn) || undefined,
       });
     }
 
@@ -558,7 +572,7 @@ const MaterialYieldView: React.FC = () => {
     console.log('[자재수율 진단]', debug);
 
     return { yieldRows: rows, bomMissingCount: missingCount, debugInfo: debug };
-  }, [bomData, pnMapping, itemRevenueData, purchaseData, selectedYear, selectedMonth]);
+  }, [bomData, pnMapping, itemRevenueData, purchaseData, selectedYear, selectedMonth, processTypeLookup]);
 
   // --- Filtered & Sorted rows ---
   const displayRows = useMemo(() => {
@@ -567,6 +581,10 @@ const MaterialYieldView: React.FC = () => {
       if (filterName && !row.childName.toLowerCase().includes(filterName.toLowerCase())) return false;
       if (filterSupplier && !row.supplier.toLowerCase().includes(filterSupplier.toLowerCase())) return false;
       if (filterStatus !== 'All' && row.status !== filterStatus) return false;
+      if (filterProcessType !== 'All') {
+        const pt = row.processType || '기타';
+        if (filterProcessType === '기타' ? (row.processType && row.processType !== '기타') : pt !== filterProcessType) return false;
+      }
       return true;
     });
 
@@ -586,7 +604,7 @@ const MaterialYieldView: React.FC = () => {
     }
 
     return result;
-  }, [yieldRows, filterPn, filterName, filterSupplier, filterStatus, sortConfig]);
+  }, [yieldRows, filterPn, filterName, filterSupplier, filterStatus, filterProcessType, sortConfig]);
 
   // --- Summary Metrics ---
   const isNoDataStatus = (s: YieldRow['status']) => s === 'noMatch' || s === 'otherPeriod' || s === 'zeroInput' || s === 'rawMatch';
@@ -615,6 +633,50 @@ const MaterialYieldView: React.FC = () => {
         deviation: Math.round((r.yieldRate - 100) * 10) / 10,
         fill: r.status === 'over' ? '#ef4444' : r.status === 'under' ? '#f59e0b' : '#10b981',
       }));
+  }, [yieldRows]);
+
+  // --- 공정별 수율 메트릭 ---
+  const processTypeMetrics = useMemo(() => {
+    const ptMap = new Map<string, { count: number; yieldSum: number; dataCount: number; overCount: number; underCount: number }>();
+    yieldRows.forEach(r => {
+      const pt = r.processType || '기타';
+      if (!ptMap.has(pt)) ptMap.set(pt, { count: 0, yieldSum: 0, dataCount: 0, overCount: 0, underCount: 0 });
+      const m = ptMap.get(pt)!;
+      m.count++;
+      if (!isNoDataStatus(r.status)) {
+        m.yieldSum += r.yieldRate;
+        m.dataCount++;
+      }
+      if (r.status === 'over') m.overCount++;
+      if (r.status === 'under') m.underCount++;
+    });
+    return Array.from(ptMap.entries()).map(([name, m]) => ({
+      name,
+      count: m.count,
+      avgYield: m.dataCount > 0 ? Math.round((m.yieldSum / m.dataCount) * 10) / 10 : 0,
+      overCount: m.overCount,
+      underCount: m.underCount,
+    })).sort((a, b) => b.count - a.count);
+  }, [yieldRows]);
+
+  // --- 공정별 수율 바 차트 ---
+  const PROCESS_COLORS: Record<string, string> = { '사출': '#3b82f6', '도장': '#8b5cf6', '조립': '#10b981', '기타': '#94a3b8' };
+  const processChartData = useMemo(() => {
+    return processTypeMetrics
+      .filter(m => m.avgYield > 0)
+      .map(m => ({
+        name: m.name,
+        avgYield: m.avgYield,
+        count: m.count,
+        fill: PROCESS_COLORS[m.name] || '#94a3b8',
+      }));
+  }, [processTypeMetrics]);
+
+  // --- 공정유형 목록 (필터 드롭다운용) ---
+  const processTypes = useMemo(() => {
+    const pts = new Set<string>();
+    yieldRows.forEach(r => pts.add(r.processType || '기타'));
+    return Array.from(pts).sort();
   }, [yieldRows]);
 
   const statusPieData = useMemo(() => {
@@ -778,11 +840,12 @@ const MaterialYieldView: React.FC = () => {
   };
 
   const handleDownload = () => {
-    const headers = ['자재품번', '자재품명', '협력업체', '관련제품', '표준소요량', '투입수량', '수율(%)', '차이', '상태'];
+    const headers = ['자재품번', '자재품명', '협력업체', '공정', '관련제품', '표준소요량', '투입수량', '수율(%)', '차이', '상태'];
     const rows = displayRows.map(r => [
       r.childPn,
       r.childName,
       r.supplier,
+      r.processType || '',
       r.parentProducts.join('; '),
       r.standardReq,
       r.inputQty,
@@ -1041,6 +1104,73 @@ const MaterialYieldView: React.FC = () => {
         </div>
       </div>
 
+      {/* 공정별 수율 분석 */}
+      {processTypeMetrics.length > 1 && (
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* 공정별 수율 바 차트 */}
+          <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
+              <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+              공정별 평균 수율 비교
+            </h3>
+            {processChartData.length > 0 ? (
+              <div className="h-[260px] w-full">
+                <ResponsiveContainer minWidth={0} width="100%" height="100%">
+                  <BarChart data={processChartData} margin={{ top: 10, right: 30, bottom: 10, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fontWeight: 700 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} domain={[0, 'auto']} tickFormatter={v => `${v}%`} />
+                    <Tooltip
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: number, _name: string, props: any) => [`${value}% (${props.payload.count}건)`, '평균 수율']}
+                    />
+                    <Bar dataKey="avgYield" radius={[6, 6, 0, 0]} barSize={48}>
+                      {processChartData.map((entry, i) => (
+                        <Cell key={i} fill={entry.fill} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[260px] flex items-center justify-center text-slate-400 text-sm">데이터가 없습니다.</div>
+            )}
+          </div>
+
+          {/* 공정별 수율 요약 */}
+          <div className="w-full lg:w-1/3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
+              <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+              공정별 요약
+            </h3>
+            <div className="space-y-3">
+              {processTypeMetrics.map(m => (
+                <div key={m.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
+                      m.name === '사출' ? 'bg-blue-100 text-blue-700' :
+                      m.name === '도장' ? 'bg-purple-100 text-purple-700' :
+                      m.name === '조립' ? 'bg-emerald-100 text-emerald-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>{m.name}</span>
+                    <span className="text-xs text-slate-500">{m.count}건</span>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-sm font-bold ${m.avgYield >= 95 && m.avgYield <= 105 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {m.avgYield > 0 ? `${m.avgYield}%` : '-'}
+                    </span>
+                    <div className="text-[10px] text-slate-400">
+                      {m.overCount > 0 && <span className="text-red-500 mr-1">과투입 {m.overCount}</span>}
+                      {m.underCount > 0 && <span className="text-amber-500">미달 {m.underCount}</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Data Table */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between mb-4">
@@ -1068,6 +1198,18 @@ const MaterialYieldView: React.FC = () => {
               <option value="otherPeriod">기간외 (다른월존재)</option>
               <option value="zeroInput">무입고 (수량0)</option>
             </select>
+            {processTypes.length > 1 && (
+              <select
+                value={filterProcessType}
+                onChange={e => setFilterProcessType(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-violet-500/20"
+              >
+                <option value="All">전체 공정</option>
+                {processTypes.map(pt => (
+                  <option key={pt} value={pt}>{pt}</option>
+                ))}
+              </select>
+            )}
           </div>
           <button
             onClick={handleDownload}
@@ -1088,6 +1230,7 @@ const MaterialYieldView: React.FC = () => {
                   <SortableHeader label="자재품번" sortKey="childPn" />
                   <SortableHeader label="자재품명" sortKey="childName" />
                   <SortableHeader label="협력업체" sortKey="supplier" />
+                  <SortableHeader label="공정" sortKey="processType" align="center" />
                   <th className="px-4 py-3 min-w-[120px]">관련제품</th>
                   <SortableHeader label="표준소요량" sortKey="standardReq" align="right" />
                   <SortableHeader label="투입수량" sortKey="inputQty" align="right" />
@@ -1111,6 +1254,7 @@ const MaterialYieldView: React.FC = () => {
                   <th className="px-2 py-2"></th>
                   <th className="px-2 py-2"></th>
                   <th className="px-2 py-2"></th>
+                  <th className="px-2 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1124,6 +1268,18 @@ const MaterialYieldView: React.FC = () => {
                       }
                     </td>
                     <td className="px-4 py-3 text-slate-600">{row.supplier}</td>
+                    <td className="px-4 py-3 text-center">
+                      {row.processType ? (
+                        <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
+                          row.processType === '사출' ? 'bg-blue-100 text-blue-700' :
+                          row.processType === '도장' ? 'bg-purple-100 text-purple-700' :
+                          row.processType === '조립' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{row.processType}</span>
+                      ) : (
+                        <span className="text-slate-300 text-[10px]">-</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-500 text-[10px] truncate max-w-[120px]" title={row.parentProducts.join(', ')}>
                       {row.parentProducts.slice(0, 3).join(', ')}
                       {row.parentProducts.length > 3 && ` +${row.parentProducts.length - 3}`}
@@ -1148,7 +1304,7 @@ const MaterialYieldView: React.FC = () => {
                 ))}
                 {displayRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                       {yieldRows.length === 0 ? '매출 데이터와 BOM을 매칭할 수 없습니다.' : '필터 조건에 맞는 데이터가 없습니다.'}
                     </td>
                   </tr>
@@ -1157,7 +1313,7 @@ const MaterialYieldView: React.FC = () => {
               {displayRows.length > 0 && (
                 <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                   <tr>
-                    <td colSpan={4} className="px-4 py-3 text-center">합계 ({displayRows.length}건)</td>
+                    <td colSpan={5} className="px-4 py-3 text-center">합계 ({displayRows.length}건)</td>
                     <td className="px-4 py-3 text-right font-mono">{displayRows.reduce((s, r) => s + r.standardReq, 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono">{displayRows.reduce((s, r) => s + r.inputQty, 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-mono text-indigo-700">

@@ -5,6 +5,7 @@ import {
   ProductCodeRecord,
   ReferenceInfoRecord,
 } from '../utils/bomMasterParser';
+import { normalizePn } from '../utils/bomDataParser';
 import {
   buildForwardMap,
   buildReverseMap,
@@ -347,6 +348,9 @@ const BomExplosionView: React.FC = () => {
                           {typeLabel(entry.type)}
                         </span>
                         <span className="font-mono text-indigo-600 font-bold">{entry.pn}</span>
+                        {entry.customerPn && normalizePn(entry.customerPn) !== normalizePn(entry.pn) && (
+                          <span className="font-mono text-violet-500 text-[10px]">[{entry.customerPn}]</span>
+                        )}
                         <span className="text-slate-600 truncate">{entry.name}</span>
                         {entry.customer && (
                           <span className="text-slate-400 ml-auto flex-shrink-0">({entry.customer})</span>

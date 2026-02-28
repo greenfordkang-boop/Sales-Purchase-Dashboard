@@ -33,6 +33,7 @@ export interface SearchIndexEntry {
   name: string;
   customer: string;
   model: string;
+  customerPn: string;
   type: 'product' | 'part' | 'material';
   displayText: string;
 }
@@ -266,7 +267,7 @@ export function buildSearchIndex(
   // forwardMap으로 leaf 여부 판별
   const forwardMap = buildForwardMap(bomRecords);
 
-  // 모든 유니크 P/N 수집 (parent + child)
+  // 모든 유니크 P/N 수집 (parent + child + productCode + refInfo)
   const pnSet = new Set<string>();
   const pnOriginal = new Map<string, string>(); // normalized -> original
   const pnName = new Map<string, string>();       // normalized -> name
@@ -286,6 +287,43 @@ export function buildSearchIndex(
     }
   }
 
+  // productCodes도 검색 인덱스에 추가 (BOM에 없는 제품코드도 검색 가능)
+  for (const pc of productCodes) {
+    const norm = normalizePn(pc.productCode);
+    if (!pnSet.has(norm)) {
+      pnSet.add(norm);
+      pnOriginal.set(norm, pc.productCode);
+      if (pc.productName) pnName.set(norm, pc.productName);
+    }
+    // customerPn도 별도 엔트리로 추가 (고객사 P/N으로 직접 검색 가능)
+    if (pc.customerPn) {
+      const custNorm = normalizePn(pc.customerPn);
+      if (!pnSet.has(custNorm)) {
+        pnSet.add(custNorm);
+        pnOriginal.set(custNorm, pc.customerPn);
+        if (pc.productName) pnName.set(custNorm, pc.productName);
+      }
+    }
+  }
+
+  // refInfo의 customerPn도 추가 (BOM에 없지만 검색 가능하게)
+  for (const ri of refInfo) {
+    const norm = normalizePn(ri.itemCode);
+    if (!pnSet.has(norm)) {
+      pnSet.add(norm);
+      pnOriginal.set(norm, ri.itemCode);
+      if (ri.itemName) pnName.set(norm, ri.itemName);
+    }
+    if (ri.customerPn) {
+      const custNorm = normalizePn(ri.customerPn);
+      if (!pnSet.has(custNorm)) {
+        pnSet.add(custNorm);
+        pnOriginal.set(custNorm, ri.customerPn);
+        if (ri.itemName) pnName.set(custNorm, ri.itemName);
+      }
+    }
+  }
+
   const entries: SearchIndexEntry[] = [];
 
   for (const norm of pnSet) {
@@ -293,7 +331,7 @@ export function buildSearchIndex(
     const pc = productMap.get(norm);
     const ri = refMap.get(norm);
     const hasChildren = forwardMap.has(norm);
-    const isChild = !hasChildren;
+    const isChild = !hasChildren && !pc;
 
     // type 분류
     let type: 'product' | 'part' | 'material';
@@ -306,11 +344,13 @@ export function buildSearchIndex(
     }
 
     const name = pnName.get(norm) || ri?.itemName || pc?.productName || '';
-    const customer = pc?.customer || '';
+    const customer = pc?.customer || ri?.customerName || '';
     const model = pc?.model || '';
+    const customerPn = ri?.customerPn || pc?.customerPn || '';
 
     const displayParts = [original];
     if (name) displayParts.push(name);
+    if (customerPn && normalizePn(customerPn) !== norm) displayParts.push(`[${customerPn}]`);
     if (customer) displayParts.push(`(${customer})`);
     if (model) displayParts.push(model);
 
@@ -319,6 +359,7 @@ export function buildSearchIndex(
       name,
       customer,
       model,
+      customerPn,
       type,
       displayText: displayParts.join(' '),
     });
@@ -327,6 +368,12 @@ export function buildSearchIndex(
   // type별 정렬: product -> part -> material
   const typeOrder = { product: 0, part: 1, material: 2 };
   entries.sort((a, b) => typeOrder[a.type] - typeOrder[b.type]);
+
+  const withCustPn = entries.filter(e => e.customerPn);
+  console.log(`[BOM검색] 인덱스 빌드: ${entries.length}건 (customerPn 있는 항목: ${withCustPn.length}건, refInfo: ${refInfo.length}건, productCodes: ${productCodes.length}건)`);
+  if (withCustPn.length > 0) {
+    console.log(`[BOM검색] customerPn 샘플:`, withCustPn.slice(0, 5).map(e => `${e.pn} → [${e.customerPn}]`));
+  }
 
   return entries;
 }
@@ -350,18 +397,31 @@ export function searchIndex(
   for (const entry of index) {
     let score = 0;
     const entryPnNorm = normalizePn(entry.pn);
+    const custPnNorm = entry.customerPn ? normalizePn(entry.customerPn) : '';
 
     // P/N 정확 매치
     if (entryPnNorm === qNorm) {
       score = 100;
     }
+    // 고객사 P/N 정확 매치
+    else if (custPnNorm && custPnNorm === qNorm) {
+      score = 95;
+    }
     // P/N 시작 매치
     else if (entryPnNorm.startsWith(qNorm)) {
       score = 80;
     }
+    // 고객사 P/N 시작 매치
+    else if (custPnNorm && custPnNorm.startsWith(qNorm)) {
+      score = 75;
+    }
     // P/N 포함 매치
     else if (entryPnNorm.includes(qNorm)) {
       score = 60;
+    }
+    // 고객사 P/N 포함 매치
+    else if (custPnNorm && custPnNorm.includes(qNorm)) {
+      score = 55;
     }
     // 품명 포함 매치
     else if (entry.name.toLowerCase().includes(q)) {

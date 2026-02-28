@@ -7,6 +7,7 @@ import {
   OutsourcePrice,
   PaintMixRatio,
   StandardMaterialData,
+  ItemStandardCost,
 } from './standardMaterialParser';
 import { ReferenceInfoRecord, MaterialCodeRecord } from './bomMasterParser';
 
@@ -455,6 +456,9 @@ export function calcMonthlyUnified(
 export function buildReferenceDataFromMasters(
   refInfo: ReferenceInfoRecord[],
   materialCodes: MaterialCodeRecord[],
+  purchasePriceRecords?: PurchasePrice[],
+  outsourcePriceRecords?: OutsourcePrice[],
+  paintMixRatioRecords?: PaintMixRatio[],
 ): ReferenceData {
   const materialPrices = new Map<string, number>();
   for (const mc of materialCodes) {
@@ -463,9 +467,46 @@ export function buildReferenceDataFromMasters(
     }
   }
 
+  // 구매단가 Map
   const purchasePrices = new Map<string, number>();
+  if (purchasePriceRecords) {
+    for (const pp of purchasePriceRecords) {
+      if (pp.itemCode && pp.currentPrice > 0) {
+        purchasePrices.set(normalizePn(pp.itemCode), pp.currentPrice);
+        if (pp.customerPn) purchasePrices.set(normalizePn(pp.customerPn), pp.currentPrice);
+      }
+    }
+  }
+
+  // 외주사출판매가 Map
   const outsourcePrices = new Map<string, number>();
+  if (outsourcePriceRecords) {
+    for (const op of outsourcePriceRecords) {
+      if (op.itemCode && op.injectionPrice > 0) {
+        outsourcePrices.set(normalizePn(op.itemCode), op.injectionPrice);
+        if (op.customerPn) outsourcePrices.set(normalizePn(op.customerPn), op.injectionPrice);
+      }
+    }
+  }
+
+  // 도료배합비율 Map (단가는 materialPrices에서 enrich)
   const paintMixMap = new Map<string, PaintMixRatio>();
+  if (paintMixRatioRecords) {
+    for (const pm of paintMixRatioRecords) {
+      const enriched = { ...pm };
+      if (enriched.mainPrice <= 0 && enriched.mainCode) {
+        enriched.mainPrice = materialPrices.get(normalizePn(enriched.mainCode)) || 0;
+      }
+      if (enriched.hardenerPrice <= 0 && enriched.hardenerCode) {
+        enriched.hardenerPrice = materialPrices.get(normalizePn(enriched.hardenerCode)) || 0;
+      }
+      if (enriched.thinnerPrice <= 0 && enriched.thinnerCode) {
+        enriched.thinnerPrice = materialPrices.get(normalizePn(enriched.thinnerCode)) || 0;
+      }
+      if (pm.paintCode) paintMixMap.set(normalizePn(pm.paintCode), enriched);
+      if (pm.mainCode) paintMixMap.set(normalizePn(pm.mainCode), enriched);
+    }
+  }
 
   const productInfoMap = new Map<string, ProductInfoItem>();
   for (const ri of refInfo) {
@@ -474,9 +515,9 @@ export function buildReferenceDataFromMasters(
       itemCode: ri.itemCode,
       customerPn: ri.customerPn,
       itemName: ri.itemName,
-      itemType: '',
-      processType: '',
-      supplyType: '',
+      itemType: ri.itemCategory || '',
+      processType: ri.processType || '',
+      supplyType: ri.supplyType || '',
       netWeight: ri.netWeight,
       cavity: ri.cavity || 1,
       lossRate: ri.lossRate,
@@ -494,4 +535,439 @@ export function buildReferenceDataFromMasters(
   }
 
   return { materialPrices, purchasePrices, outsourcePrices, paintMixMap, productInfoMap };
+}
+
+// ============================================================
+// 마스터 데이터 기반 표준재료비 산출 엔진
+// ============================================================
+
+import { BomRecord, buildBomRelations, expandBomToLeaves } from './bomDataParser';
+
+/**
+ * BOM 트리의 모든 노드(자신 포함)를 순회하며 (childPn, accumulatedQty) 반환.
+ * expandBomToLeaves와 달리 중간 노드도 포함한다.
+ */
+function getAllBomDescendants(
+  parentPn: string,
+  parentQty: number,
+  bomRelations: Map<string, BomRecord[]>,
+  visited?: Set<string>,
+  depth: number = 0,
+): { childPn: string; childName: string; accQty: number }[] {
+  const seen = visited || new Set<string>();
+  const np = normalizePn(parentPn);
+  if (seen.has(np)) return [];
+  seen.add(np);
+
+  const children = bomRelations.get(np);
+  if (!children || children.length === 0) return [];
+
+  const results: { childPn: string; childName: string; accQty: number }[] = [];
+  for (const child of children) {
+    const accQty = parentQty * child.qty;
+    const nc = normalizePn(child.childPn);
+    // 자신을 포함
+    results.push({ childPn: nc, childName: child.childName, accQty });
+    // 재귀 (최대 깊이 8)
+    if (depth < 8) {
+      const sub = getAllBomDescendants(nc, accQty, bomRelations, new Set(seen), depth + 1);
+      results.push(...sub);
+    }
+  }
+  return results;
+}
+
+/**
+ * BOM 마스터 + 기준정보 + 재질코드 기반 표준재료비 산출
+ *
+ * BOM 트리를 전체 순회하며 각 노드(중간 포함)의 사출/도장 원가를 합산.
+ * 조립품 → 사출품/도장품 하위 전개, 각 노드의 기준정보에서 원가 계산.
+ */
+export function calcMasterMaterialCost(
+  bomRecords: BomRecord[],
+  refInfo: ReferenceInfoRecord[],
+  materialCodes: MaterialCodeRecord[],
+  productQtyMap: Map<string, number>,  // normalizedCode → 생산수량
+  revenue: number,
+  purchasePriceRecords?: PurchasePrice[],
+  outsourcePriceRecords?: OutsourcePrice[],
+  paintMixRatioRecords?: PaintMixRatio[],
+): UnifiedCalcResult {
+  const ref = buildReferenceDataFromMasters(refInfo, materialCodes, purchasePriceRecords, outsourcePriceRecords, paintMixRatioRecords);
+  const rawRelations = buildBomRelations(bomRecords);
+  const bomRelations = new Map<string, BomRecord[]>();
+  for (const [key, val] of rawRelations) {
+    bomRelations.set(normalizePn(key), val);
+  }
+
+  // 제품별 원가 누적 (중복 방지: 같은 itemCode는 합산)
+  const costAccum = new Map<string, {
+    info: ProductInfoItem;
+    totalQty: number;
+    injPerEa: number;
+    pntPerEa: number;
+    purchPerEa: number;    // 구매단가 (원/EA)
+    outsrcPerEa: number;   // 외주사출판매가 (원/EA)
+    costType: 'self' | 'purchase' | 'outsource';
+  }>();
+
+  let bomCount = 0;
+  let bomMissing = 0;
+
+  const addToCostAccum = (
+    key: string,
+    info: ProductInfoItem,
+    qty: number,
+    inj: number,
+    pnt: number,
+    purch: number,
+    outsrc: number,
+    costType: 'self' | 'purchase' | 'outsource',
+  ) => {
+    const existing = costAccum.get(key);
+    if (existing) {
+      existing.totalQty += qty;
+    } else {
+      costAccum.set(key, { info, totalQty: qty, injPerEa: inj, pntPerEa: pnt, purchPerEa: purch, outsrcPerEa: outsrc, costType });
+    }
+  };
+
+  for (const [productCode, qty] of productQtyMap) {
+    if (qty <= 0) continue;
+
+    // BOM 키 탐색
+    let bomKey: string | null = null;
+    if (bomRelations.has(productCode)) {
+      bomKey = productCode;
+    } else {
+      const pi = ref.productInfoMap.get(productCode);
+      if (pi) {
+        const internalKey = normalizePn(pi.itemCode);
+        if (bomRelations.has(internalKey)) bomKey = internalKey;
+        if (!bomKey && pi.customerPn) {
+          const custKey = normalizePn(pi.customerPn);
+          if (bomRelations.has(custKey)) bomKey = custKey;
+        }
+      }
+    }
+
+    if (!bomKey) {
+      // BOM에 없더라도 제품 자체에 원가 데이터가 있으면 직접 산출
+      const directInfo = ref.productInfoMap.get(productCode);
+      if (directInfo) {
+        const key = normalizePn(directInfo.itemCode);
+        const isPurchase = directInfo.supplyType === '구매';
+        const isOutsource = directInfo.supplyType?.includes('외주');
+
+        if (isPurchase) {
+          const purch = calcPurchaseCost(directInfo.itemCode, directInfo.customerPn || '', ref.purchasePrices);
+          if (purch > 0) {
+            addToCostAccum(key, directInfo, qty, 0, 0, purch, 0, 'purchase');
+            bomCount++;
+          } else {
+            bomMissing++;
+          }
+        } else if (isOutsource) {
+          // 외주: 자체사출 없음(inj=0), NET = 구매단가 - 사출판매가
+          const pnt = calcPaintCost(directInfo, ref.paintMixMap, ref.materialPrices);
+          const purch = calcPurchaseCost(directInfo.itemCode, directInfo.customerPn || '', ref.purchasePrices);
+          const outsrc = calcOutsourceCost(directInfo.itemCode, directInfo.customerPn || '', ref.outsourcePrices);
+          if (purch > 0 || outsrc > 0) {
+            addToCostAccum(key, directInfo, qty, 0, pnt, purch, outsrc, 'outsource');
+            bomCount++;
+          } else {
+            bomMissing++;
+          }
+        } else if (directInfo.netWeight > 0 || directInfo.paintQty1 > 0) {
+          const inj = directInfo.netWeight > 0 ? calcInjectionCost(directInfo, ref.materialPrices) : 0;
+          const pnt = calcPaintCost(directInfo, ref.paintMixMap, ref.materialPrices);
+          if (inj > 0 || pnt > 0) {
+            addToCostAccum(key, directInfo, qty, inj, pnt, 0, 0, 'self');
+            bomCount++;
+          } else {
+            bomMissing++;
+          }
+        } else {
+          bomMissing++;
+        }
+      } else {
+        bomMissing++;
+      }
+      continue;
+    }
+
+    bomCount++;
+
+    // (1) 제품 자체의 원가
+    const productInfo = ref.productInfoMap.get(productCode) || ref.productInfoMap.get(bomKey);
+    if (productInfo) {
+      const key = normalizePn(productInfo.itemCode);
+      const isPurchase = productInfo.supplyType === '구매';
+      const isOutsource = productInfo.supplyType?.includes('외주');
+
+      if (isPurchase) {
+        const purch = calcPurchaseCost(productInfo.itemCode, productInfo.customerPn || '', ref.purchasePrices);
+        if (purch > 0) addToCostAccum(key, productInfo, qty, 0, 0, purch, 0, 'purchase');
+      } else if (isOutsource) {
+        // 외주: 자체사출 없음(inj=0), NET = 구매단가 - 사출판매가
+        const pnt = calcPaintCost(productInfo, ref.paintMixMap, ref.materialPrices);
+        const purch = calcPurchaseCost(productInfo.itemCode, productInfo.customerPn || '', ref.purchasePrices);
+        const outsrc = calcOutsourceCost(productInfo.itemCode, productInfo.customerPn || '', ref.outsourcePrices);
+        if (purch > 0 || outsrc > 0) {
+          addToCostAccum(key, productInfo, qty, 0, pnt, purch, outsrc, 'outsource');
+        }
+      } else if (productInfo.netWeight > 0 || productInfo.paintQty1 > 0) {
+        const inj = productInfo.netWeight > 0 ? calcInjectionCost(productInfo, ref.materialPrices) : 0;
+        const pnt = calcPaintCost(productInfo, ref.paintMixMap, ref.materialPrices);
+        if (inj > 0 || pnt > 0) {
+          addToCostAccum(key, productInfo, qty, inj, pnt, 0, 0, 'self');
+        }
+      }
+    }
+
+    // (2) BOM 하위 전개: 모든 자식 노드의 원가 합산
+    const descendants = getAllBomDescendants(bomKey, qty, bomRelations);
+    for (const desc of descendants) {
+      const childInfo = ref.productInfoMap.get(desc.childPn);
+      if (!childInfo) continue;
+      const key = normalizePn(childInfo.itemCode);
+      const isPurchase = childInfo.supplyType === '구매';
+      const isOutsource = childInfo.supplyType?.includes('외주');
+
+      if (isPurchase) {
+        const purch = calcPurchaseCost(childInfo.itemCode, childInfo.customerPn || '', ref.purchasePrices);
+        if (purch > 0) addToCostAccum(key, childInfo, desc.accQty, 0, 0, purch, 0, 'purchase');
+      } else if (isOutsource) {
+        // 외주: 자체사출 없음(inj=0), NET = 구매단가 - 사출판매가
+        const pnt = calcPaintCost(childInfo, ref.paintMixMap, ref.materialPrices);
+        const purch = calcPurchaseCost(childInfo.itemCode, childInfo.customerPn || '', ref.purchasePrices);
+        const outsrc = calcOutsourceCost(childInfo.itemCode, childInfo.customerPn || '', ref.outsourcePrices);
+        if (purch > 0 || outsrc > 0) {
+          addToCostAccum(key, childInfo, desc.accQty, 0, pnt, purch, outsrc, 'outsource');
+        }
+      } else {
+        if (childInfo.netWeight <= 0 && childInfo.paintQty1 <= 0) continue;
+        const inj = childInfo.netWeight > 0 ? calcInjectionCost(childInfo, ref.materialPrices) : 0;
+        const pnt = calcPaintCost(childInfo, ref.paintMixMap, ref.materialPrices);
+        if (inj > 0 || pnt > 0) {
+          addToCostAccum(key, childInfo, desc.accQty, inj, pnt, 0, 0, 'self');
+        }
+      }
+    }
+  }
+
+  // 결과 집계
+  const itemRows: CalcItemRow[] = [];
+  let totalResin = 0, totalPaint = 0, totalPurchase = 0, totalOutsource = 0;
+
+  for (const [, item] of costAccum) {
+    const resinAmt = item.injPerEa * item.totalQty;
+    const paintAmt = item.pntPerEa * item.totalQty;
+
+    let purchAmt = 0;
+    let outsrcAmt = 0;
+
+    if (item.costType === 'purchase') {
+      // 구매: 구매단가 × 수량
+      purchAmt = item.purchPerEa * item.totalQty;
+    } else if (item.costType === 'outsource') {
+      // 외주: NET재료비 = (구매단가 - 사출판매가) × 수량
+      // 구매단가는 전체 매입가, 사출판매가는 외주사출 서비스비
+      // 차이가 순수 원재료 가치
+      outsrcAmt = (item.purchPerEa - item.outsrcPerEa) * item.totalQty;
+      if (outsrcAmt < 0) outsrcAmt = 0; // 사출판매가 > 구매단가이면 0 처리
+    }
+
+    const totalAmt = resinAmt + paintAmt + purchAmt + outsrcAmt;
+    if (totalAmt <= 0) continue;
+
+    totalResin += resinAmt;
+    totalPaint += paintAmt;
+    totalPurchase += purchAmt;
+    totalOutsource += outsrcAmt;
+
+    const netPerEa = item.costType === 'outsource'
+      ? (item.purchPerEa - item.outsrcPerEa) + item.pntPerEa
+      : item.injPerEa + item.pntPerEa + item.purchPerEa;
+
+    itemRows.push({
+      itemCode: item.info.itemCode,
+      customerPn: item.info.customerPn || '',
+      itemName: item.info.itemName || '',
+      supplyType: item.info.supplyType || '자작',
+      processType: item.info.processType || '',
+      production: item.totalQty,
+      injectionCost: item.injPerEa,
+      paintCostPerEa: item.pntPerEa,
+      purchaseCostPerEa: item.costType === 'outsource' ? item.purchPerEa - item.outsrcPerEa : item.purchPerEa,
+      totalCostPerEa: netPerEa,
+      resinAmount: resinAmt,
+      paintAmount: paintAmt,
+      purchaseAmount: item.costType === 'purchase' ? purchAmt : outsrcAmt,
+      totalAmount: totalAmt,
+      source: 'bom',
+    });
+  }
+
+  // NET 표준재료비 = RESIN + PAINT + 구매 + 외주(구매단가-사출판매가)
+  const totalStandard = totalResin + totalPaint + totalPurchase + totalOutsource;
+
+  const summaryByType: SummaryByType[] = [
+    { name: 'RESIN', standard: totalResin, actual: 0 },
+    { name: 'PAINT', standard: totalPaint, actual: 0 },
+    { name: '구매', standard: totalPurchase, actual: 0 },
+    { name: '외주', standard: totalOutsource, actual: 0 },
+  ].filter(t => t.standard !== 0);
+
+  const standardRatio = revenue > 0 ? totalStandard / revenue : 0;
+
+  console.log(`[마스터 산출] 제품 ${productQtyMap.size}개 → BOM 매칭 ${bomCount}건 (미매칭 ${bomMissing}), 원가항목 ${costAccum.size}건`);
+  console.log(`[마스터 산출] RESIN ₩${Math.round(totalResin).toLocaleString()}, PAINT ₩${Math.round(totalPaint).toLocaleString()}, 구매 ₩${Math.round(totalPurchase).toLocaleString()}, 외주 ₩${Math.round(totalOutsource).toLocaleString()}, NET ₩${Math.round(totalStandard).toLocaleString()}`);
+
+  return {
+    summaryByType,
+    itemRows,
+    totalStandard,
+    revenue,
+    standardRatio,
+    calcSource: 'Master',
+    stats: {
+      excelItems: 0,
+      calcItems: 0,
+      bomItems: bomCount,
+      totalItems: itemRows.length,
+    },
+  };
+}
+
+// ============================================================
+// Per-item standard cost aggregation (품목별재료비 기반)
+// ============================================================
+
+const MONTH_QTY_KEYS: (keyof ItemStandardCost)[] = [
+  'jan_qty', 'feb_qty', 'mar_qty', 'apr_qty', 'may_qty', 'jun_qty',
+  'jul_qty', 'aug_qty', 'sep_qty', 'oct_qty', 'nov_qty', 'dec_qty',
+];
+const MONTH_AMT_KEYS: (keyof ItemStandardCost)[] = [
+  'jan_amt', 'feb_amt', 'mar_amt', 'apr_amt', 'may_amt', 'jun_amt',
+  'jul_amt', 'aug_amt', 'sep_amt', 'oct_amt', 'nov_amt', 'dec_amt',
+];
+
+/**
+ * 품목별재료비 데이터에서 월별 표준재료비 산출
+ * Excel 검증된 per-item 비용을 직접 사용하여 정확한 집계
+ */
+export function calcFromItemStandardCosts(
+  items: ItemStandardCost[],
+  monthIndex: number, // 0=1월, 1=2월, ...
+  revenue: number,
+): UnifiedCalcResult {
+  const qtyKey = MONTH_QTY_KEYS[monthIndex];
+  const amtKey = MONTH_AMT_KEYS[monthIndex];
+
+  let totalResin = 0;
+  let totalPaint = 0;
+  let totalPurchase = 0;
+  let totalOutsource = 0;
+  const itemRows: CalcItemRow[] = [];
+
+  for (const item of items) {
+    const qty = Number(item[qtyKey]) || 0;
+    if (qty <= 0) continue;
+
+    const st = item.supply_type || '';
+    const resinPerEa = Number(item.resin_cost_per_ea) || 0;
+    const paintPerEa = Number(item.paint_cost_per_ea) || 0;
+    const materialPerEa = Number(item.material_cost_per_ea) || 0;
+    const amt = Number(item[amtKey]) || 0;
+
+    if (st === '자작') {
+      const resinAmt = resinPerEa * qty;
+      const paintAmt = paintPerEa * qty;
+      totalResin += resinAmt;
+      totalPaint += paintAmt;
+      itemRows.push({
+        itemCode: item.item_code,
+        customerPn: item.customer_pn,
+        itemName: item.item_name,
+        supplyType: st,
+        processType: item.item_type,
+        production: qty,
+        injectionCost: resinPerEa,
+        paintCostPerEa: paintPerEa,
+        purchaseCostPerEa: 0,
+        totalCostPerEa: resinPerEa + paintPerEa,
+        resinAmount: resinAmt,
+        paintAmount: paintAmt,
+        purchaseAmount: 0,
+        totalAmount: resinAmt + paintAmt,
+        source: 'excel',
+      });
+    } else if (st === '구매') {
+      totalPurchase += amt;
+      itemRows.push({
+        itemCode: item.item_code,
+        customerPn: item.customer_pn,
+        itemName: item.item_name,
+        supplyType: st,
+        processType: item.item_type,
+        production: qty,
+        injectionCost: 0,
+        paintCostPerEa: 0,
+        purchaseCostPerEa: materialPerEa,
+        totalCostPerEa: materialPerEa,
+        resinAmount: 0,
+        paintAmount: 0,
+        purchaseAmount: amt,
+        totalAmount: amt,
+        source: 'excel',
+      });
+    } else if (st.includes('외주')) {
+      totalOutsource += amt;
+      itemRows.push({
+        itemCode: item.item_code,
+        customerPn: item.customer_pn,
+        itemName: item.item_name,
+        supplyType: st,
+        processType: item.item_type,
+        production: qty,
+        injectionCost: 0,
+        paintCostPerEa: 0,
+        purchaseCostPerEa: amt > 0 ? amt / qty : 0,
+        totalCostPerEa: amt > 0 ? amt / qty : 0,
+        resinAmount: 0,
+        paintAmount: 0,
+        purchaseAmount: amt,
+        totalAmount: amt,
+        source: 'excel',
+      });
+    }
+  }
+
+  const totalStandard = totalResin + totalPaint + totalPurchase + totalOutsource;
+  const standardRatio = revenue > 0 ? totalStandard / revenue : 0;
+
+  const summaryByType: SummaryByType[] = [
+    { name: 'RESIN', standard: totalResin, actual: 0 },
+    { name: 'PAINT', standard: totalPaint, actual: 0 },
+    { name: '구매', standard: totalPurchase, actual: 0 },
+    { name: '외주', standard: totalOutsource, actual: 0 },
+  ];
+
+  console.log(`[품목별원가] ${items.length}건 중 생산 ${itemRows.length}건 → RESIN ₩${Math.round(totalResin).toLocaleString()}, PAINT ₩${Math.round(totalPaint).toLocaleString()}, 구매 ₩${Math.round(totalPurchase).toLocaleString()}, 외주 ₩${Math.round(totalOutsource).toLocaleString()}, NET ₩${Math.round(totalStandard).toLocaleString()}`);
+
+  return {
+    summaryByType,
+    itemRows,
+    totalStandard,
+    revenue,
+    standardRatio,
+    calcSource: 'ItemStandardCost',
+    stats: {
+      excelItems: itemRows.length,
+      calcItems: 0,
+      bomItems: 0,
+      totalItems: itemRows.length,
+    },
+  };
 }

@@ -39,6 +39,7 @@ export interface YieldRow {
   yieldRate: number;        // 수율(%)
   diff: number;             // 차이(투입-표준)
   status: 'normal' | 'over' | 'under' | 'noMatch' | 'otherPeriod' | 'zeroInput' | 'rawMatch';
+  processType?: string;      // 공정유형: '사출' | '도장' | '조립' | etc.
 }
 
 // ============================================
@@ -312,17 +313,19 @@ export const parseMaterialMasterExcel = (buffer: ArrayBuffer): PnMapping[] => {
 // BOM 전개 알고리즘
 // ============================================
 
-/** 모품번별로 BOM 레코드를 그루핑 */
+/** 모품번별로 BOM 레코드를 그루핑 (정규화된 키 사용) */
 export const buildBomRelations = (records: BomRecord[]): Map<string, BomRecord[]> => {
   const map = new Map<string, BomRecord[]>();
   const seen = new Set<string>();
   for (const rec of records) {
-    const dedupKey = `${normalizePn(rec.parentPn)}|${normalizePn(rec.childPn)}`;
+    const normalizedParent = normalizePn(rec.parentPn);
+    const normalizedChild = normalizePn(rec.childPn);
+    const dedupKey = `${normalizedParent}|${normalizedChild}`;
     if (seen.has(dedupKey)) continue;
     seen.add(dedupKey);
-    const list = map.get(rec.parentPn) || [];
+    const list = map.get(normalizedParent) || [];
     list.push(rec);
-    map.set(rec.parentPn, list);
+    map.set(normalizedParent, list);
   }
   return map;
 };
