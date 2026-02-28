@@ -4,7 +4,7 @@ import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '..
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
-import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService } from '../services/supabaseService';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService, purchasePriceService, outsourceInjPriceService } from '../services/supabaseService';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import { downloadCSV } from '../utils/csvExport';
@@ -289,7 +289,7 @@ const ProductMaterialCostView: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts] = await Promise.all([
+      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts, purchasePrices, outsourcePrices] = await Promise.all([
         forecastService.getItems('current'),
         bomMasterService.getAll(),
         productCodeService.getAll(),
@@ -297,6 +297,8 @@ const ProductMaterialCostView: React.FC = () => {
         materialCodeService.getAll(),
         itemRevenueService.getAll(),
         itemStandardCostService.getAll(),
+        purchasePriceService.getAll(),
+        outsourceInjPriceService.getAll(),
       ]);
 
       setActualRevenue(revenueData || []);
@@ -370,6 +372,24 @@ const ProductMaterialCostView: React.FC = () => {
         materialTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
       }
 
+      // 구매단가 맵
+      const purchasePriceMap = new Map<string, number>();
+      for (const pp of purchasePrices) {
+        if (pp.currentPrice > 0) {
+          purchasePriceMap.set(normalizePn(pp.itemCode), pp.currentPrice);
+          if (pp.customerPn) purchasePriceMap.set(normalizePn(pp.customerPn), pp.currentPrice);
+        }
+      }
+
+      // 외주사출판매가 맵
+      const outsourcePriceMap = new Map<string, number>();
+      for (const op of outsourcePrices) {
+        if (op.injectionPrice > 0) {
+          outsourcePriceMap.set(normalizePn(op.itemCode), op.injectionPrice);
+          if (op.customerPn) outsourcePriceMap.set(normalizePn(op.customerPn), op.injectionPrice);
+        }
+      }
+
       // 표준재료비 맵 (JSON fallback + DB 우선)
       const stdCostMap = new Map<string, { eaCost: number; processType: string; productName: string }>();
       for (const sc of fallbackStandardCosts) {
@@ -410,18 +430,31 @@ const ProductMaterialCostView: React.FC = () => {
         // 1) 표준재료비 EA단가
         const std = stdCostMap.get(code);
         if (std && std.eaCost > 0) return { price: std.eaCost, source: '표준재료비' };
-        // 2) 재질코드 직접
+        // 2) 재질코드 직접 (원재료 단가 ₩/kg)
         const dp = priceMap.get(code);
         if (dp && dp > 0) return { price: dp, source: '재질코드' };
-        // 3) rawMaterialCode + netWeight
+        // 3) 구매단가
+        const pp = purchasePriceMap.get(code);
+        if (pp && pp > 0) return { price: pp, source: '구매단가' };
+        // 4) rawMaterialCode + netWeight → 사출재료비 공식 적용
         const ri = refInfoMap.get(code);
         if (ri) {
-          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
           for (const raw of rawCodes) {
-            const rp = priceMap.get(normalizePn(raw));
+            const rawNorm = normalizePn(raw);
+            const matType = materialTypeMap.get(rawNorm) || '';
+            if (/PAINT|도료/i.test(matType)) continue;
+            const rp = priceMap.get(rawNorm);
             if (rp && rp > 0) {
-              const nw = ri.netWeight;
-              if (nw && nw > 0) return { price: rp * (nw / 1000), source: `원재료×${nw}g` };
+              const nw = ri.netWeight || 0;
+              if (nw > 0) {
+                const rw = ri.runnerWeight || 0;
+                const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+                const loss = ri.lossRate || 0;
+                const weightPerEa = nw + rw / cavity;
+                const cost = (weightPerEa * rp / 1000) * (1 + loss / 100);
+                return { price: cost, source: `사출(${nw}g)` };
+              }
               return { price: rp, source: '원재료' };
             }
           }
@@ -521,13 +554,87 @@ const ProductMaterialCostView: React.FC = () => {
         const stdMaterialCost = stdEntry?.eaCost || 0;
         const hasStdCost = stdMaterialCost > 0;
 
-        // 최종 재료비: 표준재료비 우선, 없으면 BOM+도장
-        const materialCost = stdMaterialCost > 0 ? stdMaterialCost : bomMaterialCost;
+        // [Fix 3] 기준정보 기반 직접 산출 (BOM/stdCost 둘 다 없을 때 3번째 fallback)
+        let refInfoCost = 0;
+        if (!hasStdCost && bomMaterialCost <= 0 && productRef) {
+          const supplyType = productRef.supplyType || '';
+          const isPurchase = supplyType === '구매';
+          const isOutsource = supplyType.includes('외주');
+
+          if (isPurchase) {
+            // 구매: purchasePriceMap에서 조회
+            const pp = purchasePriceMap.get(forecastPn)
+              || purchasePriceMap.get(custToInternal.get(forecastPn) || '')
+              || purchasePriceMap.get(internalToCust.get(forecastPn) || '');
+            if (pp && pp > 0) {
+              refInfoCost = pp;
+              bomLeaves.push({
+                childPn: forecastPn, childName: '구매단가 (단가현황)',
+                qty: 1, totalQty: 1, unitPrice: pp, cost: pp,
+                priceSource: '구매단가', depth: 0, partType: '구매', supplier: productRef.supplier || '',
+              });
+            }
+          } else if (isOutsource) {
+            // 외주: 구매단가 - 사출판매가 = 순 재료비
+            const pp = purchasePriceMap.get(forecastPn)
+              || purchasePriceMap.get(custToInternal.get(forecastPn) || '')
+              || purchasePriceMap.get(internalToCust.get(forecastPn) || '');
+            const op = outsourcePriceMap.get(forecastPn)
+              || outsourcePriceMap.get(custToInternal.get(forecastPn) || '')
+              || outsourcePriceMap.get(internalToCust.get(forecastPn) || '');
+            if (pp && pp > 0) {
+              refInfoCost = Math.max(0, pp - (op || 0));
+              bomLeaves.push({
+                childPn: forecastPn, childName: '외주재료비 (구매-사출)',
+                qty: 1, totalQty: 1, unitPrice: refInfoCost, cost: refInfoCost,
+                priceSource: '외주산출', depth: 0, partType: '외주', supplier: productRef.supplier || '',
+              });
+            }
+          } else {
+            // 자작: 사출재료비 = (NET중량 + Runner/Cavity) × 원재료단가/1000 × (1+Loss율)
+            const nw = productRef.netWeight || 0;
+            const rw = productRef.runnerWeight || 0;
+            const cavity = (productRef.cavity && productRef.cavity > 0) ? productRef.cavity : 1;
+            const lossRate = productRef.lossRate || 0;
+
+            if (nw > 0) {
+              const rawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
+              for (const raw of rawCodes) {
+                const rawNorm = normalizePn(raw);
+                const matType = materialTypeMap.get(rawNorm) || '';
+                if (/PAINT|도료/i.test(matType)) continue; // 도료는 위에서 처리
+                const rawPrice = priceMap.get(rawNorm);
+                if (rawPrice && rawPrice > 0) {
+                  const weightPerEa = nw + rw / cavity;
+                  const injCost = (weightPerEa * rawPrice / 1000) * (1 + lossRate / 100);
+                  refInfoCost += injCost;
+                  bomLeaves.push({
+                    childPn: raw, childName: `사출재료 (기준정보)`,
+                    qty: nw, totalQty: weightPerEa / 1000,
+                    unitPrice: rawPrice, cost: injCost,
+                    priceSource: '기준정보 산출', depth: 0, partType: '사출', supplier: '',
+                  });
+                  break;
+                }
+              }
+            }
+            // 도장비는 이미 paintCost에 포함되어 bomMaterialCost에 합산됨 → refInfoCost에 추가
+            refInfoCost += paintCost;
+          }
+        }
+
+        // 최종 재료비: 표준재료비 → BOM전개 → 기준정보 직접산출
+        const materialCost = stdMaterialCost > 0 ? stdMaterialCost
+          : bomMaterialCost > 0 ? bomMaterialCost
+          : refInfoCost;
         const materialRatio = f.unitPrice > 0 && materialCost > 0 ? (materialCost / f.unitPrice) * 100 : 0;
 
         // 데이터 품질 판정
         const dataQuality: 'high' | 'medium' | 'low' =
-          hasStdCost ? 'high' : (hasBom && bomMaterialCost > 0) ? 'medium' : 'low';
+          hasStdCost ? 'high'
+          : (hasBom && bomMaterialCost > 0) ? 'medium'
+          : refInfoCost > 0 ? 'medium'
+          : 'low';
 
         result.push({
           customer: f.customer,

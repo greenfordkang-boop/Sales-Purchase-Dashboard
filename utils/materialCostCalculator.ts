@@ -861,6 +861,7 @@ export function calcFromItemStandardCosts(
   items: ItemStandardCost[],
   monthIndex: number, // 0=1월, 1=2월, ...
   revenue: number,
+  forecastQtyMap?: Map<string, number>,  // forecast 수량 폴백 (월별 qty가 0인 항목용)
 ): UnifiedCalcResult {
   const qtyKey = MONTH_QTY_KEYS[monthIndex];
   const amtKey = MONTH_AMT_KEYS[monthIndex];
@@ -872,7 +873,15 @@ export function calcFromItemStandardCosts(
   const itemRows: CalcItemRow[] = [];
 
   for (const item of items) {
-    const qty = Number(item[qtyKey]) || 0;
+    let qty = Number(item[qtyKey]) || 0;
+
+    // 월별 수량이 0이면 forecast 수량으로 폴백 (DataQualityGuide 업로드 데이터 지원)
+    if (qty <= 0 && forecastQtyMap) {
+      qty = forecastQtyMap.get(normalizePn(item.item_code)) || 0;
+      if (qty <= 0 && item.customer_pn) {
+        qty = forecastQtyMap.get(normalizePn(item.customer_pn)) || 0;
+      }
+    }
     if (qty <= 0) continue;
 
     const st = item.supply_type || '';
@@ -881,30 +890,46 @@ export function calcFromItemStandardCosts(
     const materialPerEa = Number(item.material_cost_per_ea) || 0;
     const amt = Number(item[amtKey]) || 0;
 
-    if (st === '자작') {
+    // 자작 판정: supply_type이 '자작' 이거나, 비어있지만 resin/paint/material 단가가 있으면 자작
+    const isSelfMade = st === '자작' || (!st && (resinPerEa > 0 || paintPerEa > 0) && !st.includes('구매') && !st.includes('외주'));
+
+    if (isSelfMade || (!st && materialPerEa > 0 && resinPerEa <= 0 && paintPerEa <= 0)) {
+      // material_cost_per_ea를 총 단가로 사용 (resin+paint보다 정확)
+      const totalPerEa = materialPerEa > 0 ? materialPerEa : (resinPerEa + paintPerEa);
+      if (totalPerEa <= 0) continue;
+
       const resinAmt = resinPerEa * qty;
       const paintAmt = paintPerEa * qty;
+      const totalAmt = totalPerEa * qty;
+      const otherAmt = Math.max(0, totalAmt - resinAmt - paintAmt);
+
       totalResin += resinAmt;
       totalPaint += paintAmt;
+      totalPurchase += otherAmt; // 기타 재료비 (가공/부자재 등)
+
       itemRows.push({
         itemCode: item.item_code,
         customerPn: item.customer_pn,
         itemName: item.item_name,
-        supplyType: st,
+        supplyType: st || '자작',
         processType: item.item_type,
         production: qty,
         injectionCost: resinPerEa,
         paintCostPerEa: paintPerEa,
-        purchaseCostPerEa: 0,
-        totalCostPerEa: resinPerEa + paintPerEa,
+        purchaseCostPerEa: otherAmt > 0 ? otherAmt / qty : 0,
+        totalCostPerEa: totalPerEa,
         resinAmount: resinAmt,
         paintAmount: paintAmt,
-        purchaseAmount: 0,
-        totalAmount: resinAmt + paintAmt,
+        purchaseAmount: otherAmt,
+        totalAmount: totalAmt,
         source: 'excel',
       });
     } else if (st === '구매') {
-      totalPurchase += amt;
+      // amt가 0이면 materialPerEa × qty 사용
+      const purchAmt = amt > 0 ? amt : (materialPerEa > 0 ? materialPerEa * qty : 0);
+      if (purchAmt <= 0) continue;
+      totalPurchase += purchAmt;
+      const perEa = materialPerEa > 0 ? materialPerEa : (purchAmt / qty);
       itemRows.push({
         itemCode: item.item_code,
         customerPn: item.customer_pn,
@@ -914,16 +939,19 @@ export function calcFromItemStandardCosts(
         production: qty,
         injectionCost: 0,
         paintCostPerEa: 0,
-        purchaseCostPerEa: materialPerEa,
-        totalCostPerEa: materialPerEa,
+        purchaseCostPerEa: perEa,
+        totalCostPerEa: perEa,
         resinAmount: 0,
         paintAmount: 0,
-        purchaseAmount: amt,
-        totalAmount: amt,
+        purchaseAmount: purchAmt,
+        totalAmount: purchAmt,
         source: 'excel',
       });
     } else if (st.includes('외주')) {
-      totalOutsource += amt;
+      const outsrcAmt = amt > 0 ? amt : (materialPerEa > 0 ? materialPerEa * qty : 0);
+      if (outsrcAmt <= 0) continue;
+      totalOutsource += outsrcAmt;
+      const perEa = materialPerEa > 0 ? materialPerEa : (outsrcAmt / qty);
       itemRows.push({
         itemCode: item.item_code,
         customerPn: item.customer_pn,
@@ -933,12 +961,12 @@ export function calcFromItemStandardCosts(
         production: qty,
         injectionCost: 0,
         paintCostPerEa: 0,
-        purchaseCostPerEa: amt > 0 ? amt / qty : 0,
-        totalCostPerEa: amt > 0 ? amt / qty : 0,
+        purchaseCostPerEa: perEa,
+        totalCostPerEa: perEa,
         resinAmount: 0,
         paintAmount: 0,
-        purchaseAmount: amt,
-        totalAmount: amt,
+        purchaseAmount: outsrcAmt,
+        totalAmount: outsrcAmt,
         source: 'excel',
       });
     }

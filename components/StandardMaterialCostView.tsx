@@ -269,12 +269,22 @@ const StandardMaterialCostView: React.FC = () => {
 
       // 매출 계산: 매출계획 or 매출실적에서 해당 월 집계
       let totalRevenue = 0;
+      const forecastQtyMap = new Map<string, number>();
       if (forecastData.length > 0) {
-        const monthKey = `m${monthIdx + 1}` as keyof ForecastItem;
         forecastData.forEach(fc => {
-          const qty = Number(fc[monthKey] || 0);
-          const price = fc.unitPrice || 0;
-          totalRevenue += qty * price;
+          const qty = fc.monthlyQty?.[monthIdx] || 0;
+          const rev = fc.monthlyRevenue?.[monthIdx] || 0;
+          totalRevenue += rev;
+          // forecastQtyMap: item_standard_cost의 item_code/customer_pn과 매칭하기 위해
+          // 고객P/N과 내부코드 모두 등록
+          if (qty > 0) {
+            const pn = normalizePn(fc.partNo || fc.newPartNo || '');
+            if (pn) forecastQtyMap.set(pn, (forecastQtyMap.get(pn) || 0) + qty);
+            if (fc.newPartNo) {
+              const npn = normalizePn(fc.newPartNo);
+              if (npn && npn !== pn) forecastQtyMap.set(npn, (forecastQtyMap.get(npn) || 0) + qty);
+            }
+          }
         });
       }
       if (totalRevenue === 0 && itemRevenueData.length > 0) {
@@ -286,7 +296,7 @@ const StandardMaterialCostView: React.FC = () => {
         });
       }
 
-      const result = calcFromItemStandardCosts(masterItemStandardCosts, monthIdx, totalRevenue);
+      const result = calcFromItemStandardCosts(masterItemStandardCosts, monthIdx, totalRevenue, forecastQtyMap);
 
       const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
         id: `isc-${ir.itemCode}-${idx}`,
