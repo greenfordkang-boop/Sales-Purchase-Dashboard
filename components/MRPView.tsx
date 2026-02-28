@@ -43,6 +43,131 @@ interface TreeRow {
 }
 
 // ============================================================
+// 산출근거 팝업 (총소요량 / 총원가 호버)
+// ============================================================
+
+const formatCompact = (v: number): string => {
+  if (Math.abs(v) >= 1e8) return `${(v / 1e8).toFixed(1)}억`;
+  if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(1)}백만`;
+  if (Math.abs(v) >= 1e4) return `${(v / 1e4).toFixed(0)}만`;
+  return Math.round(v).toLocaleString();
+};
+
+/** 총소요량 셀 + 호버 팝업 */
+const MrpQtyCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
+  const [show, setShow] = useState(false);
+  const activeMonths = m.monthlyQty
+    .map((q, i) => ({ month: `${i + 1}월`, qty: q }))
+    .filter(x => x.qty > 0);
+  const topMonths = [...activeMonths].sort((a, b) => b.qty - a.qty);
+  const maxMonthQty = topMonths.length > 0 ? topMonths[0].qty : 0;
+
+  return (
+    <td
+      className="px-3 py-1.5 text-right text-gray-600 relative cursor-help"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span className="border-b border-dashed border-gray-400">
+        {m.requiredQty.toLocaleString()}
+      </span>
+      {m.unit && <span className="text-[10px] text-gray-400 ml-0.5">{m.unit}</span>}
+      {show && (
+        <div
+          className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-xl px-4 py-3 min-w-[320px] text-left pointer-events-none"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="text-[10px] font-bold text-slate-300 mb-2">산출근거 (총소요량)</div>
+
+          {/* 관련 제품 */}
+          <div className="text-[11px] mb-2">
+            <span className="text-slate-400">관련 제품:</span>
+            <span className="text-indigo-300 font-bold ml-1">{m.parentProducts.length}개</span>
+            <div className="flex flex-wrap gap-1 mt-1 max-h-[40px] overflow-hidden">
+              {m.parentProducts.slice(0, 5).map((pn, i) => (
+                <span key={i} className="px-1.5 py-0.5 bg-slate-700 rounded text-[9px] font-mono text-slate-300">{pn}</span>
+              ))}
+              {m.parentProducts.length > 5 && (
+                <span className="text-[9px] text-slate-500">...외 {m.parentProducts.length - 5}개</span>
+              )}
+            </div>
+          </div>
+
+          {/* 월별 분포 (활성 월만) */}
+          <div className="text-[10px] text-slate-400 mb-1">월별 소요량:</div>
+          <div className="space-y-0.5 max-h-[140px] overflow-y-auto">
+            {topMonths.slice(0, 12).map(({ month, qty }) => (
+              <div key={month} className="flex items-center gap-2 text-[11px]">
+                <span className="w-8 text-slate-400">{month}</span>
+                <div className="flex-1 h-3 bg-slate-700 rounded overflow-hidden">
+                  <div
+                    className="h-full bg-blue-500 rounded"
+                    style={{ width: `${maxMonthQty > 0 ? (qty / maxMonthQty) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="w-20 text-right font-mono text-white">{Math.round(qty).toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* 합계 */}
+          <div className="border-t border-slate-600 mt-2 pt-2 flex items-center justify-between text-xs">
+            <span className="text-slate-400">Σ(제품 계획수량 × BOM 누적소요량)</span>
+            <span className="text-amber-300 font-black">{m.requiredQty.toLocaleString()} {m.unit}</span>
+          </div>
+        </div>
+      )}
+    </td>
+  );
+};
+
+/** 총원가 셀 + 호버 팝업 */
+const MrpCostCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
+  const [show, setShow] = useState(false);
+
+  return (
+    <td
+      className="px-3 py-1.5 text-right text-gray-700 font-medium relative cursor-help"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      <span className={m.totalCost > 0 ? 'border-b border-dashed border-gray-400' : ''}>
+        {m.totalCost > 0 ? `₩${Math.round(m.totalCost).toLocaleString()}` : '-'}
+      </span>
+      {show && m.totalCost > 0 && (
+        <div
+          className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-xl px-4 py-3 min-w-[260px] text-left pointer-events-none"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="text-[10px] font-bold text-slate-300 mb-2">산출근거 (총원가)</div>
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex justify-between">
+              <span className="text-slate-400">총소요량</span>
+              <span className="text-white font-mono">{m.requiredQty.toLocaleString()} {m.unit}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-amber-400 font-bold">×</span>
+              <span className="text-slate-400">단가</span>
+              <span className="text-white font-mono ml-auto">₩{Math.round(m.unitPrice).toLocaleString()}/{m.unit}</span>
+            </div>
+          </div>
+          <div className="border-t border-slate-600 mt-2 pt-2 flex items-center justify-between text-xs">
+            <span className="text-slate-400">= {m.requiredQty.toLocaleString()} × ₩{Math.round(m.unitPrice).toLocaleString()}</span>
+            <span className="text-amber-300 font-black">₩{formatCompact(m.totalCost)}</span>
+          </div>
+          {m.totalCost > 1e8 && (
+            <div className="mt-1 text-[10px] text-rose-400">
+              ⚠ 1억원 초과 — 소요량/단가 검증 필요
+            </div>
+          )}
+        </div>
+      )}
+      {!show && m.totalCost <= 0 && m.unitPrice <= 0 && null}
+    </td>
+  );
+};
+
+// ============================================================
 // Component
 // ============================================================
 
@@ -765,16 +890,11 @@ const MRPView: React.FC = () => {
                     </td>
                     <td className="px-3 py-1.5 text-gray-500 text-center">{m.unit || '-'}</td>
                     <td className="px-3 py-1.5 text-gray-500 max-w-24 truncate">{m.supplier || '-'}</td>
-                    <td className="px-3 py-1.5 text-right text-gray-600">
-                      {m.requiredQty.toLocaleString()}
-                      {m.unit && <span className="text-[10px] text-gray-400 ml-0.5">{m.unit}</span>}
-                    </td>
+                    <MrpQtyCell m={m} />
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {m.unitPrice > 0 ? `₩${Math.round(m.unitPrice).toLocaleString()}` : '-'}
                     </td>
-                    <td className="px-3 py-1.5 text-right text-gray-700 font-medium">
-                      {m.totalCost > 0 ? `₩${Math.round(m.totalCost).toLocaleString()}` : '-'}
-                    </td>
+                    <MrpCostCell m={m} />
                     <td className="px-3 py-1.5 text-right text-gray-500">{m.parentProducts.length}</td>
                     {Array.from({ length: 12 }, (_, i) => (
                       <td key={i} className={`px-3 py-1.5 text-right font-mono ${m.monthlyQty[i] > 0 ? 'text-gray-700' : 'text-gray-300'}`}>

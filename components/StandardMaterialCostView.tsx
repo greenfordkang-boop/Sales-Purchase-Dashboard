@@ -48,6 +48,55 @@ const formatWon = (v: number): string => {
 
 const formatPercent = (v: number): string => `${(v * 100).toFixed(1)}%`;
 
+/** 마감재료비 입력: 포커스 중 raw 숫자, 블러 시 formatWon */
+const ClosingCostInput: React.FC<{
+  value: number;
+  onChange: (v: number) => void;
+}> = ({ value, onChange }) => {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+
+  const handleFocus = () => {
+    setEditing(true);
+    setRaw(value > 0 ? Math.round(value).toString() : '');
+  };
+
+  const handleBlur = () => {
+    setEditing(false);
+    const num = parseFloat(raw.replace(/,/g, ''));
+    onChange(isNaN(num) ? 0 : num);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // 숫자와 콤마만 허용, 입력 중 자동 콤마 포맷
+    const stripped = e.target.value.replace(/,/g, '').replace(/[^0-9.-]/g, '');
+    if (stripped === '' || stripped === '-') {
+      setRaw(stripped);
+      return;
+    }
+    const num = parseFloat(stripped);
+    if (isNaN(num)) {
+      setRaw(stripped);
+    } else {
+      setRaw(Math.round(num).toLocaleString());
+    }
+  };
+
+  return (
+    <td className="px-2 py-2 text-right">
+      <input
+        type="text"
+        className="w-full text-right font-mono text-xs bg-transparent focus:outline-none focus:bg-white focus:ring-1 focus:ring-amber-400 focus:rounded px-1 py-0.5 text-amber-700 font-bold cursor-text placeholder:text-slate-300"
+        placeholder="-"
+        value={editing ? raw : (value > 0 ? formatWon(value) : '')}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        onChange={handleChange}
+      />
+    </td>
+  );
+};
+
 const normalizePn = (pn: string): string =>
   pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
@@ -3579,26 +3628,13 @@ const StandardMaterialCostView: React.FC = () => {
                     </tr>
                     <tr className="border-b border-slate-200 bg-amber-50/40 hover:bg-amber-50/60">
                       <td className="px-2 py-2 font-bold text-amber-700">마감재료비</td>
-                      {monthlySummary.map((r, mi) => {
-                        const cc = getClosingCost(selectedYear, mi);
-                        return (
-                          <td key={r.month} className="px-2 py-2 text-right">
-                            <input
-                              type="text"
-                              className="w-full text-right font-mono text-xs bg-transparent focus:outline-none focus:bg-white focus:ring-1 focus:ring-amber-400 focus:rounded px-1 py-0.5 text-amber-700 font-bold cursor-text placeholder:text-slate-300"
-                              placeholder="-"
-                              value={cc > 0 ? formatWon(cc) : ''}
-                              onFocus={e => { if (cc > 0) e.target.value = Math.round(cc).toLocaleString(); }}
-                              onBlur={e => { if (cc > 0) e.target.value = formatWon(cc); }}
-                              onChange={e => {
-                                const raw = e.target.value.replace(/,/g, '').replace(/[^0-9.-]/g, '');
-                                const num = parseFloat(raw);
-                                updateClosingCost(selectedYear, mi, isNaN(num) ? 0 : num);
-                              }}
-                            />
-                          </td>
-                        );
-                      })}
+                      {monthlySummary.map((r, mi) => (
+                        <ClosingCostInput
+                          key={r.month}
+                          value={getClosingCost(selectedYear, mi)}
+                          onChange={(v) => updateClosingCost(selectedYear, mi, v)}
+                        />
+                      ))}
                     </tr>
                     <tr className="border-b-2 border-slate-300 hover:bg-slate-50">
                       <td className="px-2 py-2 font-bold text-slate-700">차이금액</td>

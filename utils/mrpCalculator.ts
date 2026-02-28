@@ -359,20 +359,66 @@ export function calculateMRP(
     }
     if (!unit) unit = DEFAULT_UNITS[agg.type] || 'EA';
 
-    // 단가 조회: 1) 재질코드 직접 2) rawMaterialCode 경유 3) BOM 품명→재질코드 매칭
-    let unitPrice = priceMap.get(code) || 0;
-    if (unitPrice <= 0) {
-      for (const rawCode of rawCodes) {
-        const p = priceMap.get(normalizePn(rawCode));
-        if (p && p > 0) { unitPrice = p; break; }
+    // 단가 조회 (단위 불일치 방지)
+    // ★ 우선순위: 1) 표준재료비 EA단가 → 2) 매입단가 → 3) 재질코드(kg→EA 변환)
+    let unitPrice = 0;
+
+    // 1-1) 표준재료비 EA단가 (item_standard_cost) — 가장 정확
+    const stdEntry = stdCostMap.get(code);
+    if (stdEntry && stdEntry.eaCost > 0) {
+      unitPrice = stdEntry.eaCost;
+      unit = 'EA';
+    }
+    // 1-2) 표준재료비: 자재명으로 검색
+    if (unitPrice <= 0 && agg.name && agg.name !== code) {
+      const nameKey = normalizePn(agg.name);
+      const stdByName = stdCostMap.get(nameKey);
+      if (stdByName && stdByName.eaCost > 0) {
+        unitPrice = stdByName.eaCost;
+        unit = 'EA';
       }
     }
-    // 재질코드: BOM 품명으로 매칭 (재질코드가 매입 도번일 때)
+
+    // 2) 재질코드 직접 매칭 (자재코드 자체가 재질코드인 경우 — 원재료)
+    if (unitPrice <= 0) {
+      const directPrice = priceMap.get(code);
+      if (directPrice && directPrice > 0) {
+        unitPrice = directPrice;
+      }
+    }
+
+    // 3) rawMaterialCode 경유 재질단가 → netWeight로 EA당 변환
+    if (unitPrice <= 0 && rawCodes.length > 0) {
+      for (const rawCode of rawCodes) {
+        const rawPrice = priceMap.get(normalizePn(rawCode));
+        if (rawPrice && rawPrice > 0) {
+          // netWeight가 있으면 kg단가 → EA단가 변환
+          const nw = ri?.netWeight;
+          if (nw && nw > 0) {
+            unitPrice = rawPrice * (nw / 1000); // ₩/kg × (g/1000) = ₩/EA
+            unit = 'EA';
+          } else {
+            unitPrice = rawPrice; // netWeight 없으면 원래 단위 유지
+          }
+          break;
+        }
+      }
+    }
+
+    // 4) BOM 품명 → 재질코드 매칭 (netWeight 변환 적용)
     if (unitPrice <= 0 && priceMap.size > 0) {
       const nameKey = normalizePn(agg.name);
       if (nameKey && nameKey !== code) {
         const p = priceMap.get(nameKey);
-        if (p && p > 0) unitPrice = p;
+        if (p && p > 0) {
+          const nw = ri?.netWeight;
+          if (nw && nw > 0) {
+            unitPrice = p * (nw / 1000);
+            unit = 'EA';
+          } else {
+            unitPrice = p;
+          }
+        }
       }
       // 접두사 제거 후 재시도
       if (unitPrice <= 0) {
@@ -384,14 +430,21 @@ export function calculateMRP(
             if (pkNorm === strippedKey ||
                 (strippedKey.length >= 8 && pkNorm.startsWith(strippedKey.slice(0, 12))) ||
                 (pkNorm.length >= 8 && strippedKey.startsWith(pkNorm.slice(0, 12)))) {
-              unitPrice = pv;
+              const nw = ri?.netWeight;
+              if (nw && nw > 0) {
+                unitPrice = pv * (nw / 1000);
+                unit = 'EA';
+              } else {
+                unitPrice = pv;
+              }
               break;
             }
           }
         }
       }
     }
-    // 매입단가 폴백: 1) 코드 직접 매칭
+
+    // 5) 매입단가: 코드 직접 매칭
     if (unitPrice <= 0) {
       const pp = purchasePriceMap.get(code);
       if (pp && pp.price > 0) {
@@ -399,14 +452,14 @@ export function calculateMRP(
         if (!unit || unit === DEFAULT_UNITS[agg.type]) unit = pp.unit || unit;
       }
     }
-    // 매입단가 폴백: 2) rawMaterialCode로 매칭
+    // 6) 매입단가: rawMaterialCode로 매칭
     if (unitPrice <= 0) {
       for (const rawCode of rawCodes) {
         const pp = purchasePriceMap.get(normalizePn(rawCode));
         if (pp && pp.price > 0) { unitPrice = pp.price; break; }
       }
     }
-    // 매입단가 폴백: 3) BOM 품명 → 매입 도번 정확 매칭
+    // 7) 매입단가: BOM 품명 → 매입 도번 정확 매칭
     if (unitPrice <= 0) {
       const nameKey = normalizePn(agg.name);
       if (nameKey && nameKey !== code) {
@@ -417,7 +470,7 @@ export function calculateMRP(
         }
       }
     }
-    // 매입단가 폴백: 4) rawMaterialCode의 재질명 → 매입 도번 매칭
+    // 8) 매입단가: rawMaterialCode의 재질명 → 매입 도번 매칭
     if (unitPrice <= 0 && rawCodes.length > 0) {
       for (const rawCode of rawCodes) {
         const rawName = nameMap.get(normalizePn(rawCode));
@@ -427,14 +480,13 @@ export function calculateMRP(
         }
       }
     }
-    // 매입단가 폴백: 5) 접두사 제거 + 유연한 이름 매칭 (RESIN/PAINT)
+    // 9) 매입단가: 접두사 제거 + 유연한 이름 매칭 (RESIN/PAINT)
     if (unitPrice <= 0 && agg.name && agg.name !== code) {
       const stripped = stripResinPrefix(agg.name);
       const strippedKey = normalizeForName(stripped);
       if (strippedKey.length >= 6) {
         for (const [pk, pv] of purchasePriceMap.entries()) {
           const pkName = normalizeForName(pk);
-          // 접두사 제거 후 일치 또는 한쪽이 다른쪽으로 시작
           if (pkName === strippedKey ||
               (strippedKey.length >= 8 && pkName.startsWith(strippedKey.slice(0, 12))) ||
               (pkName.length >= 8 && strippedKey.startsWith(pkName.slice(0, 12)))) {
@@ -443,23 +495,6 @@ export function calculateMRP(
             break;
           }
         }
-      }
-    }
-    // 매입단가 폴백: 6) 표준재료비 EA단가 (BOM 리프가 제품코드인 경우)
-    if (unitPrice <= 0) {
-      const stdEntry = stdCostMap.get(code);
-      if (stdEntry && stdEntry.eaCost > 0) {
-        unitPrice = stdEntry.eaCost;
-        unit = 'EA';
-      }
-    }
-    // 매입단가 폴백: 7) 표준재료비 - 자재명으로 제품코드/고객사PN 검색
-    if (unitPrice <= 0 && agg.name && agg.name !== code) {
-      const nameKey = normalizePn(agg.name);
-      const stdEntry = stdCostMap.get(nameKey);
-      if (stdEntry && stdEntry.eaCost > 0) {
-        unitPrice = stdEntry.eaCost;
-        unit = 'EA';
       }
     }
 

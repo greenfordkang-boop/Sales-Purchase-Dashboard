@@ -8,6 +8,7 @@ import StandardMaterialCostView from './StandardMaterialCostView';
 import BomMasterUploadView from './BomMasterUploadView';
 import BomExplosionView from './BomExplosionView';
 import MRPView from './MRPView';
+import ProductMaterialCostView from './ProductMaterialCostView';
 import CRView from './CRView';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
@@ -519,6 +520,7 @@ const PurchaseView: React.FC = () => {
     { id: 'bomMaster', label: 'BOM 마스터' },
     { id: 'bomExplosion', label: 'BOM 전개' },
     { id: 'mrp', label: '소요량(MRP)' },
+    { id: 'productCost', label: '제품별 재료비' },
     { id: 'yield', label: '자재수율' },
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
@@ -850,6 +852,11 @@ const PurchaseView: React.FC = () => {
           2.6. MRP TAB (소요량 계획)
          ================================================================================= */}
       {activeSubTab === 'mrp' && <MRPView />}
+
+      {/* =================================================================================
+          2.7. PRODUCT MATERIAL COST TAB (제품별 재료비)
+         ================================================================================= */}
+      {activeSubTab === 'productCost' && <ProductMaterialCostView />}
 
       {/* =================================================================================
           3. MATERIAL YIELD TAB (자재수율)

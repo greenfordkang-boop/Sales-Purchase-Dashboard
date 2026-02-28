@@ -201,12 +201,91 @@ const BomExplosionView: React.FC = () => {
     }
   };
 
+  // --- 누적소요량 산출근거 팝업 ---
+  interface AncestorStep {
+    pn: string;
+    name: string;
+    unitQty: number;
+    level: number;
+  }
+
+  const QtyBreakdownCell: React.FC<{
+    node: BomTreeNode;
+    ancestors: AncestorStep[];
+  }> = ({ node, ancestors }) => {
+    const [show, setShow] = useState(false);
+    const cellRef = useRef<HTMLTableCellElement>(null);
+    const displayQty = Number.isInteger(node.qty) ? node.qty : node.qty.toFixed(4);
+
+    // Lv0 루트노드는 팝업 불필요
+    if (node.level === 0) {
+      return (
+        <td className="px-3 py-2 text-right text-xs font-mono font-bold text-slate-800">
+          {displayQty}
+        </td>
+      );
+    }
+
+    // 곱셈 체인: ancestor[0].unitQty × ancestor[1].unitQty × ... × node.unitQty
+    const chain = [...ancestors, { pn: node.pn, name: node.name, unitQty: node.unitQty, level: node.level }];
+
+    return (
+      <td
+        ref={cellRef}
+        className="px-3 py-2 text-right text-xs font-mono font-bold text-slate-800 relative cursor-help"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+      >
+        <span className="border-b border-dashed border-slate-400">
+          {displayQty}
+        </span>
+        {show && (
+          <div className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-xl px-4 py-3 min-w-[280px] text-left pointer-events-none">
+            <div className="text-[10px] font-bold text-slate-300 mb-2">산출근거 (누적소요량)</div>
+            <div className="space-y-1">
+              {chain.map((step, i) => {
+                const fmtQty = Number.isInteger(step.unitQty) ? step.unitQty : step.unitQty.toFixed(4);
+                const shortName = step.name.length > 20 ? step.name.slice(0, 20) + '…' : step.name;
+                return (
+                  <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                    {i > 0 && <span className="text-amber-400 font-bold">×</span>}
+                    <span className="text-indigo-300 font-bold">Lv{step.level}</span>
+                    <span className="text-slate-300 font-mono truncate max-w-[120px]" title={step.pn}>{step.pn}</span>
+                    {shortName && <span className="text-slate-400 truncate max-w-[80px]">({shortName})</span>}
+                    <span className="ml-auto text-white font-bold">{fmtQty}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="border-t border-slate-600 mt-2 pt-2 flex items-center justify-between text-xs">
+              <span className="text-slate-400">
+                = {chain.map(s => Number.isInteger(s.unitQty) ? s.unitQty : s.unitQty.toFixed(4)).join(' × ')}
+              </span>
+              <span className="text-amber-300 font-black">{displayQty}</span>
+            </div>
+          </div>
+        )}
+      </td>
+    );
+  };
+
   // --- Render: Tree Rows (재귀적 flat rendering) ---
-  const renderTreeRows = (node: BomTreeNode, parentKey = '', siblingIdx = 0): React.ReactNode[] => {
+  const renderTreeRows = (
+    node: BomTreeNode,
+    parentKey = '',
+    siblingIdx = 0,
+    ancestors: AncestorStep[] = [],
+  ): React.ReactNode[] => {
     const rows: React.ReactNode[] = [];
     const nodeKey = `${parentKey}/${node.pn}-${node.level}:${siblingIdx}`;
     const hasChildren = node.children.length > 0;
     const isCollapsed = collapsedNodes.has(nodeKey);
+
+    // 현재 노드까지의 조상 경로 (자식 전달용)
+    const currentAncestors: AncestorStep[] = [
+      ...ancestors,
+      { pn: node.pn, name: node.name, unitQty: node.unitQty, level: node.level },
+    ];
 
     rows.push(
       <tr key={nodeKey} className="hover:bg-slate-50 transition-colors">
@@ -244,9 +323,7 @@ const BomExplosionView: React.FC = () => {
         <td className="px-3 py-2 text-right text-xs font-mono text-slate-600">
           {node.unitQty}
         </td>
-        <td className="px-3 py-2 text-right text-xs font-mono font-bold text-slate-800">
-          {Number.isInteger(node.qty) ? node.qty : node.qty.toFixed(4)}
-        </td>
+        <QtyBreakdownCell node={node} ancestors={ancestors} />
         <td className="px-3 py-2 text-xs text-slate-500">{node.partType}</td>
         <td className="px-3 py-2 text-xs text-slate-500">{node.supplier}</td>
         <td className="px-3 py-2 text-xs text-slate-400">{node.processType || ''}</td>
@@ -256,7 +333,7 @@ const BomExplosionView: React.FC = () => {
 
     if (hasChildren && !isCollapsed) {
       for (let ci = 0; ci < node.children.length; ci++) {
-        rows.push(...renderTreeRows(node.children[ci], nodeKey, ci));
+        rows.push(...renderTreeRows(node.children[ci], nodeKey, ci, currentAncestors));
       }
     }
 
