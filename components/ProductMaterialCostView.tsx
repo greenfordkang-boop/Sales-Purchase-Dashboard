@@ -377,6 +377,13 @@ const ProductMaterialCostView: React.FC = () => {
       // DB item_standard_cost 우선 적용 (사용자가 재료비.xlsx 업로드 시 반영)
       for (const sc of dbStdCosts) {
         const costVal = (sc as unknown as Record<string, unknown>).material_cost_per_ea as number || 0;
+        // P/N 매핑 보강: item_standard_cost의 customer_pn ↔ item_code
+        if (sc.customer_pn && sc.item_code) {
+          const cpn = normalizePn(sc.customer_pn);
+          const icode = normalizePn(sc.item_code);
+          if (!custToInternal.has(cpn)) custToInternal.set(cpn, icode);
+          if (!internalToCust.has(icode)) internalToCust.set(icode, cpn);
+        }
         if (costVal > 0) {
           const entry = { eaCost: costVal, processType: sc.item_type || '', productName: sc.item_name || '' };
           stdCostMap.set(normalizePn(sc.item_code), entry);

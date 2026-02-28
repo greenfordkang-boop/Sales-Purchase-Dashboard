@@ -83,6 +83,12 @@ const DataQualityGuide: React.FC = () => {
         }
       }
       for (const sc of dbStdCosts) {
+        // P/N 매핑 보강
+        if (sc.customer_pn && sc.item_code) {
+          const cpn = normalizePn(sc.customer_pn);
+          const icode = normalizePn(sc.item_code);
+          if (!custToInternal.has(cpn)) custToInternal.set(cpn, icode);
+        }
         const costVal = (sc as unknown as Record<string, unknown>).material_cost_per_ea as number || 0;
         if (costVal > 0) {
           stdCostSet.add(normalizePn(sc.item_code));
