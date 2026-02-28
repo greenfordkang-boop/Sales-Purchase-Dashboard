@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
@@ -30,40 +30,9 @@ import {
   CalcItemRow,
 } from '../utils/materialCostCalculator';
 import { ReferenceInfoRecord, MaterialCodeRecord } from '../utils/bomMasterParser';
-import { isSupabaseConfigured } from '../lib/supabase';
-import { referenceInfoService, materialCodeService, forecastService, bomMasterService, itemRevenueService, purchaseService, purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService } from '../services/supabaseService';
-
-// ============================================================
-// Types for automated calculation
-// ============================================================
-
-interface MaterialCostRow {
-  id: string;
-  childPn: string;        // 자재 품번
-  childName: string;      // 자재명
-  supplier: string;       // 협력업체
-  materialType: string;   // RESIN / PAINT / 구매 / 외주
-  parentProducts: string[];
-  standardReq: number;    // 표준소요량 (BOM 전개)
-  avgUnitPrice: number;   // 평균 단가 (입고 기준)
-  standardCost: number;   // 표준재료비 = standardReq × avgUnitPrice
-  actualQty: number;      // 실제 투입수량
-  actualCost: number;     // 실적재료비 (입고 금액)
-  diff: number;           // 차이 (표준 - 실적)
-  diffRate: number;       // 차이율
-}
-
-interface AutoCalcResult {
-  rows: MaterialCostRow[];
-  totalStandard: number;
-  totalActual: number;
-  byType: { name: string; standard: number; actual: number }[];
-  forecastRevenue: number;  // 매출계획 금액
-  standardRatio: number;    // 표준재료비율
-  actualRatio: number;      // 실적재료비율
-  matchRate: number;        // BOM 매칭율
-  debug: { forecastItems: number; bomProducts: number; bomMissing: number; materials: number; purchaseMatched: number; calcSource?: string };
-}
+import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService } from '../services/supabaseService';
+import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
+import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
 
 // ============================================================
 // Constants
@@ -103,48 +72,6 @@ const classifyMaterialType = (
   return '구매';
 };
 
-type ViewMode = 'summary' | 'items' | 'comparison' | 'diagnostic' | 'analysis';
-type DataMode = 'auto' | 'excel' | 'master';
-
-interface DiagnosticRow {
-  customerPn: string;
-  internalCode: string;
-  itemName: string;
-  supplyType: string;
-  processType: string;
-  hasForecast: boolean;
-  forecastQty: number;
-  forecastRevenue: number;     // 매출금액
-  hasPnMapping: boolean;
-  hasBom: boolean;             // BOM 존재 여부
-  bomChildCount: number;       // BOM 리프 수
-  hasUnitCost: boolean;
-  unitCostPerEa: number;
-  injectionCost: number;
-  paintCost: number;
-  purchasePrice: number;
-  stdAmount: number;
-  materialRatio: number;       // 재료비율 (stdAmount / forecastRevenue)
-  breakPoint: string;
-  breakLevel: 0 | 1 | 2 | 3 | 4;  // 4: 비율이상 추가
-}
-
-interface ComparisonRow {
-  itemCode: string;
-  itemName: string;
-  supplyType: string;    // 자작/구매/외주/미분류
-  stdQty: number;        // 표준수량
-  stdUnitPrice: number;  // 표준단가 (원/EA)
-  stdAmount: number;     // 표준금액
-  actQty: number;        // 실적수량
-  actUnitPrice: number;  // 실적단가
-  actAmount: number;     // 실적금액
-  diffAmount: number;    // 차이 (표준-실적, 양수=절감)
-  diffRate: number;      // 차이율%
-  absDiffAmount: number; // |차이| (정렬용)
-  matchStatus: 'matched' | 'std-only' | 'act-only';
-}
-
 const StandardMaterialCostView: React.FC = () => {
   // --- Data Mode ---
   const [dataMode, setDataMode] = useState<DataMode>('auto');
@@ -156,60 +83,22 @@ const StandardMaterialCostView: React.FC = () => {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 100;
 
-  // --- Auto mode: Load existing data from localStorage/Supabase ---
-  const [forecastData, setForecastData] = useState<ForecastItem[]>([]);
-  const [itemRevenueData, setItemRevenueData] = useState<ItemRevenueRow[]>([]);
-  const [bomData, setBomData] = useState<BomRecord[]>([]);
-  const [pnMapping, setPnMapping] = useState<PnMapping[]>([]);
-  const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
-  const [itemMasterData, setItemMasterData] = useState<PurchaseItemMaster[]>([]);
+  // --- Data loading via hook ---
+  const {
+    supabaseLoading,
+    forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData,
+    masterRefInfo, masterMaterialCodes,
+    masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
+    masterItemStandardCosts,
+    excelData,
+    setPnMapping, setBomData, setExcelData,
+    setMasterItemStandardCosts,
+    loadAllData,
+  } = useStandardMaterialCost();
 
-  // --- Excel mode ---
-  const [excelData, setExcelData] = useState<StandardMaterialData | null>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_standardMaterial')
-        || sessionStorage.getItem('dashboard_standardMaterial');
-      return stored ? JSON.parse(stored) : null;
-    } catch { return null; }
-  });
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const masterInputRef = useRef<HTMLInputElement>(null);
-
-  // --- Master mode: 기존 업로드 데이터(localStorage/캐시)에서 로드 ---
-  const [masterRefInfo, setMasterRefInfo] = useState<ReferenceInfoRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_referenceInfoMaster') || sessionStorage.getItem('dashboard_referenceInfoMaster');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [masterMaterialCodes, setMasterMaterialCodes] = useState<MaterialCodeRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_materialCodeMaster') || sessionStorage.getItem('dashboard_materialCodeMaster');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-
-  // --- 표준재료비 참조 데이터 (구매단가/도료배합/외주사출) ---
-  const [masterPurchasePrices, setMasterPurchasePrices] = useState<PurchasePrice[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_purchasePriceMaster');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [masterOutsourcePrices, setMasterOutsourcePrices] = useState<OutsourcePrice[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_outsourceInjPrice');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [masterPaintMixRatios, setMasterPaintMixRatios] = useState<PaintMixRatio[]>(() => {
-    try {
-      const stored = localStorage.getItem('dashboard_paintMixRatioMaster');
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [masterItemStandardCosts, setMasterItemStandardCosts] = useState<ItemStandardCost[]>([]);
 
   // --- PDF 도면 저장 (품번 → dataURL) ---
   const [drawingMap, setDrawingMap] = useState<Record<string, string>>(() => {
@@ -300,129 +189,6 @@ const StandardMaterialCostView: React.FC = () => {
   const [filterSupplier, setFilterSupplier] = useState('All');
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
 
-  // --- Safe storage read (localStorage → sessionStorage fallback) ---
-  const safeGet = (key: string): string | null => {
-    try { return localStorage.getItem(key) || sessionStorage.getItem(key); } catch { return null; }
-  };
-
-  // --- Load data from localStorage (reusable), with global cache fallback ---
-  const loadAllData = useCallback(() => {
-    const cache = (window as any).__dashboardCache || {};
-    const f = safeGet('dashboard_forecastData');
-    if (f) try { setForecastData(JSON.parse(f)); } catch { /* */ }
-    const ir = safeGet('dashboard_itemRevenueData');
-    if (ir) try { setItemRevenueData(JSON.parse(ir)); } catch { /* */ }
-    const b = safeGet('dashboard_bomData');
-    if (b) try { setBomData(JSON.parse(b)); } catch { /* */ }
-    else if (cache.bomData) setBomData(cache.bomData);
-    const m = safeGet('dashboard_pnMapping');
-    if (m) try { setPnMapping(JSON.parse(m)); } catch { /* */ }
-    else if (cache.pnMapping) setPnMapping(cache.pnMapping);
-    const p = safeGet('dashboard_purchaseData');
-    if (p) try { setPurchaseData(JSON.parse(p)); } catch { /* */ }
-    const im = safeGet('dashboard_purchaseItemMaster');
-    if (im) try { setItemMasterData(JSON.parse(im)); } catch { /* */ }
-    console.log('[표준재료비] 데이터 로드 완료', { bomFromCache: !b && !!cache.bomData, pnFromCache: !m && !!cache.pnMapping });
-  }, []);
-
-  // --- Load on mount + listen for changes ---
-  // localStorage 로드 후, 비어있는 데이터는 Supabase에서 병렬 자동 로드
-  const [supabaseLoading, setSupabaseLoading] = useState(false);
-
-  useEffect(() => {
-    loadAllData();
-
-    // Supabase 자동 로드 — 병렬 fetch + 한 번에 setState (useMemo 1회만 트리거)
-    const autoLoadFromSupabase = async () => {
-      if (!isSupabaseConfigured()) return;
-      setSupabaseLoading(true);
-      try {
-        const cache = (window as any).__dashboardCache || {};
-        const needForecast = forecastData.length === 0;
-        const needBom = bomData.length === 0 && !cache.bomData;
-        const needRevenue = itemRevenueData.length === 0;
-        const needPurchase = purchaseData.length === 0;
-        const needRefInfo = masterRefInfo.length === 0;
-        const needMatCodes = masterMaterialCodes.length === 0;
-        const needPurchasePrice = masterPurchasePrices.length === 0;
-        const needOutsourcePrice = masterOutsourcePrices.length === 0;
-        const needPaintMix = masterPaintMixRatios.length === 0;
-        const needItemStdCost = masterItemStandardCosts.length === 0;
-
-        const [fcRes, bomRes, revRes, purRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes] = await Promise.allSettled([
-          needForecast ? forecastService.getItems('current') : Promise.resolve([]),
-          needBom ? bomMasterService.getAll() : Promise.resolve([]),
-          needRevenue ? itemRevenueService.getAll() : Promise.resolve([]),
-          needPurchase ? purchaseService.getAll() : Promise.resolve([]),
-          needRefInfo ? referenceInfoService.getAll() : Promise.resolve([]),
-          needMatCodes ? materialCodeService.getAll() : Promise.resolve([]),
-          needPurchasePrice ? purchasePriceService.getAll() : Promise.resolve([]),
-          needOutsourcePrice ? outsourceInjPriceService.getAll() : Promise.resolve([]),
-          needPaintMix ? paintMixRatioService.getAll() : Promise.resolve([]),
-          needItemStdCost ? itemStandardCostService.getAll() : Promise.resolve([]),
-        ]);
-
-        // 한 번에 setState — React 18+ 자동 배치로 useMemo 1회만 재계산
-        const fc = fcRes.status === 'fulfilled' ? fcRes.value : [];
-        const bom = bomRes.status === 'fulfilled' ? bomRes.value : [];
-        const rev = revRes.status === 'fulfilled' ? revRes.value : [];
-        const pur = purRes.status === 'fulfilled' ? purRes.value : [];
-        const ri = riRes.status === 'fulfilled' ? riRes.value : [];
-        const mc = mcRes.status === 'fulfilled' ? mcRes.value : [];
-        const pp = ppRes.status === 'fulfilled' ? ppRes.value : [];
-        const op = opRes.status === 'fulfilled' ? opRes.value : [];
-        const pm = pmRes.status === 'fulfilled' ? pmRes.value : [];
-        const isc = iscRes.status === 'fulfilled' ? iscRes.value : [];
-
-        if (needForecast && fc.length > 0) setForecastData(fc);
-        if (needBom && bom.length > 0) setBomData(bom as BomRecord[]);
-        if (needRevenue && rev.length > 0) setItemRevenueData(rev);
-        if (needPurchase && pur.length > 0) setPurchaseData(pur);
-        if (needRefInfo && ri.length > 0) setMasterRefInfo(ri);
-        if (needMatCodes && mc.length > 0) setMasterMaterialCodes(mc);
-        if (needPurchasePrice && pp.length > 0) setMasterPurchasePrices(pp as PurchasePrice[]);
-        if (needOutsourcePrice && op.length > 0) setMasterOutsourcePrices(op as OutsourcePrice[]);
-        if (needPaintMix && pm.length > 0) setMasterPaintMixRatios(pm as PaintMixRatio[]);
-        if (needItemStdCost && isc.length > 0) setMasterItemStandardCosts(isc);
-
-        console.log(`[표준재료비] Supabase 병렬 로드 완료: 매출계획 ${fc.length}건, BOM ${bom.length}건, 매출실적 ${rev.length}건, 입고 ${pur.length}건, 기준정보 ${ri.length}건, 재질코드 ${mc.length}건, 구매단가 ${pp.length}건, 외주사출 ${op.length}건, 도료배합 ${pm.length}건, 품목별원가 ${isc.length}건`);
-      } catch (err) {
-        console.error('[표준재료비] Supabase 자동 로드 실패:', err);
-      } finally {
-        setSupabaseLoading(false);
-      }
-    };
-    autoLoadFromSupabase();
-
-    // Cross-tab storage events
-    const onStorage = (e: StorageEvent) => {
-      if (e.key?.startsWith('dashboard_')) loadAllData();
-    };
-    // Same-window custom events (with direct data payload - bypasses localStorage)
-    const onDataUpdate = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail?.key && detail?.data) {
-        const { key, data } = detail;
-        if (key === 'dashboard_bomData') setBomData(data);
-        else if (key === 'dashboard_pnMapping') setPnMapping(data);
-        else if (key === 'dashboard_purchaseData') setPurchaseData(data);
-        else if (key === 'dashboard_forecastData') setForecastData(data);
-        else if (key === 'dashboard_itemRevenueData') setItemRevenueData(data);
-        else if (key === 'dashboard_referenceInfoMaster') setMasterRefInfo(data);
-        else if (key === 'dashboard_materialCodeMaster') setMasterMaterialCodes(data);
-      } else {
-        loadAllData();
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('dashboard-data-updated', onDataUpdate);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('dashboard-data-updated', onDataUpdate);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // --- Available years ---
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -457,11 +223,9 @@ const StandardMaterialCostView: React.FC = () => {
       if (forecastData.length > 0) {
         const monthKey = `m${monthIdx + 1}` as keyof ForecastItem;
         forecastData.forEach(fc => {
-          if (fc.year === selectedYear) {
-            const qty = Number(fc[monthKey] || 0);
-            const price = fc.unitPrice || 0;
-            totalRevenue += qty * price;
-          }
+          const qty = Number(fc[monthKey] || 0);
+          const price = fc.unitPrice || 0;
+          totalRevenue += qty * price;
         });
       }
       if (totalRevenue === 0 && itemRevenueData.length > 0) {
@@ -1522,18 +1286,6 @@ const StandardMaterialCostView: React.FC = () => {
   // ============================================================
   // MONTHLY SUMMARY (12개월 추이)
   // ============================================================
-  interface MonthlySummaryRow {
-    month: string;           // 'Jan', 'Feb', ...
-    monthKr: string;         // '01월', '02월', ...
-    revenue: number;         // 매출액
-    standardCost: number;    // 표준재료비
-    actualCost: number;      // 실적재료비
-    diff: number;            // 차이금액 (표준 - 실적)
-    standardRatio: number;   // 표준재료비율
-    actualRatio: number;     // 실적재료비율
-    achievementRate: number; // 달성율
-  }
-
   const monthlySummary = useMemo<MonthlySummaryRow[]>(() => {
     const hasMasterCosts = pnMapping.some(m => m.materialCost && m.materialCost > 0);
     if (dataMode === 'excel' || (bomData.length === 0 && !hasMasterCosts && !(excelData?.items?.length))) return [];
