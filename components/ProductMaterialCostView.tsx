@@ -181,7 +181,7 @@ const BomTreePopup: React.FC<{
                         }`}>{leaf.partType || '-'}</span>
                       </td>
                       <td className="px-3 py-1.5 text-[10px] text-slate-500 max-w-[100px] truncate" title={leaf.supplier}>
-                        {/구매|외주/.test(leaf.partType) && leaf.supplier ? leaf.supplier : '-'}
+                        {leaf.supplier || '-'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
                       <td className="px-3 py-1.5 text-right font-mono">
@@ -451,17 +451,21 @@ const ProductMaterialCostView: React.FC = () => {
           const leaves = expandBomToLeaves(bomParent, 1, bomRelations);
           bomLeaves = leaves.map(l => {
             const { price, source } = getLeafPrice(l.childPn);
+            // BOM에 유형/구입처가 없으면 기준정보에서 보강
+            const leafRef = refInfoMap.get(normalizePn(l.childPn));
+            const partType = l.partType || leafRef?.processType || leafRef?.supplyType || '';
+            const supplier = l.supplier || leafRef?.supplier || '';
             return {
               childPn: l.childPn,
-              childName: l.childName || '',
+              childName: l.childName || leafRef?.itemName || '',
               qty: 0,
               totalQty: l.totalRequired,
               unitPrice: price,
               cost: l.totalRequired * price,
               priceSource: source,
               depth: 0,
-              partType: l.partType || '',
-              supplier: l.supplier || '',
+              partType,
+              supplier,
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
