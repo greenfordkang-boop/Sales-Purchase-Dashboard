@@ -145,8 +145,13 @@ const BomTreePopup: React.FC<{
               <div className="font-bold">₩{fmt(row.unitPrice)}</div>
             </div>
             <div className="bg-white/15 rounded-lg px-3 py-2">
-              <div className="text-blue-200 text-[10px]">표준재료비</div>
+              <div className="text-blue-200 text-[10px]">
+                재료비{row.hasStdCost ? ' (표준)' : row.hasBom ? ' (BOM)' : ' (기준정보)'}
+              </div>
               <div className="font-bold">₩{fmt(row.materialCost)}</div>
+              {row.hasStdCost && row.bomMaterialCost > 0 && row.stdMaterialCost !== row.bomMaterialCost && (
+                <div className="text-[9px] text-blue-200 mt-0.5">BOM: ₩{fmt(row.bomMaterialCost)}</div>
+              )}
             </div>
             <div className="bg-white/15 rounded-lg px-3 py-2">
               <div className="text-blue-200 text-[10px]">재료비율</div>
@@ -231,6 +236,18 @@ const BomTreePopup: React.FC<{
                     <td colSpan={6} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
                     <td className="px-3 py-2 text-right font-mono font-semibold">₩{fmt(gapFromStd)}</td>
                     <td className="px-3 py-2 text-[10px]">추정치</td>
+                  </tr>
+                )}
+                {/* 표준재료비 < BOM 소계 경고 */}
+                {row.stdMaterialCost > 0 && totalBomCost > row.stdMaterialCost && (
+                  <tr className="bg-red-50 text-red-700">
+                    <td colSpan={6} className="px-3 py-2 text-right text-xs">
+                      표준재료비(₩{fmt(row.stdMaterialCost)}) &lt; BOM 소계(₩{fmt(totalBomCost)}) — 표준재료비 재검토 필요
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-semibold text-red-600">
+                      △₩{fmt(totalBomCost - row.stdMaterialCost)}
+                    </td>
+                    <td className="px-3 py-2 text-[10px]">차이</td>
                   </tr>
                 )}
                 {/* 최종 합계 */}

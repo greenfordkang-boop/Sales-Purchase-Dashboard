@@ -129,11 +129,13 @@ export function expandForwardTree(
 
     const childRef = refInfoMap?.get(childNorm);
 
-    // 원재료/구매 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
-    const isLeafType = /원재료|구매/.test(child.partType || '');
+    // 원재료/구매/외주 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
+    const isLeafType = /원재료|구매|외주/.test(child.partType || '');
+    // 기준정보에서 구매/외주로 확인된 품목도 leaf 처리
+    const isRefLeaf = childRef && /구매|외주/.test(childRef.supplyType || '');
 
     let childNode: BomTreeNode;
-    if (isLeafType) {
+    if (isLeafType || isRefLeaf) {
       childNode = {
         pn: child.childPn,
         name: child.childName || childRef?.itemName || '',
@@ -162,11 +164,11 @@ export function expandForwardTree(
       );
     }
 
-    // child 정보 업데이트
+    // child 정보 업데이트 (BOM → refInfo fallback)
     childNode.name = child.childName || childRef?.itemName || childNode.name;
     childNode.unitQty = child.qty;
-    childNode.partType = child.partType || '';
-    childNode.supplier = child.supplier || '';
+    childNode.partType = child.partType || childRef?.processType || childRef?.supplyType || '';
+    childNode.supplier = child.supplier || childRef?.supplier || '';
 
     if (childRef) {
       childNode.netWeight = childRef.netWeight || undefined;
