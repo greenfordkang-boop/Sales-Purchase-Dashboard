@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
@@ -273,6 +274,9 @@ const ProductMaterialCostView: React.FC = () => {
   const [filterStage, setFilterStage] = useState('전체');
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
+  const [materialPriceUploading, setMaterialPriceUploading] = useState(false);
+  const [materialPriceMsg, setMaterialPriceMsg] = useState('');
+  const materialPriceFileRef = useRef<HTMLInputElement>(null);
 
   // 데이터 로드 + 계산
   useEffect(() => {
@@ -710,6 +714,98 @@ const ProductMaterialCostView: React.FC = () => {
     downloadCSV(`제품별_재료비_${new Date().toISOString().slice(0, 10)}.csv`, headers, csvRows);
   };
 
+  const handleMaterialPriceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // reset input so same file can be re-uploaded
+    e.target.value = '';
+
+    setMaterialPriceUploading(true);
+    setMaterialPriceMsg('');
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+      // 헤더 행 자동 탐색
+      const codePattern = /재질코드|material.*code/i;
+      const pricePattern = /단가|가격|price|현재단가|current.*price/i;
+
+      let headerRowIdx = -1;
+      let codeColIdx = -1;
+      let priceColIdx = -1;
+
+      for (let ri = 0; ri < Math.min(rows.length, 20); ri++) {
+        const row = rows[ri];
+        if (!Array.isArray(row)) continue;
+        for (let ci = 0; ci < row.length; ci++) {
+          const cell = String(row[ci] || '').trim();
+          if (codePattern.test(cell)) codeColIdx = ci;
+          if (pricePattern.test(cell)) priceColIdx = ci;
+        }
+        if (codeColIdx >= 0 && priceColIdx >= 0) {
+          headerRowIdx = ri;
+          break;
+        }
+        // reset if only partial match on this row
+        codeColIdx = -1;
+        priceColIdx = -1;
+      }
+
+      if (headerRowIdx === -1 || codeColIdx < 0 || priceColIdx < 0) {
+        setMaterialPriceMsg('헤더를 찾을 수 없습니다. "재질코드"와 "단가" 컬럼이 필요합니다.');
+        setMaterialPriceUploading(false);
+        return;
+      }
+
+      // 재질코드 → 단가 Map 생성
+      const priceFromExcel = new Map<string, number>();
+      for (let ri = headerRowIdx + 1; ri < rows.length; ri++) {
+        const row = rows[ri];
+        if (!Array.isArray(row)) continue;
+        const code = String(row[codeColIdx] || '').trim().toUpperCase();
+        const price = Number(row[priceColIdx]);
+        if (code && !isNaN(price) && price > 0) {
+          priceFromExcel.set(code, price);
+        }
+      }
+
+      if (priceFromExcel.size === 0) {
+        setMaterialPriceMsg('유효한 단가 데이터가 없습니다.');
+        setMaterialPriceUploading(false);
+        return;
+      }
+
+      // 기존 materialCodes 가져와서 병합
+      const existingCodes = await materialCodeService.getAll();
+      let updatedCount = 0;
+      const merged = existingCodes.map(mc => {
+        const key = mc.materialCode.trim().toUpperCase();
+        const newPrice = priceFromExcel.get(key);
+        if (newPrice !== undefined) {
+          updatedCount++;
+          return { ...mc, currentPrice: newPrice };
+        }
+        return mc;
+      });
+
+      // 저장
+      await materialCodeService.saveAll(merged);
+
+      // 화면 갱신
+      await loadData();
+
+      setMaterialPriceMsg(`${priceFromExcel.size}건 중 ${updatedCount}건 단가 업데이트 완료`);
+    } catch (err) {
+      console.error('재질단가 업로드 오류:', err);
+      setMaterialPriceMsg('업로드 실패: ' + (err instanceof Error ? err.message : '알 수 없는 오류'));
+    } finally {
+      setMaterialPriceUploading(false);
+    }
+  };
+
   const SortHeader: React.FC<{ label: string; k: keyof ProductRow; align?: string }> = ({ label, k, align = 'left' }) => (
     <th
       className={`px-3 py-2.5 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
@@ -792,6 +888,25 @@ const ProductMaterialCostView: React.FC = () => {
           className="px-4 py-2 bg-emerald-500 text-white text-sm rounded-lg hover:bg-emerald-600 transition-colors">
           Excel 내보내기
         </button>
+        <button
+          onClick={() => materialPriceFileRef.current?.click()}
+          disabled={materialPriceUploading}
+          className="px-4 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600 transition-colors disabled:opacity-50"
+        >
+          {materialPriceUploading ? '업로드 중...' : '재질단가 업로드'}
+        </button>
+        <input
+          ref={materialPriceFileRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          className="hidden"
+          onChange={handleMaterialPriceUpload}
+        />
+        {materialPriceMsg && (
+          <span className={`text-xs font-medium ${materialPriceMsg.includes('실패') || materialPriceMsg.includes('없습니다') ? 'text-red-600' : 'text-blue-600'}`}>
+            {materialPriceMsg}
+          </span>
+        )}
       </div>
 
       {/* 테이블 */}

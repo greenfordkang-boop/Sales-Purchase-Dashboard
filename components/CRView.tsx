@@ -3,7 +3,7 @@ import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
 import { parseCIExcel, CIDetailItem, CIParseResult } from '../utils/ciDataParser';
 import { ForecastSummary } from '../utils/salesForecastParser';
-import { ciKpiService, ciDetailService, ciUploadService } from '../services/supabaseService';
+import { ciKpiService, ciDetailService, ciUploadService, forecastService } from '../services/supabaseService';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 // ============================================
@@ -118,13 +118,13 @@ const CRView: React.FC = () => {
   const [editValue, setEditValue] = useState('');
 
   // --- Forecast data (매출계획) ---
-  const forecastSummary = useMemo<ForecastSummary | null>(() => {
+  const [forecastSummary, setForecastSummary] = useState<ForecastSummary | null>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY_FORECAST_SUMMARY);
       if (stored) return JSON.parse(stored);
     } catch { /* ignore */ }
     return null;
-  }, []);
+  });
 
   // Monthly 매출계획 in 백만원
   const monthlySalesPlan = useMemo(() => {
@@ -161,20 +161,34 @@ const CRView: React.FC = () => {
     }
     (async () => {
       try {
-        const [kpi, details, uploadRecords] = await Promise.all([
+        const [kpi, details, uploadRecords, summary] = await Promise.all([
           ciKpiService.get(),
           ciDetailService.getAll(),
           ciUploadService.getAll(),
+          forecastService.getSummary('current'),
         ]);
         if (kpi) setKpiData(kpi);
         if (details && Object.keys(details).length > 0) setCiDetailsByMonth(details);
         if (uploadRecords && uploadRecords.length > 0) setUploads(uploadRecords);
+        if (summary) setForecastSummary(summary);
       } catch (e) {
         console.error('CI data load from Supabase error:', e);
       } finally {
         initialLoadDone.current = true;
       }
     })();
+  }, []);
+
+  // --- Refresh forecast on data update event ---
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        const summary = await forecastService.getSummary('current');
+        if (summary) setForecastSummary(summary);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('dashboard-data-updated', handler);
+    return () => window.removeEventListener('dashboard-data-updated', handler);
   }, []);
 
   // ============================================
