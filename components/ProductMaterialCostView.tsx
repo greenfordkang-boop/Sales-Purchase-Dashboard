@@ -13,6 +13,17 @@ import { downloadCSV } from '../utils/csvExport';
 // Types
 // ============================================================
 
+interface CalcDetail {
+  netWeight: number;
+  runnerWeight: number;
+  cavity: number;
+  lossRate: number;
+  materialPrice: number;   // ₩/kg
+  materialCode: string;
+  weightPerEa: number;
+  result: number;
+}
+
 interface BomLeaf {
   childPn: string;
   childName: string;
@@ -24,6 +35,7 @@ interface BomLeaf {
   depth: number;
   partType: string;
   supplier: string;  // 구입처/협력업체
+  calcDetail?: CalcDetail;
 }
 
 interface ProductRow {
@@ -79,6 +91,56 @@ const MONTH_OPTIONS = [
 // BOM Tree Popup Component
 // ============================================================
 
+// 사출재료비 산출근거 호버 팝업
+const CalcDetailTooltip: React.FC<{ detail: CalcDetail }> = ({ detail }) => {
+  const { netWeight, runnerWeight, cavity, lossRate, materialPrice, materialCode, weightPerEa, result } = detail;
+  return (
+    <div className="absolute z-[200] right-0 bottom-full mb-2 bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 min-w-[300px] text-left pointer-events-none">
+      <div className="text-[10px] font-bold text-amber-300 mb-2">사출재료비 산출근거</div>
+      <div className="space-y-1.5 text-[11px]">
+        <div className="flex justify-between">
+          <span className="text-slate-300">재질코드</span>
+          <span className="font-mono text-indigo-300">{materialCode}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-300">재질단가</span>
+          <span className="font-mono text-white">₩{Math.round(materialPrice).toLocaleString()}/kg</span>
+        </div>
+        <div className="border-t border-slate-600 my-1" />
+        <div className="flex justify-between">
+          <span className="text-slate-300">순중량 (NET)</span>
+          <span className="font-mono text-white">{netWeight}g</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-300">러너중량</span>
+          <span className="font-mono text-white">{runnerWeight}g</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-300">캐비티</span>
+          <span className="font-mono text-white">{cavity}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-300">EA당중량</span>
+          <span className="font-mono text-cyan-300">{weightPerEa.toFixed(2)}g</span>
+        </div>
+        <div className="text-[10px] text-slate-400 pl-2">= {netWeight} + {runnerWeight}/{cavity}</div>
+        <div className="flex justify-between">
+          <span className="text-slate-300">Loss율</span>
+          <span className="font-mono text-white">{lossRate}%</span>
+        </div>
+        <div className="border-t border-slate-600 my-1" />
+        <div className="text-[10px] text-slate-400">
+          = ({weightPerEa.toFixed(2)}g × ₩{Math.round(materialPrice).toLocaleString()} / 1000) × (1 + {lossRate}%)
+        </div>
+        <div className="flex justify-between items-center pt-1">
+          <span className="text-amber-300 font-bold">사출재료비</span>
+          <span className="font-mono text-amber-300 font-black text-sm">₩{Math.round(result).toLocaleString()}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BomTreePopup: React.FC<{
   row: ProductRow;
   onClose: () => void;
@@ -86,6 +148,7 @@ const BomTreePopup: React.FC<{
 }> = ({ row, onClose, onPriceUpdate }) => {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [hoveringCalcIdx, setHoveringCalcIdx] = useState<number | null>(null);
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
@@ -193,7 +256,7 @@ const BomTreePopup: React.FC<{
                         {leaf.supplier || '-'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono">
+                      <td className="px-3 py-1.5 text-right font-mono relative">
                         {editingIdx === i ? (
                           <input
                             type="number"
@@ -207,13 +270,21 @@ const BomTreePopup: React.FC<{
                         ) : (
                           <span
                             className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
-                              leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' : 'text-slate-700 border-b border-dashed border-slate-300'
+                              leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                              leaf.calcDetail ? 'text-amber-700 border-b border-dashed border-amber-400' :
+                              'text-slate-700 border-b border-dashed border-slate-300'
                             }`}
                             onClick={() => handlePriceClick(i)}
-                            title="클릭하여 단가 수정"
+                            onMouseEnter={() => leaf.calcDetail && setHoveringCalcIdx(i)}
+                            onMouseLeave={() => setHoveringCalcIdx(null)}
+                            title={leaf.calcDetail ? '호버: 산출근거 | 클릭: 단가 수정' : '클릭하여 단가 수정'}
                           >
                             ₩{fmt(leaf.unitPrice)}
+                            {leaf.calcDetail && <span className="ml-0.5 text-[9px] text-amber-500">&#9432;</span>}
                           </span>
+                        )}
+                        {hoveringCalcIdx === i && leaf.calcDetail && (
+                          <CalcDetailTooltip detail={leaf.calcDetail} />
                         )}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono font-semibold">₩{fmt(leaf.cost)}</td>
@@ -454,7 +525,7 @@ const ProductMaterialCostView: React.FC = () => {
       }
 
       // leaf 가격 조회
-      function getLeafPrice(leafCode: string): { price: number; source: string } {
+      function getLeafPrice(leafCode: string): { price: number; source: string; calcDetail?: CalcDetail } {
         const code = normalizePn(leafCode);
         // 1) 표준재료비 EA단가
         const std = stdCostMap.get(code);
@@ -490,7 +561,15 @@ const ProductMaterialCostView: React.FC = () => {
                 const loss = ri.lossRate || 0;
                 const weightPerEa = nw + rw / cavity;
                 const cost = (weightPerEa * rp / 1000) * (1 + loss / 100);
-                return { price: cost, source: `사출(${nw}g)` };
+                return {
+                  price: cost,
+                  source: `사출(${nw}g)`,
+                  calcDetail: {
+                    netWeight: nw, runnerWeight: rw, cavity, lossRate: loss,
+                    materialPrice: rp, materialCode: raw,
+                    weightPerEa, result: cost,
+                  },
+                };
               }
               return { price: rp, source: '원재료' };
             }
@@ -545,7 +624,7 @@ const ProductMaterialCostView: React.FC = () => {
         if (bomParent) {
           const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns);
           bomLeaves = leaves.map(l => {
-            const { price, source } = getLeafPrice(l.childPn);
+            const { price, source, calcDetail } = getLeafPrice(l.childPn);
             // BOM에 유형/구입처가 없으면 기준정보에서 보강
             const leafRef = refInfoMap.get(normalizePn(l.childPn));
             const partType = l.partType || leafRef?.processType || leafRef?.supplyType || '';
@@ -561,6 +640,7 @@ const ProductMaterialCostView: React.FC = () => {
               depth: 0,
               partType,
               supplier,
+              calcDetail,
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
@@ -669,6 +749,11 @@ const ProductMaterialCostView: React.FC = () => {
                     qty: nw, totalQty: weightPerEa / 1000,
                     unitPrice: rawPrice, cost: injCost,
                     priceSource: '기준정보 산출', depth: 0, partType: '사출', supplier: '',
+                    calcDetail: {
+                      netWeight: nw, runnerWeight: rw, cavity, lossRate,
+                      materialPrice: rawPrice, materialCode: raw,
+                      weightPerEa, result: injCost,
+                    },
                   });
                   break;
                 }

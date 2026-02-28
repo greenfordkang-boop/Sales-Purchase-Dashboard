@@ -4,8 +4,14 @@ import {
   BomMasterRecord,
   ProductCodeRecord,
   ReferenceInfoRecord,
+  MaterialCodeRecord,
 } from '../utils/bomMasterParser';
 import { normalizePn } from '../utils/bomDataParser';
+import {
+  PurchasePrice,
+  OutsourcePrice,
+  ItemStandardCost,
+} from '../utils/standardMaterialParser';
 import {
   buildForwardMap,
   buildReverseMap,
@@ -27,6 +33,10 @@ import {
   bomMasterService,
   productCodeService,
   referenceInfoService,
+  materialCodeService,
+  purchasePriceService,
+  outsourceInjPriceService,
+  itemStandardCostService,
 } from '../services/supabaseService';
 
 // ============================================
@@ -38,6 +48,10 @@ const BomExplosionView: React.FC = () => {
   const [bomRecords, setBomRecords] = useState<BomMasterRecord[]>([]);
   const [productCodes, setProductCodes] = useState<ProductCodeRecord[]>([]);
   const [refInfo, setRefInfo] = useState<ReferenceInfoRecord[]>([]);
+  const [materialCodes, setMaterialCodes] = useState<MaterialCodeRecord[]>([]);
+  const [purchasePrices, setPurchasePrices] = useState<PurchasePrice[]>([]);
+  const [outsourcePrices, setOutsourcePrices] = useState<OutsourcePrice[]>([]);
+  const [stdCosts, setStdCosts] = useState<ItemStandardCost[]>([]);
   const [loading, setLoading] = useState(true);
 
   // --- Search State ---
@@ -54,22 +68,35 @@ const BomExplosionView: React.FC = () => {
   // --- Tree State ---
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
 
+  // --- Price Edit State ---
+  const [editingPriceKey, setEditingPriceKey] = useState<string>('');
+  const [editPriceValue, setEditPriceValue] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
   // --- Data Load ---
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      const [bom, pc, ri] = await Promise.all([
-        bomMasterService.getAll(),
-        productCodeService.getAll(),
-        referenceInfoService.getAll(),
-      ]);
-      setBomRecords(bom);
-      setProductCodes(pc);
-      setRefInfo(ri);
-      setLoading(false);
-    };
-    loadData();
+  const loadAllData = useCallback(async () => {
+    setLoading(true);
+    const [bom, pc, ri, mc, pp, op, sc] = await Promise.all([
+      bomMasterService.getAll(),
+      productCodeService.getAll(),
+      referenceInfoService.getAll(),
+      materialCodeService.getAll(),
+      purchasePriceService.getAll(),
+      outsourceInjPriceService.getAll(),
+      itemStandardCostService.getAll(),
+    ]);
+    setBomRecords(bom);
+    setProductCodes(pc);
+    setRefInfo(ri);
+    setMaterialCodes(mc);
+    setPurchasePrices(pp);
+    setOutsourcePrices(op);
+    setStdCosts(sc);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { loadAllData(); }, [loadAllData]);
 
   // --- Derived Maps (useMemo) ---
   const forwardMap = useMemo(() => buildForwardMap(bomRecords), [bomRecords]);
@@ -79,6 +106,85 @@ const BomExplosionView: React.FC = () => {
     () => buildSearchIndex(bomRecords, productCodes, refInfo),
     [bomRecords, productCodes, refInfo],
   );
+
+  // --- Price Maps ---
+  const priceData = useMemo(() => {
+    // 재질코드 단가 맵
+    const matPriceMap = new Map<string, number>();
+    const materialTypeMap = new Map<string, string>();
+    for (const mc of materialCodes) {
+      if (mc.currentPrice > 0) matPriceMap.set(normalizePn(mc.materialCode), mc.currentPrice);
+      materialTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
+    }
+    // 구매단가 맵
+    const purchaseMap = new Map<string, number>();
+    for (const pp of purchasePrices) {
+      if (pp.currentPrice > 0) {
+        purchaseMap.set(normalizePn(pp.itemCode), pp.currentPrice);
+        if (pp.customerPn) purchaseMap.set(normalizePn(pp.customerPn), pp.currentPrice);
+      }
+    }
+    // 외주사출판매가 맵
+    const outsourceMap = new Map<string, number>();
+    for (const op of outsourcePrices) {
+      if (op.injectionPrice > 0) {
+        outsourceMap.set(normalizePn(op.itemCode), op.injectionPrice);
+        if (op.customerPn) outsourceMap.set(normalizePn(op.customerPn), op.injectionPrice);
+      }
+    }
+    // 표준재료비 맵
+    const stdMap = new Map<string, number>();
+    for (const sc of stdCosts) {
+      const costVal = sc.material_cost_per_ea || (sc.resin_cost_per_ea + sc.paint_cost_per_ea);
+      if (costVal > 0) {
+        stdMap.set(normalizePn(sc.item_code), costVal);
+        if (sc.customer_pn) stdMap.set(normalizePn(sc.customer_pn), costVal);
+      }
+    }
+    return { matPriceMap, materialTypeMap, purchaseMap, outsourceMap, stdMap };
+  }, [materialCodes, purchasePrices, outsourcePrices, stdCosts]);
+
+  // --- getNodePrice: 단가 조회 ---
+  const getNodePrice = useCallback((pn: string): { price: number; source: string } => {
+    const code = normalizePn(pn);
+    const { matPriceMap, materialTypeMap, purchaseMap, outsourceMap, stdMap } = priceData;
+    // 1) 표준재료비
+    const std = stdMap.get(code);
+    if (std && std > 0) return { price: std, source: '표준' };
+    // 2) 재질코드 직접
+    const dp = matPriceMap.get(code);
+    if (dp && dp > 0) return { price: dp, source: '재질' };
+    // 3) 구매단가
+    const pp = purchaseMap.get(code);
+    if (pp && pp > 0) {
+      const ri = refInfoMap.get(code);
+      if (ri && /외주/.test(ri.supplyType || '')) {
+        const op = outsourceMap.get(code) || 0;
+        return { price: Math.max(0, pp - op), source: op > 0 ? '외주' : '구매' };
+      }
+      return { price: pp, source: '구매' };
+    }
+    // 4) 사출공식: rawMaterialCode + netWeight
+    const ri = refInfoMap.get(code);
+    if (ri) {
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
+      for (const raw of rawCodes) {
+        const rawNorm = normalizePn(raw);
+        const matType = materialTypeMap.get(rawNorm) || '';
+        if (/PAINT|도료/i.test(matType)) continue;
+        const rp = matPriceMap.get(rawNorm);
+        if (rp && rp > 0 && ri.netWeight && ri.netWeight > 0) {
+          const rw = ri.runnerWeight || 0;
+          const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+          const loss = ri.lossRate || 0;
+          const wpe = ri.netWeight + rw / cavity;
+          const cost = (wpe * rp / 1000) * (1 + loss / 100);
+          return { price: cost, source: '사출' };
+        }
+      }
+    }
+    return { price: 0, source: '' };
+  }, [priceData, refInfoMap]);
 
   // --- Debounce ---
   useEffect(() => {
@@ -156,22 +262,46 @@ const BomExplosionView: React.FC = () => {
     });
   }, []);
 
+  // --- Price Save Handler ---
+  const handlePriceSave = useCallback(async (pn: string) => {
+    const val = parseFloat(editPriceValue);
+    if (isNaN(val) || val < 0) { setEditingPriceKey(''); return; }
+    setSavingPrice(true);
+    const code = normalizePn(pn);
+    // 재질코드에 있으면 materialCodeService, 아니면 purchasePriceService
+    const isMaterialCode = materialCodes.some(m => normalizePn(m.materialCode) === code);
+    let ok: boolean;
+    if (isMaterialCode) {
+      ok = await materialCodeService.updatePrice(pn, val);
+    } else {
+      ok = await purchasePriceService.updatePrice(pn, val);
+    }
+    setSavingPrice(false);
+    setEditingPriceKey('');
+    if (ok) {
+      // 데이터 리로드
+      const [mc, pp] = await Promise.all([
+        materialCodeService.getAll(),
+        purchasePriceService.getAll(),
+      ]);
+      setMaterialCodes(mc);
+      setPurchasePrices(pp);
+    }
+  }, [editPriceValue, materialCodes]);
+
   const handleDownloadForward = useCallback(() => {
     if (!flatRows.length) return;
-    const headers = ['레벨', '품번', '품명', '단위소요량', '누적소요량', '부품유형', '협력업체', '공정유형', '조달구분'];
-    const rows = flatRows.map(r => [
-      r.level,
-      r.pn,
-      r.name,
-      r.unitQty,
-      r.cumulativeQty,
-      r.partType,
-      r.supplier,
-      r.processType,
-      r.supplyType,
-    ]);
+    const headers = ['레벨', '품번', '품명', '단위소요량', '누적소요량', '부품유형', '협력업체', '공정유형', '조달구분', '단가', '단가출처', '금액'];
+    const rows = flatRows.map(r => {
+      const { price, source } = getNodePrice(r.pn);
+      return [
+        r.level, r.pn, r.name, r.unitQty, r.cumulativeQty,
+        r.partType, r.supplier, r.processType, r.supplyType,
+        Math.round(price), source, Math.round(r.cumulativeQty * price),
+      ];
+    });
     downloadCSV(`BOM정전개_${selectedPn}`, headers, rows);
-  }, [flatRows, selectedPn]);
+  }, [flatRows, selectedPn, getNodePrice]);
 
   const handleDownloadReverse = useCallback(() => {
     if (!reversePaths.length) return;
@@ -328,6 +458,53 @@ const BomExplosionView: React.FC = () => {
         <td className="px-3 py-2 text-xs text-slate-500">{node.supplier}</td>
         <td className="px-3 py-2 text-xs text-slate-400">{node.processType || ''}</td>
         <td className="px-3 py-2 text-xs text-slate-400">{node.supplyType || ''}</td>
+        {/* 단가 (editable) */}
+        {(() => {
+          const { price, source } = getNodePrice(node.pn);
+          const isEditing = editingPriceKey === nodeKey;
+          const cost = node.qty * price;
+          return (
+            <>
+              <td className="px-2 py-2 text-right text-xs font-mono w-24">
+                {isEditing ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      ref={editInputRef}
+                      type="number"
+                      value={editPriceValue}
+                      onChange={(e) => setEditPriceValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handlePriceSave(node.pn);
+                        if (e.key === 'Escape') setEditingPriceKey('');
+                      }}
+                      onBlur={() => handlePriceSave(node.pn)}
+                      className="w-20 px-1 py-0.5 border border-indigo-300 rounded text-right text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+                      autoFocus
+                      disabled={savingPrice}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setEditingPriceKey(nodeKey);
+                      setEditPriceValue(price > 0 ? String(Math.round(price)) : '');
+                    }}
+                    className={`cursor-pointer hover:bg-indigo-50 px-1.5 py-0.5 rounded transition-colors w-full text-right ${
+                      price > 0 ? 'text-slate-700' : 'text-slate-300'
+                    }`}
+                    title={source ? `출처: ${source} — 클릭하여 수정` : '클릭하여 단가 입력'}
+                  >
+                    {price > 0 ? `₩${Math.round(price).toLocaleString()}` : '-'}
+                    {source && <span className="ml-1 text-[9px] text-slate-400">{source}</span>}
+                  </button>
+                )}
+              </td>
+              <td className="px-2 py-2 text-right text-xs font-mono text-slate-600 w-24">
+                {price > 0 ? `₩${Math.round(cost).toLocaleString()}` : ''}
+              </td>
+            </>
+          );
+        })()}
       </tr>,
     );
 
@@ -553,6 +730,8 @@ const BomExplosionView: React.FC = () => {
                       <th className="px-3 py-2.5 w-24">협력업체</th>
                       <th className="px-3 py-2.5 w-20">공정</th>
                       <th className="px-3 py-2.5 w-20">조달</th>
+                      <th className="px-2 py-2.5 text-right w-24">단가</th>
+                      <th className="px-2 py-2.5 text-right w-24">금액</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
