@@ -50,6 +50,9 @@ interface ProductRow {
   forecastMonthlyRevenue: number[]; // 월별 계획 매출 [0..11]
   dataQuality: 'high' | 'medium' | 'low'; // 데이터 품질
   paintCost: number;               // 도장재료비 (기준정보 기반)
+  processType: string;             // 부품유형 (사출, 도장, 조립 등)
+  supplyType: string;              // 조달구분 (자작, 구매, 외주)
+  supplier: string;                // 협력업체
 }
 
 // ============================================================
@@ -660,6 +663,9 @@ const ProductMaterialCostView: React.FC = () => {
           forecastMonthlyRevenue: f.monthlyRevenue || new Array(12).fill(0),
           dataQuality,
           paintCost,
+          processType: productRef?.processType || '',
+          supplyType: productRef?.supplyType || '',
+          supplier: productRef?.supplier || '',
         });
       }
 
@@ -773,7 +779,10 @@ const ProductMaterialCostView: React.FC = () => {
         x.partNo.toLowerCase().includes(f) ||
         x.newPartNo.toLowerCase().includes(f) ||
         x.partName.toLowerCase().includes(f) ||
-        x.category.toLowerCase().includes(f)
+        x.category.toLowerCase().includes(f) ||
+        x.processType.toLowerCase().includes(f) ||
+        x.supplyType.toLowerCase().includes(f) ||
+        x.supplier.toLowerCase().includes(f)
       );
     }
     // 정렬
@@ -811,9 +820,10 @@ const ProductMaterialCostView: React.FC = () => {
 
   const handleDownload = () => {
     const pLabel = selectedMonth === 'all' ? '연간' : `${parseInt(selectedMonth)}월`;
-    const headers = ['거래선', '차종', '단계', 'P.N', 'NEW P.N', 'Type', '구분', '품목명', '판매단가', '표준재료비', '재료비율%', `${pLabel}수량`, `${pLabel}매출`, `${pLabel}재료비`, 'BOM', '표준단가'];
+    const headers = ['거래선', '차종', '단계', 'P.N', 'NEW P.N', '품목명', 'Type', '구분', '부품유형', '조달구분', '협력업체', '판매단가', '표준재료비', '재료비율%', `${pLabel}수량`, `${pLabel}매출`, `${pLabel}재료비`, 'BOM', '표준단가'];
     const csvRows = filtered.map(r => [
-      r.customer, r.model, r.stage, r.partNo, r.newPartNo, r.type, r.category, r.partName,
+      r.customer, r.model, r.stage, r.partNo, r.newPartNo, r.partName,
+      r.type, r.category, r.processType, r.supplyType, r.supplier,
       String(Math.round(r.unitPrice)), String(Math.round(r.materialCost)), r.materialRatio.toFixed(1),
       String(r.yearlyQty), String(Math.round(r.yearlyRevenue)), String(Math.round(r.yearlyMaterialCost)),
       r.hasBom ? 'O' : 'X', r.hasStdCost ? 'O' : 'X',
@@ -1027,8 +1037,12 @@ const ProductMaterialCostView: React.FC = () => {
                 <SortHeader label="단계" k="stage" />
                 <th className="px-3 py-2.5 text-left whitespace-nowrap">P.N</th>
                 <th className="px-3 py-2.5 text-left whitespace-nowrap">NEW P.N</th>
+                <SortHeader label="품목명" k="partName" />
                 <SortHeader label="Type" k="type" />
                 <SortHeader label="구분" k="category" />
+                <SortHeader label="부품유형" k="processType" />
+                <SortHeader label="조달" k="supplyType" />
+                <SortHeader label="협력업체" k="supplier" />
                 <SortHeader label="판매단가" k="unitPrice" align="right" />
                 <SortHeader label="표준재료비" k="materialCost" align="right" />
                 <SortHeader label="재료비율" k="materialRatio" align="right" />
@@ -1056,10 +1070,32 @@ const ProductMaterialCostView: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px]">{r.partNo}</td>
                     <td className="px-3 py-2 font-mono text-[11px]">{r.newPartNo}</td>
+                    <td className="px-3 py-2 max-w-[120px] truncate text-[11px]" title={r.partName}>{r.partName || '-'}</td>
                     <td className="px-3 py-2">{r.type || '-'}</td>
                     <td className="px-3 py-2">
                       <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{r.category || '-'}</span>
                     </td>
+                    <td className="px-3 py-2">
+                      {r.processType ? (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          /사출/.test(r.processType) ? 'bg-blue-100 text-blue-700' :
+                          /도장/.test(r.processType) ? 'bg-purple-100 text-purple-700' :
+                          /조립/.test(r.processType) ? 'bg-teal-100 text-teal-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{r.processType}</span>
+                      ) : <span className="text-slate-300">-</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.supplyType ? (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          r.supplyType === '자작' ? 'bg-green-100 text-green-700' :
+                          r.supplyType === '구매' ? 'bg-amber-100 text-amber-700' :
+                          r.supplyType.includes('외주') ? 'bg-orange-100 text-orange-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{r.supplyType}</span>
+                      ) : <span className="text-slate-300">-</span>}
+                    </td>
+                    <td className="px-3 py-2 text-[10px] text-slate-600 max-w-[100px] truncate" title={r.supplier}>{r.supplier || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.unitPrice)}</td>
                     <td
                       className="px-3 py-2 text-right font-mono font-semibold cursor-pointer hover:bg-blue-100 rounded transition-colors relative group"
