@@ -8,6 +8,7 @@ import PurchaseView from './components/PurchaseView';
 import InventoryView from './components/InventoryView';
 import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
+import UserGuideModal from './components/UserGuideModal';
 import {
   signIn,
   signUp,
@@ -40,6 +41,7 @@ const App: React.FC = () => {
 
   // 대시보드 상태
   const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(DashboardTab.OVERVIEW);
+  const [showGuide, setShowGuide] = useState(false);
 
   // 관리자 패널 상태
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -489,6 +491,15 @@ const App: React.FC = () => {
         </div>
         <div className="flex items-center gap-4">
           <SyncStatus />
+          <button
+            onClick={() => setShowGuide(true)}
+            className="text-slate-400 hover:text-emerald-400 transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+            title="사용설명서"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
           <span className="text-xs text-slate-400 font-medium">
             {userProfile?.display_name || currentUser?.email?.split('@')[0]}
             {isAdmin(currentUser?.email) && ' (관리자)'}
@@ -516,6 +527,8 @@ const App: React.FC = () => {
           {activeTab === 'admin' && isAdmin(currentUser?.email) && renderAdminPanel()}
         </div>
       </main>
+
+      <UserGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
         신성오토텍 영업/구매 대시보드 v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}
