@@ -116,8 +116,9 @@ export function calcPaintCost(
   let totalPaintCost = 0;
 
   // 각 도 (1~3도) 처리
+  // 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도에 도료코드 저장
   const paintQtys = [product.paintQty1, product.paintQty2, product.paintQty3];
-  const paintCodes = [product.rawMaterialCode3, product.rawMaterialCode4, ''];
+  const paintCodes = [product.rawMaterialCode1, product.rawMaterialCode2, product.rawMaterialCode3];
 
   for (let d = 0; d < 3; d++) {
     const qty = paintQtys[d];

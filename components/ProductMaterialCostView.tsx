@@ -4,7 +4,8 @@ import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '..
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
-import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService, purchasePriceService, outsourceInjPriceService } from '../services/supabaseService';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService, purchasePriceService, outsourceInjPriceService, paintMixRatioService } from '../services/supabaseService';
+import { PaintMixRatio } from '../utils/standardMaterialParser';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import { downloadCSV } from '../utils/csvExport';
@@ -834,7 +835,7 @@ const ProductMaterialCostView: React.FC = () => {
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts, purchasePrices, outsourcePrices] = await Promise.all([
+      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts, purchasePrices, outsourcePrices, paintMixRatios] = await Promise.all([
         forecastService.getItems('current'),
         bomMasterService.getAll(),
         productCodeService.getAll(),
@@ -844,6 +845,7 @@ const ProductMaterialCostView: React.FC = () => {
         itemStandardCostService.getAll(),
         purchasePriceService.getAll(),
         outsourceInjPriceService.getAll(),
+        paintMixRatioService.getAll(),
       ]);
 
       setActualRevenue(revenueData || []);
@@ -918,6 +920,34 @@ const ProductMaterialCostView: React.FC = () => {
         materialTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
         materialNameMap.set(normalizePn(mc.materialCode), mc.materialName || '');
       }
+
+      // 도료배합비율 맵 (calcPaintCost와 동일한 로직)
+      const paintMixMap = new Map<string, PaintMixRatio>();
+      for (const pm of paintMixRatios) {
+        // 배합비율에 없는 단가는 재질단가에서 보강
+        const enriched: PaintMixRatio = {
+          ...pm,
+          mainPrice: pm.mainPrice > 0 ? pm.mainPrice : (pm.mainCode ? priceMap.get(normalizePn(pm.mainCode)) || 0 : 0),
+          hardenerPrice: pm.hardenerPrice > 0 ? pm.hardenerPrice : (pm.hardenerCode ? priceMap.get(normalizePn(pm.hardenerCode)) || 0 : 0),
+          thinnerPrice: pm.thinnerPrice > 0 ? pm.thinnerPrice : (pm.thinnerCode ? priceMap.get(normalizePn(pm.thinnerCode)) || 0 : 0),
+        };
+        if (pm.paintCode) paintMixMap.set(normalizePn(pm.paintCode), enriched);
+        if (pm.mainCode) paintMixMap.set(normalizePn(pm.mainCode), enriched);
+      }
+
+      // 도료단가 헬퍼: paintMixMap → 배합가, fallback → priceMap 직접 조회
+      const getPaintBlendedPrice = (paintCode: string): { price: number; name: string } => {
+        const norm = normalizePn(paintCode);
+        const mix = paintMixMap.get(norm);
+        if (mix) {
+          const mainR = mix.mainRatio > 0 ? mix.mainRatio / 100 : 1;
+          const hardR = mix.hardenerRatio > 0 ? mix.hardenerRatio / 100 : 0;
+          const thinR = mix.thinnerRatio > 0 ? mix.thinnerRatio / 100 : 0;
+          const blended = mix.mainPrice * mainR + mix.hardenerPrice * hardR + mix.thinnerPrice * thinR;
+          return { price: blended, name: mix.paintName || materialNameMap.get(norm) || '' };
+        }
+        return { price: priceMap.get(norm) || 0, name: materialNameMap.get(norm) || '' };
+      };
 
       // 구매단가 맵
       const purchasePriceMap = new Map<string, number>();
@@ -1117,21 +1147,20 @@ const ProductMaterialCostView: React.FC = () => {
               }
             }
             // 도장 유형 leaf → 도료 산출근거 생성
-            // rawMaterialCode3=1도, rawMaterialCode4=2도 (calcPaintCost 공식과 동일)
+            // 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도에 도료코드 저장
             let paintCalcDetail: PaintCalcDetail | undefined;
             if (/도장/.test(partType) && leafRef) {
-              const paintRawCodes = [leafRef.rawMaterialCode3, leafRef.rawMaterialCode4].filter(Boolean) as string[];
+              const paintRawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2].filter(Boolean) as string[];
               const paintQtys = [leafRef.paintQty1, leafRef.paintQty2];
               const coats: PaintCalcDetail['coats'] = [];
               for (let pIdx = 0; pIdx < paintRawCodes.length; pIdx++) {
                 const raw = paintRawCodes[pIdx];
-                const rawNorm = normalizePn(raw);
-                const pp = priceMap.get(rawNorm) || 0;
+                const { price: pp, name: pName } = getPaintBlendedPrice(raw);
                 const pq = paintQtys[pIdx] || 0;
                 if (pp > 0 || pq > 0) {
                   coats.push({
                     rawCode: raw,
-                    rawName: materialNameMap.get(rawNorm) || '',
+                    rawName: pName,
                     pricePerKg: pp,
                     qtyGrams: pq,
                     cost: pp * pq / 1000,
@@ -1174,20 +1203,20 @@ const ProductMaterialCostView: React.FC = () => {
           || (f.partNo ? refInfoMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined)
           || (f.newPartNo ? refInfoMap.get(custToInternal.get(normalizePn(f.newPartNo)) || '') : undefined);
         if (productRef) _debugRefMatched++; else _debugRefMissed++;
-        // [도장재료비 자동 산입] rawMaterialCode3=1도, rawMaterialCode4=2도
+        // [도장재료비 자동 산입] 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도, paintMixMap 배합가 사용
         if (productRef && /도장/i.test(productRef.processType || '')) {
-          const paintRawCodes = [productRef.rawMaterialCode3, productRef.rawMaterialCode4].filter(Boolean) as string[];
+          const paintRawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
           const paintQtys = [productRef.paintQty1, productRef.paintQty2];
           for (let paintIdx = 0; paintIdx < paintRawCodes.length; paintIdx++) {
             const rawCode = paintRawCodes[paintIdx];
-            const paintPrice = priceMap.get(normalizePn(rawCode)) || 0;
+            const { price: paintPrice, name: paintName } = getPaintBlendedPrice(rawCode);
             const pqty = paintQtys[paintIdx] || 0;
             if (paintPrice > 0 && pqty > 0) {
               const cost = paintPrice * pqty / 1000; // g→kg 변환
               paintCost += cost;
               bomLeaves.push({
                 childPn: rawCode,
-                childName: `도장재료 ${paintIdx + 1}도`,
+                childName: paintName || `도장재료 ${paintIdx + 1}도`,
                 qty: pqty, totalQty: pqty / 1000,
                 unitPrice: paintPrice, cost,
                 priceSource: `도장 paintQty${paintIdx + 1}`,
@@ -1323,17 +1352,16 @@ const ProductMaterialCostView: React.FC = () => {
               }
             }
           }
-          // 도장 산출근거 — rawMaterialCode3=1도, rawMaterialCode4=2도 (calcPaintCost 공식과 동일)
-          const paintRawCodesP = [productRef.rawMaterialCode3, productRef.rawMaterialCode4].filter(Boolean) as string[];
+          // 도장 산출근거 — 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도, paintMixMap 배합가 사용
+          const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
           const pQtys = [productRef.paintQty1, productRef.paintQty2];
           const pCoats: PaintCalcDetail['coats'] = [];
           for (let pI = 0; pI < paintRawCodesP.length; pI++) {
             const raw = paintRawCodesP[pI];
-            const rawNorm = normalizePn(raw);
-            const pp = priceMap.get(rawNorm) || 0;
+            const { price: pp, name: pName } = getPaintBlendedPrice(raw);
             const pq = pQtys[pI] || 0;
             if (pp > 0 || pq > 0) {
-              pCoats.push({ rawCode: raw, rawName: materialNameMap.get(rawNorm) || '', pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
+              pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
             }
           }
           if (pCoats.length > 0) {
