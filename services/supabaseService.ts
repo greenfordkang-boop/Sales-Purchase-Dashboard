@@ -2656,6 +2656,39 @@ export const purchasePriceService = {
     await insertInBatches('purchase_price_master', rows);
     console.log(`✅ purchase_price_master saved: ${rows.length} rows`);
   },
+
+  /** 개별 구매단가 업데이트 (item_code 기준) */
+  async updatePrice(itemCode: string, newPrice: number): Promise<boolean> {
+    if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) {
+      const stored = localStorage.getItem('dashboard_purchasePriceMaster');
+      if (stored) {
+        const records: PurchasePrice[] = JSON.parse(stored);
+        const idx = records.findIndex(r => r.itemCode.trim().toUpperCase() === itemCode.trim().toUpperCase());
+        if (idx >= 0) {
+          records[idx].previousPrice = records[idx].currentPrice;
+          records[idx].currentPrice = newPrice;
+          try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(records)); } catch { /* ignore */ }
+          return true;
+        }
+      }
+      return false;
+    }
+    try {
+      const { error } = await supabase!
+        .from('purchase_price_master')
+        .update({ current_price: newPrice })
+        .eq('item_code', itemCode);
+      if (error) {
+        console.error('구매단가 업데이트 실패:', error.message);
+        return false;
+      }
+      console.log(`✅ 구매단가 업데이트: ${itemCode} → ₩${newPrice}`);
+      return true;
+    } catch (err) {
+      console.error('구매단가 업데이트 오류:', err);
+      return false;
+    }
+  },
 };
 
 // ============================================
