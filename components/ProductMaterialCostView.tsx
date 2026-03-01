@@ -397,6 +397,7 @@ const BomTreePopup: React.FC<{
                             <span
                               className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
                                 leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
                                 'text-slate-700 border-b border-dashed border-slate-300'
                               }`}
                               onClick={() => handlePriceClick(i)}
@@ -423,9 +424,16 @@ const BomTreePopup: React.FC<{
                         )}
                         {/* CalcDetailTooltip is rendered at popup level via fixed positioning */}
                       </td>
-                      <td className="px-3 py-1.5 text-right font-mono font-semibold">₩{fmt(leaf.cost)}</td>
+                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
+                        leaf.priceSource === '수동입력' ? 'text-purple-700' :
+                        leaf.priceSource === '사출(적용)' ? 'text-blue-700' : ''
+                      }`}>₩{fmt(leaf.cost)}</td>
                       <td className="px-3 py-1.5 text-[10px]">
-                        <span className={leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' : 'text-slate-400'}>
+                        <span className={
+                          leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' :
+                          leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
+                          'text-slate-400'
+                        }>
                           {leaf.priceSource}
                         </span>
                       </td>
