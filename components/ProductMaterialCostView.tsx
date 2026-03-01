@@ -276,10 +276,6 @@ const BomTreePopup: React.FC<{
   );
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
-  // calcOpenIdx를 ref로 동기화 (async 콜백에서 최신값 보장)
-  const calcOpenIdxRef = useRef<number | null>(null);
-  calcOpenIdxRef.current = calcOpenIdx;
-
   // --- 드래그 ---
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
@@ -311,28 +307,26 @@ const BomTreePopup: React.FC<{
   };
 
   const handleCalcApply = async (leafPn: string, calcPrice: number) => {
-    // ★ 1단계: UI 즉시 업데이트 (비동기 전에!)
-    const idx = calcOpenIdxRef.current;
-    if (idx !== null && idx >= 0) {
-      setLocalLeaves(prev => {
-        if (idx >= prev.length) return prev;
-        const updated = [...prev];
-        updated[idx] = {
-          ...updated[idx],
-          unitPrice: calcPrice,
-          cost: updated[idx].totalQty * calcPrice,
-          priceSource: '사출(적용)',
-        };
-        return updated;
-      });
-    }
+    // ★ 1단계: UI 즉시 업데이트 — leafPn으로 직접 매칭 (인덱스 의존 제거)
+    setLocalLeaves(prev => {
+      const idx = prev.findIndex(l => normalizePn(l.childPn) === normalizePn(leafPn));
+      if (idx < 0) return prev;
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        unitPrice: calcPrice,
+        cost: updated[idx].totalQty * calcPrice,
+        priceSource: '사출(적용)',
+      };
+      return updated;
+    });
     setCalcOpenIdx(null);
 
     // ★ 2단계: DB 업데이트 (백그라운드)
     const ok = await itemStandardCostService.updateResinCost(leafPn, calcPrice);
     setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
     setTimeout(() => setApplyMsg(null), 3000);
-    onRefInfoUpdate(); // 전체 재계산
+    onRefInfoUpdate(); // 전체 재계산 (silent 모드 → 팝업 unmount 안됨)
   };
 
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
@@ -600,8 +594,8 @@ const ProductMaterialCostView: React.FC = () => {
     return () => window.removeEventListener('dashboard-data-updated', handler);
   }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [forecastData, masterRecords, productCodes, refInfo, materialCodes, revenueData, dbStdCosts, purchasePrices, outsourcePrices] = await Promise.all([
         forecastService.getItems('current'),
@@ -618,7 +612,7 @@ const ProductMaterialCostView: React.FC = () => {
       setActualRevenue(revenueData || []);
       if (forecastData.length === 0) {
         setBaseRows([]);
-        setLoading(false);
+        if (!silent) setLoading(false);
         return;
       }
 
@@ -1075,7 +1069,7 @@ const ProductMaterialCostView: React.FC = () => {
     } catch (err) {
       console.error('제품별 재료비 계산 실패:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -1575,12 +1569,12 @@ const ProductMaterialCostView: React.FC = () => {
           row={popupRow}
           onClose={() => setPopupRow(null)}
           onPriceUpdate={() => {
-            // 단가 수정 후 전체 재계산
-            loadData();
+            // 단가 수정 후 전체 재계산 (silent: 팝업 unmount 방지)
+            loadData(true);
           }}
           onRefInfoUpdate={() => {
-            // 기준정보 수정 후 전체 재계산
-            loadData();
+            // 기준정보 수정 후 전체 재계산 (silent: 팝업 unmount 방지)
+            loadData(true);
           }}
         />
       )}
