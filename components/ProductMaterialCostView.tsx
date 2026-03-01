@@ -92,12 +92,11 @@ const MONTH_OPTIONS = [
 // ============================================================
 
 // 사출재료비 산출근거 호버 팝업
-const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | null }> = ({ detail, anchorRect }) => {
+const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | null; actualPrice: number; priceSource: string }> = ({ detail, anchorRect, actualPrice, priceSource }) => {
   const { netWeight, runnerWeight, cavity, lossRate, materialPrice, materialCode, weightPerEa, result } = detail;
   if (!anchorRect) return null;
-  // 화면 상단에 공간이 충분하면 위로, 아니면 아래로
   const spaceAbove = anchorRect.top;
-  const showAbove = spaceAbove > 320;
+  const showAbove = spaceAbove > 360;
   const style: React.CSSProperties = {
     position: 'fixed',
     right: Math.max(8, window.innerWidth - anchorRect.right),
@@ -106,8 +105,10 @@ const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | nu
       : { top: anchorRect.bottom + 8 }),
     zIndex: 10000,
   };
+  const diff = actualPrice - result;
+  const hasDiff = Math.abs(diff) > 1;
   return (
-    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[310px] text-left pointer-events-none">
+    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[320px] text-left pointer-events-none">
       <div className="text-[10px] font-bold text-amber-300 mb-2">사출재료비 산출근거</div>
       <div className="space-y-1.5 text-[11px]">
         <div className="flex justify-between">
@@ -145,9 +146,24 @@ const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | nu
           = ({weightPerEa.toFixed(2)}g × ₩{Math.round(materialPrice).toLocaleString()} / 1000) × (1 + {lossRate}%)
         </div>
         <div className="flex justify-between items-center pt-1">
-          <span className="text-amber-300 font-bold">사출재료비</span>
+          <span className="text-amber-300 font-bold">공식 산출</span>
           <span className="font-mono text-amber-300 font-black text-sm">₩{Math.round(result).toLocaleString()}</span>
         </div>
+        {hasDiff && (
+          <>
+            <div className="border-t border-slate-600 my-1" />
+            <div className="flex justify-between items-center">
+              <span className="text-slate-300">적용단가 ({priceSource})</span>
+              <span className="font-mono text-white font-bold">₩{Math.round(actualPrice).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-300">차이</span>
+              <span className={`font-mono font-bold ${diff > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                {diff > 0 ? '+' : ''}₩{Math.round(diff).toLocaleString()}
+              </span>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -363,7 +379,12 @@ const BomTreePopup: React.FC<{
       </div>
       {/* 사출재료비 산출근거 팝업 (fixed position, overflow 영향 없음) */}
       {hoveringCalcIdx !== null && localLeaves[hoveringCalcIdx]?.calcDetail && (
-        <CalcDetailTooltip detail={localLeaves[hoveringCalcIdx].calcDetail!} anchorRect={calcAnchorRect} />
+        <CalcDetailTooltip
+          detail={localLeaves[hoveringCalcIdx].calcDetail!}
+          anchorRect={calcAnchorRect}
+          actualPrice={localLeaves[hoveringCalcIdx].unitPrice}
+          priceSource={localLeaves[hoveringCalcIdx].priceSource}
+        />
       )}
     </div>
   );
@@ -649,6 +670,33 @@ const ProductMaterialCostView: React.FC = () => {
             const leafRef = refInfoMap.get(normalizePn(l.childPn));
             const partType = l.partType || leafRef?.processType || leafRef?.supplyType || '';
             const supplier = l.supplier || leafRef?.supplier || '';
+            // 가격 출처와 무관하게 사출 산출근거 생성 (기준정보에 중량데이터 있으면)
+            let finalCalcDetail = calcDetail;
+            if (!finalCalcDetail && leafRef) {
+              const nw = leafRef.netWeight || 0;
+              if (nw > 0) {
+                const rawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2].filter(Boolean) as string[];
+                for (const raw of rawCodes) {
+                  const rawNorm = normalizePn(raw);
+                  const matType = materialTypeMap.get(rawNorm) || '';
+                  if (/PAINT|도료/i.test(matType)) continue;
+                  const rp = priceMap.get(rawNorm);
+                  if (rp && rp > 0) {
+                    const rw = leafRef.runnerWeight || 0;
+                    const cavity = (leafRef.cavity && leafRef.cavity > 0) ? leafRef.cavity : 1;
+                    const loss = leafRef.lossRate || 0;
+                    const weightPerEa = nw + rw / cavity;
+                    const injCost = (weightPerEa * rp / 1000) * (1 + loss / 100);
+                    finalCalcDetail = {
+                      netWeight: nw, runnerWeight: rw, cavity, lossRate: loss,
+                      materialPrice: rp, materialCode: raw,
+                      weightPerEa, result: injCost,
+                    };
+                    break;
+                  }
+                }
+              }
+            }
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
@@ -660,7 +708,7 @@ const ProductMaterialCostView: React.FC = () => {
               depth: 0,
               partType,
               supplier,
-              calcDetail,
+              calcDetail: finalCalcDetail,
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
