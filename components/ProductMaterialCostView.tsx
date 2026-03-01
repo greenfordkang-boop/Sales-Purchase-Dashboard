@@ -214,7 +214,7 @@ const CalcDetailTooltip: React.FC<{
           <span className="text-slate-300">EA당중량</span>
           <span className="font-mono text-cyan-300">{wpe.toFixed(2)}g</span>
         </div>
-        <div className="text-[10px] text-slate-400 pl-2">= {nw} + {rw}/{cav || 1}</div>
+        <div className="text-[10px] text-slate-400 pl-2">= {nw.toFixed(2)} + {rw.toFixed(2)}/{cav || 1}</div>
         <div className="flex justify-between items-center">
           <span className="text-slate-300">Loss율</span>
           <div className="flex items-center gap-1">{numInput(loss, setLoss)}<span className="text-slate-400">%</span></div>
@@ -323,7 +323,7 @@ const PaintCostEditor: React.FC<{
                   </span>
                 </div>
                 <div className="flex justify-between mt-0.5">
-                  <span className="text-slate-400 text-[10px]">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {c.qtyGrams}g</span>
+                  <span className="text-slate-400 text-[10px]">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g</span>
                   <span className="font-mono text-white">₩{Math.round(c.cost).toLocaleString()}</span>
                 </div>
               </div>
@@ -716,11 +716,11 @@ const BomTreePopup: React.FC<{
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">NET중량</span>
-                        <span className="font-mono">{row.productCalcDetail.netWeight}g</span>
+                        <span className="font-mono">{row.productCalcDetail.netWeight.toFixed(2)}g</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Runner / Cavity</span>
-                        <span className="font-mono">{row.productCalcDetail.runnerWeight}g / {row.productCalcDetail.cavity}</span>
+                        <span className="font-mono">{row.productCalcDetail.runnerWeight.toFixed(2)}g / {row.productCalcDetail.cavity}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">EA당중량</span>
@@ -745,7 +745,7 @@ const BomTreePopup: React.FC<{
                       {row.productPaintDetail.coats.map((c, i) => (
                         <div key={i} className="flex justify-between">
                           <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
-                          <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {c.qtyGrams}g = ₩{Math.round(c.cost).toLocaleString()}</span>
+                          <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g = ₩{Math.round(c.cost).toLocaleString()}</span>
                         </div>
                       ))}
                       <div className="border-t border-purple-200 my-1" />
@@ -1055,7 +1055,7 @@ const ProductMaterialCostView: React.FC = () => {
                 const cost = (weightPerEa * rp / 1000) * (1 + loss / 100);
                 return {
                   price: cost,
-                  source: `사출(${nw}g)`,
+                  source: `사출(${nw.toFixed(2)}g)`,
                   calcDetail: {
                     leafPn: leafCode,
                     netWeight: nw, runnerWeight: rw, cavity, lossRate: loss,

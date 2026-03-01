@@ -287,6 +287,7 @@ const BomMasterUploadView: React.FC = () => {
 
     const wb = XLSX.utils.book_new();
     const v = (val: unknown) => (val === 0 || val === '' || val == null) ? '' : val;
+    const g2 = (val: number) => val > 0 ? Math.round(val * 100) / 100 : '';
     const matName = (code: string) => code ? (matNameMap.get(normalizePn(code)) || '') : '';
 
     // --- Sheet 1: BOM (원본: 전체 행 포함, 원재료 포함) ---
@@ -356,8 +357,8 @@ const BomMasterUploadView: React.FC = () => {
           v(ri.safetyStock), v(ri.safetyStockDays), v(ri.lotQty), v(ri.productionPerHour),
           v(ri.defectAllowance), v(ri.workers), ri.processingTime, v(ri.standardCT), v(ri.standardManHours), v(ri.qtyPerBox),
           ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || '',
-          v(ri.netWeight), v(ri.runnerWeight), v(ri.netWeight2), v(ri.runnerWeight2),
-          v(ri.paintQty1), v(ri.paintQty2), v(ri.paintQty3), v(ri.paintQty4),
+          g2(ri.netWeight), g2(ri.runnerWeight), g2(ri.netWeight2), g2(ri.runnerWeight2),
+          g2(ri.paintQty1), g2(ri.paintQty2), g2(ri.paintQty3), g2(ri.paintQty4),
           v(ri.lossRate), v(ri.cavity), v(ri.useCavity),
           ri.productSizeType, ri.glossType, ri.useYn,
         ]);
@@ -408,7 +409,7 @@ const BomMasterUploadView: React.FC = () => {
       const hdr = [
         'No', '업종코드', '업종명', '재질코드', '재질명', '재질분류',
         '도료구분', '색상', '단위', '안전재고량', '일평균사용량',
-        'Loss율(%)', '유효기간(일)', '발주 SIZE', '사용여부', '보호항목',
+        'Loss율(%)', '유효기간(일)', '발주 SIZE', '사용여부', '보호항목', '현재단가',
       ];
       const rows: unknown[][] = [hdr];
       mcData.forEach((mc, i) => {
@@ -416,13 +417,14 @@ const BomMasterUploadView: React.FC = () => {
           i + 1, mc.industryCode, mc.materialType, mc.materialCode, mc.materialName, mc.materialCategory,
           mc.paintCategory, mc.color, mc.unit, v(mc.safetyStock), v(mc.dailyAvgUsage),
           v(mc.lossRate), v(mc.validDays), mc.orderSize, mc.useYn, mc.protectedItem,
+          mc.currentPrice > 0 ? mc.currentPrice : '',
         ]);
       });
       const ws = XLSX.utils.aoa_to_sheet(rows);
       ws['!cols'] = [
         { wch: 6 }, { wch: 10 }, { wch: 8 }, { wch: 16 }, { wch: 28 }, { wch: 14 },
         { wch: 8 }, { wch: 8 }, { wch: 6 }, { wch: 10 }, { wch: 12 },
-        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 },
+        { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 12 },
       ];
       XLSX.utils.book_append_sheet(wb, ws, '재질코드');
     }
@@ -486,9 +488,9 @@ const BomMasterUploadView: React.FC = () => {
           matName(ref?.rawMaterialCode1 || ''),
           matName(ref?.rawMaterialCode2 || ''),
           matName(ref?.rawMaterialCode3 || ''),
-          v(ref?.netWeight), v(ref?.runnerWeight),
-          v(ref?.netWeight2), v(ref?.runnerWeight2),
-          v(ref?.paintQty1), v(ref?.paintQty2), v(ref?.paintQty3),
+          g2(ref?.netWeight || 0), g2(ref?.runnerWeight || 0),
+          g2(ref?.netWeight2 || 0), g2(ref?.runnerWeight2 || 0),
+          g2(ref?.paintQty1 || 0), g2(ref?.paintQty2 || 0), g2(ref?.paintQty3 || 0),
           price > 0 ? price : '',
         ]);
       }
@@ -518,7 +520,7 @@ const BomMasterUploadView: React.FC = () => {
           const usage = ((ri.netWeight + runnerPerCav) * (1 + ri.lossRate / 100)) / 1000;
           rows.push([
             ri.itemCode, ri.customerPn, ri.itemName, cav,
-            ri.netWeight, ri.runnerWeight,
+            g2(ri.netWeight), g2(ri.runnerWeight),
             runnerPerCav > 0 ? Math.round(runnerPerCav * 100) / 100 : '',
             v(ri.lossRate),
             usage > 0 ? Math.round(usage * 10000) / 10000 : '',
@@ -548,7 +550,7 @@ const BomMasterUploadView: React.FC = () => {
         rows.push([
           ri.itemCode, ri.customerPn, ri.itemName,
           matName(ri.rawMaterialCode1),
-          ri.netWeight, ri.runnerWeight, reasons.join(', '),
+          g2(ri.netWeight), g2(ri.runnerWeight), reasons.join(', '),
         ]);
       }
       const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -571,7 +573,7 @@ const BomMasterUploadView: React.FC = () => {
         rows.push([
           ri.itemCode, ri.customerPn, ri.itemName,
           matName(ri.rawMaterialCode1), matName(ri.rawMaterialCode2), matName(ri.rawMaterialCode3),
-          ri.paintQty1, ri.paintQty2, ri.paintQty3, reasons.join(', '),
+          g2(ri.paintQty1), g2(ri.paintQty2), g2(ri.paintQty3), reasons.join(', '),
         ]);
       }
       const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -637,6 +639,13 @@ const BomMasterUploadView: React.FC = () => {
               disabled={isUploading}
             />
           </label>
+          <button
+            onClick={handleBomExcelDownload}
+            disabled={assembledBom.length === 0}
+            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Excel 다운로드
+          </button>
           <span className="text-xs text-gray-500">
             파란색 5개 시트 (BOM, 제품코드, 기준정보, 설비코드, 재질코드) 자동 감지
           </span>
@@ -900,13 +909,9 @@ const BomMasterUploadView: React.FC = () => {
             <span className="text-xs text-gray-400">
               {assembledBom.length.toLocaleString()}건 중 {filteredBom.length}건 표시
             </span>
-            <button
-              onClick={handleBomExcelDownload}
-              disabled={assembledBom.length === 0}
-              className="ml-auto px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              Excel 다운로드 ({assembledBom.length.toLocaleString()}건)
-            </button>
+            <span className="ml-auto text-xs text-gray-400">
+              상단에서 Excel 다운로드 가능
+            </span>
           </div>
 
           <div className="bg-white rounded-lg shadow overflow-hidden max-h-96 overflow-y-auto">
@@ -935,7 +940,7 @@ const BomMasterUploadView: React.FC = () => {
                     <td className="px-3 py-1.5 text-gray-500">{row.processType || '-'}</td>
                     <td className="px-3 py-1.5 text-gray-500">{row.supplyType || '-'}</td>
                     <td className="px-3 py-1.5 text-right text-gray-600">
-                      {row.netWeight > 0 ? row.netWeight.toFixed(1) : '-'}
+                      {row.netWeight > 0 ? row.netWeight.toFixed(2) : '-'}
                     </td>
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {row.materialPrice > 0 ? row.materialPrice.toLocaleString() : '-'}
