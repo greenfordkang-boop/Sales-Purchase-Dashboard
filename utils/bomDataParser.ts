@@ -343,7 +343,8 @@ interface LeafResult {
 export const normalizePn = (pn: string): string =>
   pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
 
-/** 모품번에서 leaf 자재까지 재귀 전개 (누적 소요량 곱셈, maxDepth 제한) */
+/** 모품번에서 leaf 자재까지 재귀 전개 (누적 소요량 곱셈, maxDepth 제한)
+ *  alsoEmitPns: 중간 노드이더라도 leaf로도 추가할 품번 Set (도장품 등 — 자식도 함께 전개) */
 export const expandBomToLeaves = (
   parentPn: string,
   parentQty: number,
@@ -352,6 +353,7 @@ export const expandBomToLeaves = (
   depth: number = 0,
   maxDepth: number = 10,
   forceLeafPns?: Set<string>,
+  alsoEmitPns?: Set<string>,
 ): LeafResult[] => {
   const seen = visited || new Set<string>();
   const normalizedParent = normalizePn(parentPn);
@@ -384,8 +386,8 @@ export const expandBomToLeaves = (
         parentPn,
       });
     } else {
-      // 도장 중간 노드: 자신도 leaf로 추가 (도장비 산출) + 하위 자식도 전개
-      if (/도장/.test(child.partType || '')) {
+      // alsoEmitPns에 포함된 중간 노드(도장품 등): 자신도 leaf로 추가 + 하위 자식도 전개
+      if (alsoEmitPns?.has(normalizedChild)) {
         results.push({
           childPn: child.childPn,
           childName: child.childName,
@@ -396,7 +398,7 @@ export const expandBomToLeaves = (
         });
       }
       // 중간 노드: 재귀 전개
-      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns);
+      const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
       results.push(...subLeaves.map(leaf => ({
         ...leaf,
         parentPn,

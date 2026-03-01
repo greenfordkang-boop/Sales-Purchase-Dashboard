@@ -994,10 +994,16 @@ const ProductMaterialCostView: React.FC = () => {
 
       // 구매/외주 품목은 BOM에서 항상 leaf로 처리 (하위 BOM 전개 방지)
       const forceLeafPns = new Set<string>();
+      // 도장 품목은 BOM 중간 노드여도 leaf로도 추가 (도장비 산출 + 하위 자식도 전개)
+      const paintIntermediatePns = new Set<string>();
       for (const ri of refInfo) {
         if (/구매|외주/.test(ri.supplyType || '')) {
           forceLeafPns.add(normalizePn(ri.itemCode));
           if (ri.customerPn) forceLeafPns.add(normalizePn(ri.customerPn));
+        }
+        if (/도장/.test(ri.processType || '') && !/구매|외주/.test(ri.supplyType || '')) {
+          paintIntermediatePns.add(normalizePn(ri.itemCode));
+          if (ri.customerPn) paintIntermediatePns.add(normalizePn(ri.customerPn));
         }
       }
 
@@ -1110,7 +1116,7 @@ const ProductMaterialCostView: React.FC = () => {
         let bomLeaves: BomLeaf[] = [];
         let bomMaterialCost = 0;
         if (bomParent) {
-          const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns);
+          const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
           bomLeaves = leaves.map(l => {
             const { price, source, calcDetail } = getLeafPrice(l.childPn);
             // BOM에 유형/구입처가 없으면 기준정보에서 보강
