@@ -2892,10 +2892,12 @@ export const itemStandardCostService = {
     console.log(`✅ item_standard_cost saved: ${records.length} rows`);
   },
 
-  /** 개별 품목의 resin_cost_per_ea (사출재료비) 업데이트 */
+  /** 개별 품목의 resin_cost_per_ea (사출재료비) 업데이트 (UPSERT: 없으면 INSERT) */
   async updateResinCost(itemCode: string, resinCost: number): Promise<boolean> {
     const normCode = itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
-    if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) {
+
+    // localStorage도 항상 동시 업데이트 (즉시 반영용)
+    try {
       const stored = localStorage.getItem('dashboard_itemStandardCost');
       if (stored) {
         const records: ItemStandardCost[] = JSON.parse(stored);
@@ -2905,12 +2907,28 @@ export const itemStandardCostService = {
         if (idx >= 0) {
           records[idx].resin_cost_per_ea = resinCost;
           records[idx].material_cost_per_ea = resinCost + records[idx].paint_cost_per_ea;
-          try { safeSetItem('dashboard_itemStandardCost', JSON.stringify(records)); } catch {}
-          return true;
+          safeSetItem('dashboard_itemStandardCost', JSON.stringify(records));
+        } else {
+          // localStorage에도 신규 레코드 추가
+          const newRec: ItemStandardCost = {
+            item_code: itemCode, customer_pn: '', item_name: '', customer_name: '',
+            variety: '', item_type: '', supply_type: '',
+            resin_cost_per_ea: resinCost, paint_cost_per_ea: 0, material_cost_per_ea: resinCost,
+            purchase_price_per_ea: 0, injection_price_per_ea: 0,
+            jan_qty: 0, feb_qty: 0, mar_qty: 0, apr_qty: 0, may_qty: 0, jun_qty: 0,
+            jul_qty: 0, aug_qty: 0, sep_qty: 0, oct_qty: 0, nov_qty: 0, dec_qty: 0,
+            jan_amt: 0, feb_amt: 0, mar_amt: 0, apr_amt: 0, may_amt: 0, jun_amt: 0,
+            jul_amt: 0, aug_amt: 0, sep_amt: 0, oct_amt: 0, nov_amt: 0, dec_amt: 0,
+            total_qty: 0, total_amt: 0,
+          };
+          records.push(newRec);
+          safeSetItem('dashboard_itemStandardCost', JSON.stringify(records));
         }
       }
-      return false;
-    }
+    } catch { /* localStorage 실패는 무시 */ }
+
+    if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) return true;
+
     try {
       // exact match 시도
       let { data } = await supabase!
@@ -2918,7 +2936,7 @@ export const itemStandardCostService = {
         .select('item_code, paint_cost_per_ea')
         .eq('item_code', itemCode)
         .limit(1);
-      // exact match 실패 → 정규화 비교 (대시/공백 차이 흡수)
+      // exact match 실패 → 정규화 비교
       if (!data || data.length === 0) {
         const { data: all } = await supabase!
           .from('item_standard_cost')
@@ -2928,20 +2946,36 @@ export const itemStandardCostService = {
         );
         if (match) data = [match];
       }
-      if (!data || data.length === 0) {
-        console.warn(`표준재료비 레코드 없음: ${itemCode} (norm: ${normCode})`);
-        return false;
-      }
-      const record = data[0];
-      const paintCost = record.paint_cost_per_ea || 0;
-      const materialCost = resinCost + paintCost;
 
-      const { error } = await supabase!
-        .from('item_standard_cost')
-        .update({ resin_cost_per_ea: resinCost, material_cost_per_ea: materialCost })
-        .eq('item_code', record.item_code);
-      if (error) { console.error('표준재료비 업데이트 실패:', error.message); return false; }
-      console.log(`✅ 표준재료비(사출) 업데이트: ${record.item_code} → ₩${Math.round(resinCost)}`);
+      if (data && data.length > 0) {
+        // 기존 레코드 UPDATE
+        const record = data[0];
+        const paintCost = record.paint_cost_per_ea || 0;
+        const materialCost = resinCost + paintCost;
+        const { error } = await supabase!
+          .from('item_standard_cost')
+          .update({ resin_cost_per_ea: resinCost, material_cost_per_ea: materialCost })
+          .eq('item_code', record.item_code);
+        if (error) { console.error('표준재료비 업데이트 실패:', error.message); return false; }
+        console.log(`✅ 표준재료비 UPDATE: ${record.item_code} → ₩${Math.round(resinCost)}`);
+      } else {
+        // 레코드 없음 → INSERT 신규 생성
+        const { error } = await supabase!
+          .from('item_standard_cost')
+          .insert({
+            item_code: itemCode, customer_pn: '', item_name: '', customer_name: '',
+            variety: '', item_type: '', supply_type: '',
+            resin_cost_per_ea: resinCost, paint_cost_per_ea: 0, material_cost_per_ea: resinCost,
+            purchase_price_per_ea: 0, injection_price_per_ea: 0,
+            jan_qty: 0, feb_qty: 0, mar_qty: 0, apr_qty: 0, may_qty: 0, jun_qty: 0,
+            jul_qty: 0, aug_qty: 0, sep_qty: 0, oct_qty: 0, nov_qty: 0, dec_qty: 0,
+            jan_amt: 0, feb_amt: 0, mar_amt: 0, apr_amt: 0, may_amt: 0, jun_amt: 0,
+            jul_amt: 0, aug_amt: 0, sep_amt: 0, oct_amt: 0, nov_amt: 0, dec_amt: 0,
+            total_qty: 0, total_amt: 0,
+          });
+        if (error) { console.error('표준재료비 INSERT 실패:', error.message); return false; }
+        console.log(`✅ 표준재료비 INSERT: ${itemCode} → ₩${Math.round(resinCost)}`);
+      }
       return true;
     } catch (err) { console.error('표준재료비 업데이트 오류:', err); return false; }
   },

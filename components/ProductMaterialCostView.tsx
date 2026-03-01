@@ -274,9 +274,9 @@ const BomTreePopup: React.FC<{
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
+  const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
   // --- 드래그 ---
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
   const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
@@ -286,7 +286,6 @@ const BomTreePopup: React.FC<{
     const el = (e.currentTarget as HTMLElement).closest('[data-popup]') as HTMLElement;
     const rect = el.getBoundingClientRect();
     dragStart.current = { mx: e.clientX, my: e.clientY, px: rect.left, py: rect.top };
-    setDragOffset({ x: 0, y: 0 });
 
     const onMove = (ev: MouseEvent) => {
       if (!dragging.current) return;
@@ -296,7 +295,6 @@ const BomTreePopup: React.FC<{
     };
     const onUp = () => {
       dragging.current = false;
-      setDragOffset(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -309,17 +307,25 @@ const BomTreePopup: React.FC<{
   };
 
   const handleCalcApply = async (leafPn: string, calcPrice: number) => {
-    // 표준재료비(사출재료비)를 산출값으로 업데이트
-    await itemStandardCostService.updateResinCost(leafPn, calcPrice);
+    // 표준재료비(사출재료비)를 산출값으로 업데이트 (UPSERT)
+    const ok = await itemStandardCostService.updateResinCost(leafPn, calcPrice);
     // 팝업 내 로컬 상태도 즉시 반영 (functional setState로 stale closure 방지)
     setLocalLeaves(prev => {
-      const idx = prev.findIndex(l => l.childPn === leafPn || l.calcDetail?.leafPn === leafPn);
+      const normPn = leafPn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+      const idx = prev.findIndex(l => {
+        const normChild = l.childPn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
+        const normCalc = l.calcDetail?.leafPn?.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') || '';
+        return normChild === normPn || normCalc === normPn;
+      });
       if (idx < 0) return prev;
       const updated = [...prev];
       updated[idx] = { ...updated[idx], unitPrice: calcPrice, cost: updated[idx].totalQty * calcPrice, priceSource: '사출(적용)' };
       return updated;
     });
     setCalcOpenIdx(null);
+    // 피드백 메시지
+    setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 적용 완료` : '적용 실패 — 콘솔 확인');
+    setTimeout(() => setApplyMsg(null), 3000);
     onRefInfoUpdate(); // 전체 재계산
   };
 
@@ -534,8 +540,13 @@ const BomTreePopup: React.FC<{
         </div>
 
         {/* 푸터 */}
-        <div className="bg-slate-50 border-t px-4 py-2 text-[10px] text-slate-400 flex justify-between">
+        <div className="bg-slate-50 border-t px-4 py-2 text-[10px] text-slate-400 flex justify-between items-center">
           <span>BOM leaf {localLeaves.length}건 | 단가 클릭 시 수정 가능</span>
+          {applyMsg && (
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded ${applyMsg.includes('완료') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+              {applyMsg}
+            </span>
+          )}
           <span>수량 {fmt(row.yearlyQty)} | 재료비 ₩{fmtWon(row.yearlyMaterialCost)}</span>
         </div>
       </div>
