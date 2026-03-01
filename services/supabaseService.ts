@@ -2380,6 +2380,43 @@ export const referenceInfoService = {
     await insertInBatches('reference_info_master', rows);
     console.log(`✅ reference_info_master saved: ${rows.length} rows`);
   },
+
+  /** 개별 레코드의 중량/캐비티/Loss 등 부분 업데이트 */
+  async updateFields(itemCode: string, fields: Partial<{
+    netWeight: number; runnerWeight: number; cavity: number; lossRate: number;
+    netWeight2: number; runnerWeight2: number;
+  }>): Promise<boolean> {
+    // localStorage 업데이트
+    const stored = localStorage.getItem('dashboard_referenceInfoMaster');
+    if (stored) {
+      const records: ReferenceInfoRecord[] = JSON.parse(stored);
+      const idx = records.findIndex(r => r.itemCode.trim().toUpperCase() === itemCode.trim().toUpperCase());
+      if (idx >= 0) {
+        Object.assign(records[idx], fields);
+        try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch {}
+      }
+    }
+
+    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return true;
+
+    const dbFields: Record<string, number> = {};
+    if (fields.netWeight !== undefined) dbFields.net_weight = fields.netWeight;
+    if (fields.runnerWeight !== undefined) dbFields.runner_weight = fields.runnerWeight;
+    if (fields.cavity !== undefined) dbFields.cavity = fields.cavity;
+    if (fields.lossRate !== undefined) dbFields.loss_rate = fields.lossRate;
+    if (fields.netWeight2 !== undefined) dbFields.net_weight_2 = fields.netWeight2;
+    if (fields.runnerWeight2 !== undefined) dbFields.runner_weight_2 = fields.runnerWeight2;
+
+    try {
+      const { error } = await supabase!
+        .from('reference_info_master')
+        .update(dbFields)
+        .eq('item_code', itemCode);
+      if (error) { console.error('기준정보 업데이트 실패:', error.message); return false; }
+      console.log(`✅ 기준정보 업데이트: ${itemCode}`, dbFields);
+      return true;
+    } catch (err) { console.error('기준정보 업데이트 오류:', err); return false; }
+  },
 };
 
 // ============================================

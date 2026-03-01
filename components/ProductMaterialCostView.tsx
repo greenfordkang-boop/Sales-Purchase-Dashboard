@@ -14,12 +14,14 @@ import { downloadCSV } from '../utils/csvExport';
 // ============================================================
 
 interface CalcDetail {
+  leafPn: string;          // 이 부품의 품번 (기준정보 업데이트 키)
   netWeight: number;
   runnerWeight: number;
   cavity: number;
   lossRate: number;
   materialPrice: number;   // ₩/kg
   materialCode: string;
+  materialName: string;    // 원재료명
   weightPerEa: number;
   result: number;
 }
@@ -91,12 +93,25 @@ const MONTH_OPTIONS = [
 // BOM Tree Popup Component
 // ============================================================
 
-// 사출재료비 산출근거 호버 팝업
-const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | null; actualPrice: number; priceSource: string }> = ({ detail, anchorRect, actualPrice, priceSource }) => {
-  const { netWeight, runnerWeight, cavity, lossRate, materialPrice, materialCode, weightPerEa, result } = detail;
+// 사출재료비 산출근거 에디터 팝업
+const CalcDetailTooltip: React.FC<{
+  detail: CalcDetail;
+  anchorRect: DOMRect | null;
+  actualPrice: number;
+  priceSource: string;
+  onSave: (leafPn: string, fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number }) => void;
+  onClose: () => void;
+}> = ({ detail, anchorRect, actualPrice, priceSource, onSave, onClose }) => {
+  const { materialPrice, materialCode, materialName } = detail;
+  const [nw, setNw] = useState(detail.netWeight);
+  const [rw, setRw] = useState(detail.runnerWeight);
+  const [cav, setCav] = useState(detail.cavity);
+  const [loss, setLoss] = useState(detail.lossRate);
+  const [saving, setSaving] = useState(false);
+
   if (!anchorRect) return null;
   const spaceAbove = anchorRect.top;
-  const showAbove = spaceAbove > 360;
+  const showAbove = spaceAbove > 420;
   const style: React.CSSProperties = {
     position: 'fixed',
     right: Math.max(8, window.innerWidth - anchorRect.right),
@@ -105,49 +120,80 @@ const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | nu
       : { top: anchorRect.bottom + 8 }),
     zIndex: 10000,
   };
-  const diff = actualPrice - result;
+
+  const wpe = nw + rw / (cav || 1);
+  const calcResult = (wpe * materialPrice / 1000) * (1 + loss / 100);
+  const diff = actualPrice - calcResult;
   const hasDiff = Math.abs(diff) > 1;
+  const hasChanges = nw !== detail.netWeight || rw !== detail.runnerWeight || cav !== detail.cavity || loss !== detail.lossRate;
+
+  const handleSave = async () => {
+    setSaving(true);
+    const fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number } = {};
+    if (nw !== detail.netWeight) fields.netWeight = nw;
+    if (rw !== detail.runnerWeight) fields.runnerWeight = rw;
+    if (cav !== detail.cavity) fields.cavity = cav;
+    if (loss !== detail.lossRate) fields.lossRate = loss;
+    await onSave(detail.leafPn, fields);
+    setSaving(false);
+  };
+
+  const numInput = (value: number, onChange: (v: number) => void, step = 0.01) => (
+    <input
+      type="number"
+      value={value}
+      onChange={e => onChange(parseFloat(e.target.value) || 0)}
+      step={step}
+      className="w-20 bg-slate-700 text-white text-right font-mono text-[11px] px-1.5 py-0.5 rounded border border-slate-600 focus:border-amber-400 focus:outline-none"
+    />
+  );
+
   return (
-    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[320px] text-left pointer-events-none">
-      <div className="text-[10px] font-bold text-amber-300 mb-2">사출재료비 산출근거</div>
+    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[330px] text-left" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-2">
+        <div className="text-[10px] font-bold text-amber-300">사출재료비 산출근거</div>
+        <button onClick={onClose} className="text-slate-400 hover:text-white text-xs">&times;</button>
+      </div>
       <div className="space-y-1.5 text-[11px]">
-        <div className="flex justify-between">
-          <span className="text-slate-300">재질코드</span>
-          <span className="font-mono text-indigo-300">{materialCode}</span>
+        <div className="flex justify-between items-center">
+          <span className="text-slate-300">원재료</span>
+          <span className="font-mono text-indigo-300 text-[10px] truncate max-w-[180px]" title={`${materialCode} ${materialName}`}>
+            {materialCode}{materialName && ` (${materialName})`}
+          </span>
         </div>
         <div className="flex justify-between">
           <span className="text-slate-300">재질단가</span>
           <span className="font-mono text-white">₩{Math.round(materialPrice).toLocaleString()}/kg</span>
         </div>
         <div className="border-t border-slate-600 my-1" />
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span className="text-slate-300">순중량 (NET)</span>
-          <span className="font-mono text-white">{netWeight}g</span>
+          <div className="flex items-center gap-1">{numInput(nw, setNw)}<span className="text-slate-400">g</span></div>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span className="text-slate-300">러너중량</span>
-          <span className="font-mono text-white">{runnerWeight}g</span>
+          <div className="flex items-center gap-1">{numInput(rw, setRw)}<span className="text-slate-400">g</span></div>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span className="text-slate-300">캐비티</span>
-          <span className="font-mono text-white">{cavity}</span>
+          {numInput(cav, setCav, 1)}
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <span className="text-slate-300">EA당중량</span>
-          <span className="font-mono text-cyan-300">{weightPerEa.toFixed(2)}g</span>
+          <span className="font-mono text-cyan-300">{wpe.toFixed(2)}g</span>
         </div>
-        <div className="text-[10px] text-slate-400 pl-2">= {netWeight} + {runnerWeight}/{cavity}</div>
-        <div className="flex justify-between">
+        <div className="text-[10px] text-slate-400 pl-2">= {nw} + {rw}/{cav || 1}</div>
+        <div className="flex justify-between items-center">
           <span className="text-slate-300">Loss율</span>
-          <span className="font-mono text-white">{lossRate}%</span>
+          <div className="flex items-center gap-1">{numInput(loss, setLoss)}<span className="text-slate-400">%</span></div>
         </div>
         <div className="border-t border-slate-600 my-1" />
         <div className="text-[10px] text-slate-400">
-          = ({weightPerEa.toFixed(2)}g × ₩{Math.round(materialPrice).toLocaleString()} / 1000) × (1 + {lossRate}%)
+          = ({wpe.toFixed(2)}g × ₩{Math.round(materialPrice).toLocaleString()} / 1000) × (1 + {loss}%)
         </div>
         <div className="flex justify-between items-center pt-1">
           <span className="text-amber-300 font-bold">공식 산출</span>
-          <span className="font-mono text-amber-300 font-black text-sm">₩{Math.round(result).toLocaleString()}</span>
+          <span className="font-mono text-amber-300 font-black text-sm">₩{Math.round(calcResult).toLocaleString()}</span>
         </div>
         {hasDiff && (
           <>
@@ -164,6 +210,15 @@ const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | nu
             </div>
           </>
         )}
+        {hasChanges && (
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full mt-2 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+          >
+            {saving ? '저장 중...' : '기준정보 마스터에 저장'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -173,14 +228,23 @@ const BomTreePopup: React.FC<{
   row: ProductRow;
   onClose: () => void;
   onPriceUpdate: (materialCode: string, newPrice: number) => void;
-}> = ({ row, onClose, onPriceUpdate }) => {
+  onRefInfoUpdate: () => void;
+}> = ({ row, onClose, onPriceUpdate, onRefInfoUpdate }) => {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
-  const [hoveringCalcIdx, setHoveringCalcIdx] = useState<number | null>(null);
+  const [calcOpenIdx, setCalcOpenIdx] = useState<number | null>(null);
   const [calcAnchorRect, setCalcAnchorRect] = useState<DOMRect | null>(null);
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
+
+  const handleCalcSave = async (leafPn: string, fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number }) => {
+    const ok = await referenceInfoService.updateFields(leafPn, fields);
+    if (ok) {
+      onRefInfoUpdate();
+      setCalcOpenIdx(null);
+    }
+  };
 
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
 
@@ -297,24 +361,32 @@ const BomTreePopup: React.FC<{
                             autoFocus
                           />
                         ) : (
-                          <span
-                            className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
-                              leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
-                              leaf.calcDetail ? 'text-amber-700 border-b border-dashed border-amber-400' :
-                              'text-slate-700 border-b border-dashed border-slate-300'
-                            }`}
-                            onClick={() => handlePriceClick(i)}
-                            onMouseEnter={(e) => {
-                              if (leaf.calcDetail) {
-                                setHoveringCalcIdx(i);
-                                setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                              }
-                            }}
-                            onMouseLeave={() => { setHoveringCalcIdx(null); setCalcAnchorRect(null); }}
-                            title={leaf.calcDetail ? '호버: 산출근거 | 클릭: 단가 수정' : '클릭하여 단가 수정'}
-                          >
-                            ₩{fmt(leaf.unitPrice)}
-                            {leaf.calcDetail && <span className="ml-0.5 text-[9px] text-amber-500">&#9432;</span>}
+                          <span className="flex items-center justify-end gap-0.5">
+                            <span
+                              className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
+                                leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                'text-slate-700 border-b border-dashed border-slate-300'
+                              }`}
+                              onClick={() => handlePriceClick(i)}
+                              title="클릭하여 단가 수정"
+                            >
+                              ₩{fmt(leaf.unitPrice)}
+                            </span>
+                            {leaf.calcDetail && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setCalcOpenIdx(calcOpenIdx === i ? null : i);
+                                  setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                                }}
+                                className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
+                                  calcOpenIdx === i ? 'bg-amber-500 text-white' : 'text-amber-500 hover:bg-amber-100'
+                                }`}
+                                title="사출재료비 산출근거 (클릭)"
+                              >
+                                &#9432;
+                              </button>
+                            )}
                           </span>
                         )}
                         {/* CalcDetailTooltip is rendered at popup level via fixed positioning */}
@@ -377,13 +449,15 @@ const BomTreePopup: React.FC<{
           <span>수량 {fmt(row.yearlyQty)} | 재료비 ₩{fmtWon(row.yearlyMaterialCost)}</span>
         </div>
       </div>
-      {/* 사출재료비 산출근거 팝업 (fixed position, overflow 영향 없음) */}
-      {hoveringCalcIdx !== null && localLeaves[hoveringCalcIdx]?.calcDetail && (
+      {/* 사출재료비 산출근거 에디터 (fixed position, overflow 영향 없음) */}
+      {calcOpenIdx !== null && localLeaves[calcOpenIdx]?.calcDetail && (
         <CalcDetailTooltip
-          detail={localLeaves[hoveringCalcIdx].calcDetail!}
+          detail={localLeaves[calcOpenIdx].calcDetail!}
           anchorRect={calcAnchorRect}
-          actualPrice={localLeaves[hoveringCalcIdx].unitPrice}
-          priceSource={localLeaves[hoveringCalcIdx].priceSource}
+          actualPrice={localLeaves[calcOpenIdx].unitPrice}
+          priceSource={localLeaves[calcOpenIdx].priceSource}
+          onSave={handleCalcSave}
+          onClose={() => setCalcOpenIdx(null)}
         />
       )}
     </div>
@@ -500,8 +574,10 @@ const ProductMaterialCostView: React.FC = () => {
 
       // 재질 타입 맵 (PAINT/RESIN 구분)
       const materialTypeMap = new Map<string, string>();
+      const materialNameMap = new Map<string, string>();
       for (const mc of mergedMat) {
         materialTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
+        materialNameMap.set(normalizePn(mc.materialCode), mc.materialName || '');
       }
 
       // 구매단가 맵
@@ -606,8 +682,10 @@ const ProductMaterialCostView: React.FC = () => {
                   price: cost,
                   source: `사출(${nw}g)`,
                   calcDetail: {
+                    leafPn: leafCode,
                     netWeight: nw, runnerWeight: rw, cavity, lossRate: loss,
                     materialPrice: rp, materialCode: raw,
+                    materialName: materialNameMap.get(rawNorm) || '',
                     weightPerEa, result: cost,
                   },
                 };
@@ -688,8 +766,10 @@ const ProductMaterialCostView: React.FC = () => {
                     const weightPerEa = nw + rw / cavity;
                     const injCost = (weightPerEa * rp / 1000) * (1 + loss / 100);
                     finalCalcDetail = {
+                      leafPn: l.childPn,
                       netWeight: nw, runnerWeight: rw, cavity, lossRate: loss,
                       materialPrice: rp, materialCode: raw,
+                      materialName: materialNameMap.get(normalizePn(raw)) || '',
                       weightPerEa, result: injCost,
                     };
                     break;
@@ -818,8 +898,10 @@ const ProductMaterialCostView: React.FC = () => {
                     unitPrice: rawPrice, cost: injCost,
                     priceSource: '기준정보 산출', depth: 0, partType: '사출', supplier: '',
                     calcDetail: {
+                      leafPn: forecastPn,
                       netWeight: nw, runnerWeight: rw, cavity, lossRate,
                       materialPrice: rawPrice, materialCode: raw,
+                      materialName: materialNameMap.get(rawNorm) || '',
                       weightPerEa, result: injCost,
                     },
                   });
@@ -1386,6 +1468,10 @@ const ProductMaterialCostView: React.FC = () => {
           onClose={() => setPopupRow(null)}
           onPriceUpdate={() => {
             // 단가 수정 후 전체 재계산
+            loadData();
+          }}
+          onRefInfoUpdate={() => {
+            // 기준정보 수정 후 전체 재계산
             loadData();
           }}
         />
