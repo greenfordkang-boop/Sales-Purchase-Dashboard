@@ -2386,11 +2386,14 @@ export const referenceInfoService = {
     netWeight: number; runnerWeight: number; cavity: number; lossRate: number;
     netWeight2: number; runnerWeight2: number;
   }>): Promise<boolean> {
+    const normCode = itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
     // localStorage 업데이트
     const stored = localStorage.getItem('dashboard_referenceInfoMaster');
     if (stored) {
       const records: ReferenceInfoRecord[] = JSON.parse(stored);
-      const idx = records.findIndex(r => r.itemCode.trim().toUpperCase() === itemCode.trim().toUpperCase());
+      const idx = records.findIndex(r =>
+        r.itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode
+      );
       if (idx >= 0) {
         Object.assign(records[idx], fields);
         try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch {}
@@ -2408,12 +2411,32 @@ export const referenceInfoService = {
     if (fields.runnerWeight2 !== undefined) dbFields.runner_weight_2 = fields.runnerWeight2;
 
     try {
+      // exact match 시도
+      let { data } = await supabase!
+        .from('reference_info_master')
+        .select('item_code')
+        .eq('item_code', itemCode)
+        .limit(1);
+      // 정규화 비교 fallback
+      let actualItemCode = itemCode;
+      if (!data || data.length === 0) {
+        const { data: all } = await supabase!
+          .from('reference_info_master')
+          .select('item_code');
+        const match = all?.find(r =>
+          r.item_code.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode
+        );
+        if (match) actualItemCode = match.item_code;
+      } else {
+        actualItemCode = data[0].item_code;
+      }
+
       const { error } = await supabase!
         .from('reference_info_master')
         .update(dbFields)
-        .eq('item_code', itemCode);
+        .eq('item_code', actualItemCode);
       if (error) { console.error('기준정보 업데이트 실패:', error.message); return false; }
-      console.log(`✅ 기준정보 업데이트: ${itemCode}`, dbFields);
+      console.log(`✅ 기준정보 업데이트: ${actualItemCode}`, dbFields);
       return true;
     } catch (err) { console.error('기준정보 업데이트 오류:', err); return false; }
   },
@@ -2871,11 +2894,14 @@ export const itemStandardCostService = {
 
   /** 개별 품목의 resin_cost_per_ea (사출재료비) 업데이트 */
   async updateResinCost(itemCode: string, resinCost: number): Promise<boolean> {
+    const normCode = itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
     if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) {
       const stored = localStorage.getItem('dashboard_itemStandardCost');
       if (stored) {
         const records: ItemStandardCost[] = JSON.parse(stored);
-        const idx = records.findIndex(r => r.item_code.trim().toUpperCase() === itemCode.trim().toUpperCase());
+        const idx = records.findIndex(r =>
+          r.item_code.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode
+        );
         if (idx >= 0) {
           records[idx].resin_cost_per_ea = resinCost;
           records[idx].material_cost_per_ea = resinCost + records[idx].paint_cost_per_ea;
@@ -2886,21 +2912,36 @@ export const itemStandardCostService = {
       return false;
     }
     try {
-      // 먼저 기존 레코드 조회해서 paint_cost 합산
-      const { data } = await supabase!
+      // exact match 시도
+      let { data } = await supabase!
         .from('item_standard_cost')
-        .select('paint_cost_per_ea')
+        .select('item_code, paint_cost_per_ea')
         .eq('item_code', itemCode)
         .limit(1);
-      const paintCost = data?.[0]?.paint_cost_per_ea || 0;
+      // exact match 실패 → 정규화 비교 (대시/공백 차이 흡수)
+      if (!data || data.length === 0) {
+        const { data: all } = await supabase!
+          .from('item_standard_cost')
+          .select('item_code, paint_cost_per_ea');
+        const match = all?.find(r =>
+          r.item_code.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode
+        );
+        if (match) data = [match];
+      }
+      if (!data || data.length === 0) {
+        console.warn(`표준재료비 레코드 없음: ${itemCode} (norm: ${normCode})`);
+        return false;
+      }
+      const record = data[0];
+      const paintCost = record.paint_cost_per_ea || 0;
       const materialCost = resinCost + paintCost;
 
       const { error } = await supabase!
         .from('item_standard_cost')
         .update({ resin_cost_per_ea: resinCost, material_cost_per_ea: materialCost })
-        .eq('item_code', itemCode);
+        .eq('item_code', record.item_code);
       if (error) { console.error('표준재료비 업데이트 실패:', error.message); return false; }
-      console.log(`✅ 표준재료비(사출) 업데이트: ${itemCode} → ₩${Math.round(resinCost)}`);
+      console.log(`✅ 표준재료비(사출) 업데이트: ${record.item_code} → ₩${Math.round(resinCost)}`);
       return true;
     } catch (err) { console.error('표준재료비 업데이트 오류:', err); return false; }
   },

@@ -111,16 +111,31 @@ const CalcDetailTooltip: React.FC<{
   const [saving, setSaving] = useState(false);
 
   if (!anchorRect) return null;
+  const tooltipH = 420; // 예상 높이
+  const spaceBelow = window.innerHeight - anchorRect.bottom;
   const spaceAbove = anchorRect.top;
-  const showAbove = spaceAbove > 420;
   const style: React.CSSProperties = {
     position: 'fixed',
-    right: Math.max(8, window.innerWidth - anchorRect.right),
-    ...(showAbove
-      ? { bottom: window.innerHeight - anchorRect.top + 8 }
-      : { top: anchorRect.bottom + 8 }),
     zIndex: 10000,
   };
+  // 좌우: 화면 오른쪽 기준, 넘치면 왼쪽으로
+  const rightPos = window.innerWidth - anchorRect.right;
+  if (rightPos + 330 > window.innerWidth) {
+    style.left = 8;
+  } else {
+    style.right = Math.max(8, rightPos);
+  }
+  // 상하: 아래 공간 충분하면 아래, 아니면 위, 위도 부족하면 화면 상단에 고정
+  if (spaceBelow >= tooltipH) {
+    style.top = anchorRect.bottom + 4;
+  } else if (spaceAbove >= tooltipH) {
+    style.bottom = window.innerHeight - anchorRect.top + 4;
+  } else {
+    // 양쪽 다 부족 → 화면 상단 고정 + 스크롤
+    style.top = 8;
+    style.maxHeight = window.innerHeight - 16;
+    style.overflowY = 'auto';
+  }
 
   const wpe = nw + rw / (cav || 1);
   const calcResult = (wpe * materialPrice / 1000) * (1 + loss / 100);
@@ -260,6 +275,35 @@ const BomTreePopup: React.FC<{
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
 
+  // --- 드래그 ---
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragging = useRef(false);
+  const dragStart = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    const el = (e.currentTarget as HTMLElement).closest('[data-popup]') as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    dragStart.current = { mx: e.clientX, my: e.clientY, px: rect.left, py: rect.top };
+    setDragOffset({ x: 0, y: 0 });
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const dx = ev.clientX - dragStart.current.mx;
+      const dy = ev.clientY - dragStart.current.my;
+      setPos({ x: dragStart.current.px + dx, y: dragStart.current.py + dy });
+    };
+    const onUp = () => {
+      dragging.current = false;
+      setDragOffset(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, []);
+
   const handleCalcSave = async (leafPn: string, fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number }) => {
     await referenceInfoService.updateFields(leafPn, fields);
   };
@@ -267,13 +311,14 @@ const BomTreePopup: React.FC<{
   const handleCalcApply = async (leafPn: string, calcPrice: number) => {
     // 표준재료비(사출재료비)를 산출값으로 업데이트
     await itemStandardCostService.updateResinCost(leafPn, calcPrice);
-    // 팝업 내 로컬 상태도 즉시 반영
-    const idx = calcOpenIdx;
-    if (idx !== null) {
-      const updated = [...localLeaves];
+    // 팝업 내 로컬 상태도 즉시 반영 (functional setState로 stale closure 방지)
+    setLocalLeaves(prev => {
+      const idx = prev.findIndex(l => l.childPn === leafPn || l.calcDetail?.leafPn === leafPn);
+      if (idx < 0) return prev;
+      const updated = [...prev];
       updated[idx] = { ...updated[idx], unitPrice: calcPrice, cost: updated[idx].totalQty * calcPrice, priceSource: '사출(적용)' };
-      setLocalLeaves(updated);
-    }
+      return updated;
+    });
     setCalcOpenIdx(null);
     onRefInfoUpdate(); // 전체 재계산
   };
@@ -317,9 +362,14 @@ const BomTreePopup: React.FC<{
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[80vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* 헤더 */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4">
+      <div
+        data-popup
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[80vh] overflow-hidden"
+        style={pos ? { position: 'fixed', left: pos.x, top: pos.y, margin: 0 } : undefined}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* 헤더 (드래그 핸들) */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 cursor-move select-none" onMouseDown={onMouseDown}>
           <div className="flex justify-between items-start">
             <div>
               <div className="font-bold text-lg">{row.partName || row.newPartNo}</div>
