@@ -80,6 +80,8 @@ interface ProductRow {
   processType: string;             // 부품유형 (사출, 도장, 조립 등)
   supplyType: string;              // 조달구분 (자작, 구매, 외주)
   supplier: string;                // 협력업체
+  productCalcDetail?: CalcDetail;  // BOM 없을 때 제품 레벨 사출 산출근거
+  productPaintDetail?: PaintCalcDetail; // BOM 없을 때 제품 레벨 도장 산출근거
 }
 
 // ============================================================
@@ -692,9 +694,71 @@ const BomTreePopup: React.FC<{
               </tbody>
             </table>
           ) : row.hasStdCost ? (
-            <div className="p-6 text-center text-slate-500 text-sm">
-              <div className="mb-2">BOM 전개 데이터 없음</div>
-              <div className="text-xs text-slate-400">표준재료비 ₩{fmt(row.stdMaterialCost)} (item_standard_cost 기준)</div>
+            <div className="p-6 text-slate-500 text-sm">
+              <div className="text-center mb-4 text-slate-400 text-xs">BOM 전개 데이터 없음</div>
+              <div className="max-w-md mx-auto space-y-3">
+                <div className="flex justify-between items-center bg-slate-50 rounded-lg px-4 py-2">
+                  <span className="text-slate-600 text-xs">표준재료비</span>
+                  <span className="font-mono font-bold text-slate-800">₩{fmt(row.stdMaterialCost)}</span>
+                </div>
+                {row.productCalcDetail && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                    <div className="text-[10px] font-bold text-amber-600 mb-2">사출재료비 산출근거</div>
+                    <div className="space-y-1 text-[11px]">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">원재료</span>
+                        <span className="font-mono text-xs">{row.productCalcDetail.materialCode} {row.productCalcDetail.materialName && `(${row.productCalcDetail.materialName})`}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">재질단가</span>
+                        <span className="font-mono">₩{Math.round(row.productCalcDetail.materialPrice).toLocaleString()}/kg</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">NET중량</span>
+                        <span className="font-mono">{row.productCalcDetail.netWeight}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Runner / Cavity</span>
+                        <span className="font-mono">{row.productCalcDetail.runnerWeight}g / {row.productCalcDetail.cavity}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">EA당중량</span>
+                        <span className="font-mono">{row.productCalcDetail.weightPerEa.toFixed(2)}g</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Loss율</span>
+                        <span className="font-mono">{row.productCalcDetail.lossRate}%</span>
+                      </div>
+                      <div className="border-t border-amber-200 my-1" />
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="text-amber-700">공식 산출</span>
+                        <span className="font-mono text-amber-700 text-sm">₩{Math.round(row.productCalcDetail.result).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {row.productPaintDetail && row.productPaintDetail.coats.length > 0 && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
+                    <div className="text-[10px] font-bold text-purple-600 mb-2">도장재료비 산출근거</div>
+                    <div className="space-y-1 text-[11px]">
+                      {row.productPaintDetail.coats.map((c, i) => (
+                        <div key={i} className="flex justify-between">
+                          <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
+                          <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {c.qtyGrams}g = ₩{Math.round(c.cost).toLocaleString()}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-purple-200 my-1" />
+                      <div className="flex justify-between items-center font-bold">
+                        <span className="text-purple-700">도장 합계</span>
+                        <span className="font-mono text-purple-700 text-sm">₩{Math.round(row.productPaintDetail.totalCalcCost).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!row.productCalcDetail && !row.productPaintDetail && (
+                  <div className="text-center text-xs text-slate-400">기준정보에 중량/도장량 데이터 없음</div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="p-6 text-center text-slate-400 text-sm">재료비 데이터 없음</div>
@@ -1236,6 +1300,57 @@ const ProductMaterialCostView: React.FC = () => {
           : refInfoCost > 0 ? 'medium'
           : 'low';
 
+        // 제품 레벨 산출근거 (BOM 없을 때 팝업에서 표시/편집용)
+        let productCalcDetail: CalcDetail | undefined;
+        let productPaintDetail: PaintCalcDetail | undefined;
+        if (productRef) {
+          // 사출 산출근거
+          const nw = productRef.netWeight || 0;
+          if (nw > 0) {
+            const rawCodes2 = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
+            for (const raw of rawCodes2) {
+              const rawNorm = normalizePn(raw);
+              const matType = materialTypeMap.get(rawNorm) || '';
+              if (/PAINT|도료/i.test(matType)) continue;
+              const rp = priceMap.get(rawNorm);
+              if (rp && rp > 0) {
+                const rw = productRef.runnerWeight || 0;
+                const cav = (productRef.cavity && productRef.cavity > 0) ? productRef.cavity : 1;
+                const loss = productRef.lossRate || 0;
+                const wpe = nw + rw / cav;
+                productCalcDetail = {
+                  leafPn: productRef.itemCode || forecastPn,
+                  netWeight: nw, runnerWeight: rw, cavity: cav, lossRate: loss,
+                  materialPrice: rp, materialCode: raw,
+                  materialName: materialNameMap.get(rawNorm) || '',
+                  weightPerEa: wpe, result: (wpe * rp / 1000) * (1 + loss / 100),
+                };
+                break;
+              }
+            }
+          }
+          // 도장 산출근거
+          const rawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4].filter(Boolean) as string[];
+          const pQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4];
+          const pCoats: PaintCalcDetail['coats'] = [];
+          let pI = 0;
+          for (const raw of rawCodesP) {
+            const rawNorm = normalizePn(raw);
+            const matType = materialTypeMap.get(rawNorm) || '';
+            if (/PAINT|도료/i.test(matType)) {
+              const pp = priceMap.get(rawNorm) || 0;
+              const pq = pQtys[pI] || 0;
+              if (pp > 0 || pq > 0) {
+                pCoats.push({ rawCode: raw, rawName: materialNameMap.get(rawNorm) || '', pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
+              }
+              pI++;
+            }
+          }
+          if (pCoats.length > 0) {
+            productPaintDetail = { leafPn: productRef.itemCode || forecastPn, coats: pCoats, totalCalcCost: pCoats.reduce((s, c) => s + c.cost, 0) };
+          }
+        }
+
         result.push({
           customer: f.customer,
           model: f.model,
@@ -1263,6 +1378,8 @@ const ProductMaterialCostView: React.FC = () => {
           processType: productRef?.processType || '',
           supplyType: productRef?.supplyType || '',
           supplier: productRef?.supplier || '',
+          productCalcDetail,
+          productPaintDetail,
         });
       }
 
