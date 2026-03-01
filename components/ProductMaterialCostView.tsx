@@ -92,10 +92,22 @@ const MONTH_OPTIONS = [
 // ============================================================
 
 // 사출재료비 산출근거 호버 팝업
-const CalcDetailTooltip: React.FC<{ detail: CalcDetail }> = ({ detail }) => {
+const CalcDetailTooltip: React.FC<{ detail: CalcDetail; anchorRect: DOMRect | null }> = ({ detail, anchorRect }) => {
   const { netWeight, runnerWeight, cavity, lossRate, materialPrice, materialCode, weightPerEa, result } = detail;
+  if (!anchorRect) return null;
+  // 화면 상단에 공간이 충분하면 위로, 아니면 아래로
+  const spaceAbove = anchorRect.top;
+  const showAbove = spaceAbove > 320;
+  const style: React.CSSProperties = {
+    position: 'fixed',
+    right: Math.max(8, window.innerWidth - anchorRect.right),
+    ...(showAbove
+      ? { bottom: window.innerHeight - anchorRect.top + 8 }
+      : { top: anchorRect.bottom + 8 }),
+    zIndex: 10000,
+  };
   return (
-    <div className="absolute z-[200] right-0 bottom-full mb-2 bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 min-w-[300px] text-left pointer-events-none">
+    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[310px] text-left pointer-events-none">
       <div className="text-[10px] font-bold text-amber-300 mb-2">사출재료비 산출근거</div>
       <div className="space-y-1.5 text-[11px]">
         <div className="flex justify-between">
@@ -149,6 +161,7 @@ const BomTreePopup: React.FC<{
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [hoveringCalcIdx, setHoveringCalcIdx] = useState<number | null>(null);
+  const [calcAnchorRect, setCalcAnchorRect] = useState<DOMRect | null>(null);
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
@@ -275,17 +288,20 @@ const BomTreePopup: React.FC<{
                               'text-slate-700 border-b border-dashed border-slate-300'
                             }`}
                             onClick={() => handlePriceClick(i)}
-                            onMouseEnter={() => leaf.calcDetail && setHoveringCalcIdx(i)}
-                            onMouseLeave={() => setHoveringCalcIdx(null)}
+                            onMouseEnter={(e) => {
+                              if (leaf.calcDetail) {
+                                setHoveringCalcIdx(i);
+                                setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                              }
+                            }}
+                            onMouseLeave={() => { setHoveringCalcIdx(null); setCalcAnchorRect(null); }}
                             title={leaf.calcDetail ? '호버: 산출근거 | 클릭: 단가 수정' : '클릭하여 단가 수정'}
                           >
                             ₩{fmt(leaf.unitPrice)}
                             {leaf.calcDetail && <span className="ml-0.5 text-[9px] text-amber-500">&#9432;</span>}
                           </span>
                         )}
-                        {hoveringCalcIdx === i && leaf.calcDetail && (
-                          <CalcDetailTooltip detail={leaf.calcDetail} />
-                        )}
+                        {/* CalcDetailTooltip is rendered at popup level via fixed positioning */}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono font-semibold">₩{fmt(leaf.cost)}</td>
                       <td className="px-3 py-1.5 text-[10px]">
@@ -345,6 +361,10 @@ const BomTreePopup: React.FC<{
           <span>수량 {fmt(row.yearlyQty)} | 재료비 ₩{fmtWon(row.yearlyMaterialCost)}</span>
         </div>
       </div>
+      {/* 사출재료비 산출근거 팝업 (fixed position, overflow 영향 없음) */}
+      {hoveringCalcIdx !== null && localLeaves[hoveringCalcIdx]?.calcDetail && (
+        <CalcDetailTooltip detail={localLeaves[hoveringCalcIdx].calcDetail!} anchorRect={calcAnchorRect} />
+      )}
     </div>
   );
 };
