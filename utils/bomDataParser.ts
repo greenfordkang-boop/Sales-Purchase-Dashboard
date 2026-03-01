@@ -384,6 +384,17 @@ export const expandBomToLeaves = (
         parentPn,
       });
     } else {
+      // 도장 중간 노드: 자신도 leaf로 추가 (도장비 산출) + 하위 자식도 전개
+      if (/도장/.test(child.partType || '')) {
+        results.push({
+          childPn: child.childPn,
+          childName: child.childName,
+          supplier: child.supplier,
+          partType: child.partType || '',
+          totalRequired: requiredQty,
+          parentPn,
+        });
+      }
       // 중간 노드: 재귀 전개
       const subLeaves = expandBomToLeaves(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns);
       results.push(...subLeaves.map(leaf => ({

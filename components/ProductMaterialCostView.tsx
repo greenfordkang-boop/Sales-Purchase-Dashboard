@@ -1175,14 +1175,21 @@ const ProductMaterialCostView: React.FC = () => {
                 };
               }
             }
+            // 도장 리프: getLeafPrice가 0이면 paintCalcDetail 도장비를 unitPrice로 사용
+            let finalPrice = price;
+            let finalSource = source;
+            if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
+              finalPrice = paintCalcDetail.totalCalcCost;
+              finalSource = '도장(산출)';
+            }
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
               qty: 0,
               totalQty: l.totalRequired,
-              unitPrice: price,
-              cost: l.totalRequired * price,
-              priceSource: source,
+              unitPrice: finalPrice,
+              cost: l.totalRequired * finalPrice,
+              priceSource: finalSource,
               depth: 0,
               partType,
               supplier,
