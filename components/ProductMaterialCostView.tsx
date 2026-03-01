@@ -276,6 +276,10 @@ const BomTreePopup: React.FC<{
   );
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
+  // calcOpenIdx를 ref로 동기화 (async 콜백에서 최신값 보장)
+  const calcOpenIdxRef = useRef<number | null>(null);
+  calcOpenIdxRef.current = calcOpenIdx;
+
   // --- 드래그 ---
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragging = useRef(false);
@@ -307,24 +311,26 @@ const BomTreePopup: React.FC<{
   };
 
   const handleCalcApply = async (leafPn: string, calcPrice: number) => {
-    // 표준재료비(사출재료비)를 산출값으로 업데이트 (UPSERT)
-    const ok = await itemStandardCostService.updateResinCost(leafPn, calcPrice);
-    // 팝업 내 로컬 상태도 즉시 반영 (functional setState로 stale closure 방지)
-    setLocalLeaves(prev => {
-      const normPn = leafPn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
-      const idx = prev.findIndex(l => {
-        const normChild = l.childPn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
-        const normCalc = l.calcDetail?.leafPn?.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') || '';
-        return normChild === normPn || normCalc === normPn;
+    // ★ 1단계: UI 즉시 업데이트 (비동기 전에!)
+    const idx = calcOpenIdxRef.current;
+    if (idx !== null && idx >= 0) {
+      setLocalLeaves(prev => {
+        if (idx >= prev.length) return prev;
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          unitPrice: calcPrice,
+          cost: updated[idx].totalQty * calcPrice,
+          priceSource: '사출(적용)',
+        };
+        return updated;
       });
-      if (idx < 0) return prev;
-      const updated = [...prev];
-      updated[idx] = { ...updated[idx], unitPrice: calcPrice, cost: updated[idx].totalQty * calcPrice, priceSource: '사출(적용)' };
-      return updated;
-    });
+    }
     setCalcOpenIdx(null);
-    // 피드백 메시지
-    setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 적용 완료` : '적용 실패 — 콘솔 확인');
+
+    // ★ 2단계: DB 업데이트 (백그라운드)
+    const ok = await itemStandardCostService.updateResinCost(leafPn, calcPrice);
+    setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
     setTimeout(() => setApplyMsg(null), 3000);
     onRefInfoUpdate(); // 전체 재계산
   };
