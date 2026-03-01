@@ -26,6 +26,18 @@ interface CalcDetail {
   result: number;
 }
 
+interface PaintCalcDetail {
+  leafPn: string;
+  coats: Array<{
+    rawCode: string;      // 도료 원재료코드
+    rawName: string;      // 도료명
+    pricePerKg: number;   // 도료 단가 ₩/kg
+    qtyGrams: number;     // 도장량 (g)
+    cost: number;         // = pricePerKg × qtyGrams / 1000
+  }>;
+  totalCalcCost: number;
+}
+
 interface BomLeaf {
   childPn: string;
   childName: string;
@@ -38,6 +50,7 @@ interface BomLeaf {
   partType: string;
   supplier: string;  // 구입처/협력업체
   calcDetail?: CalcDetail;
+  paintCalcDetail?: PaintCalcDetail;
 }
 
 interface ProductRow {
@@ -261,6 +274,111 @@ const CalcDetailTooltip: React.FC<{
   );
 };
 
+// 도장단가 에디터 팝업
+const PaintCostEditor: React.FC<{
+  detail: PaintCalcDetail;
+  anchorRect: DOMRect | null;
+  actualPrice: number;
+  priceSource: string;
+  onApply: (leafPn: string, price: number) => void;
+  onClose: () => void;
+}> = ({ detail, anchorRect, actualPrice, priceSource, onApply, onClose }) => {
+  const [manualPrice, setManualPrice] = useState(Math.round(actualPrice));
+  const [saving, setSaving] = useState(false);
+
+  if (!anchorRect) return null;
+
+  const tooltipH = 340;
+  const spaceBelow = window.innerHeight - anchorRect.bottom;
+  const spaceAbove = anchorRect.top;
+  const style: React.CSSProperties = { position: 'fixed', zIndex: 10000 };
+  const rightPos = window.innerWidth - anchorRect.right;
+  if (rightPos + 330 > window.innerWidth) { style.left = 8; } else { style.right = Math.max(8, rightPos); }
+  if (spaceBelow >= tooltipH) { style.top = anchorRect.bottom + 4; }
+  else if (spaceAbove >= tooltipH) { style.bottom = window.innerHeight - anchorRect.top + 4; }
+  else { style.top = 8; style.maxHeight = window.innerHeight - 16; style.overflowY = 'auto'; }
+
+  const hasCoats = detail.coats.length > 0;
+  const calcTotal = detail.totalCalcCost;
+  const useCalc = hasCoats && calcTotal > 0;
+
+  return (
+    <div style={style} className="bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 w-[330px] text-left" onClick={e => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-2">
+        <div className="text-[10px] font-bold text-purple-300">도장단가 편집</div>
+        <button onClick={onClose} className="text-slate-400 hover:text-white text-xs">&times;</button>
+      </div>
+      <div className="space-y-1.5 text-[11px]">
+        {hasCoats && (
+          <>
+            {detail.coats.map((c, i) => (
+              <div key={i} className="bg-slate-700/50 rounded-lg px-2 py-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-300">{i + 1}도 도료</span>
+                  <span className="font-mono text-indigo-300 text-[10px] truncate max-w-[160px]" title={`${c.rawCode} ${c.rawName}`}>
+                    {c.rawCode}{c.rawName && ` (${c.rawName})`}
+                  </span>
+                </div>
+                <div className="flex justify-between mt-0.5">
+                  <span className="text-slate-400 text-[10px]">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {c.qtyGrams}g</span>
+                  <span className="font-mono text-white">₩{Math.round(c.cost).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+            <div className="border-t border-slate-600 my-1" />
+            <div className="flex justify-between items-center">
+              <span className="text-purple-300 font-bold">도장 산출 합계</span>
+              <span className="font-mono text-purple-300 font-black text-sm">₩{Math.round(calcTotal).toLocaleString()}</span>
+            </div>
+          </>
+        )}
+        <div className="border-t border-slate-600 my-1" />
+        <div className="flex justify-between items-center">
+          <span className="text-slate-300">현재 적용가 ({priceSource})</span>
+          <span className="font-mono text-white font-bold">₩{Math.round(actualPrice).toLocaleString()}</span>
+        </div>
+        <div className="flex justify-between items-center mt-2">
+          <span className="text-slate-300">새 단가 입력</span>
+          <input
+            type="number"
+            value={manualPrice}
+            onChange={e => setManualPrice(parseFloat(e.target.value) || 0)}
+            className="w-28 bg-slate-700 text-white text-right font-mono text-xs px-2 py-1 rounded border border-slate-600 focus:border-purple-400 focus:outline-none"
+          />
+        </div>
+        <div className="flex gap-2 mt-3">
+          {useCalc && (
+            <button
+              onClick={async () => {
+                setSaving(true);
+                await onApply(detail.leafPn, calcTotal);
+                setSaving(false);
+              }}
+              disabled={saving}
+              className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? '적용 중...' : `₩${Math.round(calcTotal).toLocaleString()} 산출가 적용`}
+            </button>
+          )}
+          <button
+            onClick={async () => {
+              setSaving(true);
+              await onApply(detail.leafPn, manualPrice);
+              setSaving(false);
+            }}
+            disabled={saving || manualPrice === actualPrice}
+            className={`flex-1 py-1.5 font-bold text-xs rounded-lg transition-colors disabled:opacity-50 ${
+              useCalc ? 'bg-slate-600 hover:bg-slate-500 text-white' : 'bg-purple-500 hover:bg-purple-400 text-white'
+            }`}
+          >
+            {saving ? '적용 중...' : `₩${Math.round(manualPrice).toLocaleString()} 적용`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BomTreePopup: React.FC<{
   row: ProductRow;
   onClose: () => void;
@@ -271,6 +389,8 @@ const BomTreePopup: React.FC<{
   const [editValue, setEditValue] = useState('');
   const [calcOpenIdx, setCalcOpenIdx] = useState<number | null>(null);
   const [calcAnchorRect, setCalcAnchorRect] = useState<DOMRect | null>(null);
+  const [paintOpenIdx, setPaintOpenIdx] = useState<number | null>(null);
+  const [paintAnchorRect, setPaintAnchorRect] = useState<DOMRect | null>(null);
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
     [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
   );
@@ -327,6 +447,28 @@ const BomTreePopup: React.FC<{
     setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
     setTimeout(() => setApplyMsg(null), 3000);
     onRefInfoUpdate(); // 전체 재계산 (silent 모드 → 팝업 unmount 안됨)
+  };
+
+  const handlePaintApply = async (leafPn: string, price: number) => {
+    setLocalLeaves(prev => {
+      const idx = prev.findIndex(l => normalizePn(l.childPn) === normalizePn(leafPn));
+      if (idx < 0) return prev;
+      const updated = [...prev];
+      updated[idx] = {
+        ...updated[idx],
+        unitPrice: price,
+        cost: updated[idx].totalQty * price,
+        priceSource: '도장(적용)',
+      };
+      return updated;
+    });
+    setPaintOpenIdx(null);
+
+    // DB 업데이트
+    const ok = await itemStandardCostService.updateResinCost(leafPn, price);
+    setApplyMsg(ok ? `₩${Math.round(price).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
+    setTimeout(() => setApplyMsg(null), 3000);
+    onRefInfoUpdate();
   };
 
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
@@ -454,6 +596,7 @@ const BomTreePopup: React.FC<{
                               className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
                                 leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
                                 leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
+                                leaf.priceSource === '도장(적용)' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
                                 'text-slate-700 border-b border-dashed border-slate-300'
                               }`}
                               onClick={() => handlePriceClick(i)}
@@ -466,6 +609,7 @@ const BomTreePopup: React.FC<{
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setCalcOpenIdx(calcOpenIdx === i ? null : i);
+                                  setPaintOpenIdx(null);
                                   setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
                                 }}
                                 className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
@@ -476,18 +620,36 @@ const BomTreePopup: React.FC<{
                                 &#9432;
                               </button>
                             )}
+                            {/도장/.test(leaf.partType) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPaintOpenIdx(paintOpenIdx === i ? null : i);
+                                  setCalcOpenIdx(null);
+                                  setPaintAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                                }}
+                                className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
+                                  paintOpenIdx === i ? 'bg-purple-500 text-white' : 'text-purple-500 hover:bg-purple-100'
+                                }`}
+                                title="도장단가 편집 (클릭)"
+                              >
+                                &#9998;
+                              </button>
+                            )}
                           </span>
                         )}
                         {/* CalcDetailTooltip is rendered at popup level via fixed positioning */}
                       </td>
                       <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
                         leaf.priceSource === '수동입력' ? 'text-purple-700' :
-                        leaf.priceSource === '사출(적용)' ? 'text-blue-700' : ''
+                        leaf.priceSource === '사출(적용)' ? 'text-blue-700' :
+                        leaf.priceSource === '도장(적용)' ? 'text-purple-700' : ''
                       }`}>₩{fmt(leaf.cost)}</td>
                       <td className="px-3 py-1.5 text-[10px]">
                         <span className={
                           leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' :
                           leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
+                          leaf.priceSource === '도장(적용)' ? 'text-purple-600 font-semibold' :
                           'text-slate-400'
                         }>
                           {leaf.priceSource}
@@ -560,6 +722,17 @@ const BomTreePopup: React.FC<{
           onSave={handleCalcSave}
           onApplyCalc={handleCalcApply}
           onClose={() => setCalcOpenIdx(null)}
+        />
+      )}
+      {/* 도장단가 에디터 */}
+      {paintOpenIdx !== null && /도장/.test(localLeaves[paintOpenIdx]?.partType || '') && (
+        <PaintCostEditor
+          detail={localLeaves[paintOpenIdx].paintCalcDetail || { leafPn: localLeaves[paintOpenIdx].childPn, coats: [], totalCalcCost: 0 }}
+          anchorRect={paintAnchorRect}
+          actualPrice={localLeaves[paintOpenIdx].unitPrice}
+          priceSource={localLeaves[paintOpenIdx].priceSource}
+          onApply={handlePaintApply}
+          onClose={() => setPaintOpenIdx(null)}
         />
       )}
     </div>
@@ -879,6 +1052,39 @@ const ProductMaterialCostView: React.FC = () => {
                 }
               }
             }
+            // 도장 유형 leaf → 도료 산출근거 생성
+            let paintCalcDetail: PaintCalcDetail | undefined;
+            if (/도장/.test(partType) && leafRef) {
+              const rawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2, leafRef.rawMaterialCode3, leafRef.rawMaterialCode4].filter(Boolean) as string[];
+              const paintQtys = [leafRef.paintQty1, leafRef.paintQty2, leafRef.paintQty3, leafRef.paintQty4];
+              const coats: PaintCalcDetail['coats'] = [];
+              let pIdx = 0;
+              for (const raw of rawCodes) {
+                const rawNorm = normalizePn(raw);
+                const matType = materialTypeMap.get(rawNorm) || '';
+                if (/PAINT|도료/i.test(matType)) {
+                  const pp = priceMap.get(rawNorm) || 0;
+                  const pq = paintQtys[pIdx] || 0;
+                  if (pp > 0 || pq > 0) {
+                    coats.push({
+                      rawCode: raw,
+                      rawName: materialNameMap.get(rawNorm) || '',
+                      pricePerKg: pp,
+                      qtyGrams: pq,
+                      cost: pp * pq / 1000,
+                    });
+                  }
+                  pIdx++;
+                }
+              }
+              if (coats.length > 0) {
+                paintCalcDetail = {
+                  leafPn: l.childPn,
+                  coats,
+                  totalCalcCost: coats.reduce((s, c) => s + c.cost, 0),
+                };
+              }
+            }
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
@@ -891,6 +1097,7 @@ const ProductMaterialCostView: React.FC = () => {
               partType,
               supplier,
               calcDetail: finalCalcDetail,
+              paintCalcDetail,
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
