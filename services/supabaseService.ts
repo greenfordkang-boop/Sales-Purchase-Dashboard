@@ -2868,4 +2868,40 @@ export const itemStandardCostService = {
     await insertInBatches('item_standard_cost', records);
     console.log(`✅ item_standard_cost saved: ${records.length} rows`);
   },
+
+  /** 개별 품목의 resin_cost_per_ea (사출재료비) 업데이트 */
+  async updateResinCost(itemCode: string, resinCost: number): Promise<boolean> {
+    if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) {
+      const stored = localStorage.getItem('dashboard_itemStandardCost');
+      if (stored) {
+        const records: ItemStandardCost[] = JSON.parse(stored);
+        const idx = records.findIndex(r => r.item_code.trim().toUpperCase() === itemCode.trim().toUpperCase());
+        if (idx >= 0) {
+          records[idx].resin_cost_per_ea = resinCost;
+          records[idx].material_cost_per_ea = resinCost + records[idx].paint_cost_per_ea;
+          try { safeSetItem('dashboard_itemStandardCost', JSON.stringify(records)); } catch {}
+          return true;
+        }
+      }
+      return false;
+    }
+    try {
+      // 먼저 기존 레코드 조회해서 paint_cost 합산
+      const { data } = await supabase!
+        .from('item_standard_cost')
+        .select('paint_cost_per_ea')
+        .eq('item_code', itemCode)
+        .limit(1);
+      const paintCost = data?.[0]?.paint_cost_per_ea || 0;
+      const materialCost = resinCost + paintCost;
+
+      const { error } = await supabase!
+        .from('item_standard_cost')
+        .update({ resin_cost_per_ea: resinCost, material_cost_per_ea: materialCost })
+        .eq('item_code', itemCode);
+      if (error) { console.error('표준재료비 업데이트 실패:', error.message); return false; }
+      console.log(`✅ 표준재료비(사출) 업데이트: ${itemCode} → ₩${Math.round(resinCost)}`);
+      return true;
+    } catch (err) { console.error('표준재료비 업데이트 오류:', err); return false; }
+  },
 };

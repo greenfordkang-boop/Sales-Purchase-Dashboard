@@ -100,8 +100,9 @@ const CalcDetailTooltip: React.FC<{
   actualPrice: number;
   priceSource: string;
   onSave: (leafPn: string, fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number }) => void;
+  onApplyCalc: (leafPn: string, calcPrice: number) => void;
   onClose: () => void;
-}> = ({ detail, anchorRect, actualPrice, priceSource, onSave, onClose }) => {
+}> = ({ detail, anchorRect, actualPrice, priceSource, onSave, onApplyCalc, onClose }) => {
   const { materialPrice, materialCode, materialName } = detail;
   const [nw, setNw] = useState(detail.netWeight);
   const [rw, setRw] = useState(detail.runnerWeight);
@@ -210,15 +211,36 @@ const CalcDetailTooltip: React.FC<{
             </div>
           </>
         )}
-        {hasChanges && (
+        <div className="flex gap-2 mt-2">
+          {hasChanges && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 py-1.5 bg-slate-600 hover:bg-slate-500 text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+            >
+              {saving ? '저장 중...' : '기준정보 저장'}
+            </button>
+          )}
           <button
-            onClick={handleSave}
+            onClick={async () => {
+              setSaving(true);
+              if (hasChanges) {
+                const fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number } = {};
+                if (nw !== detail.netWeight) fields.netWeight = nw;
+                if (rw !== detail.runnerWeight) fields.runnerWeight = rw;
+                if (cav !== detail.cavity) fields.cavity = cav;
+                if (loss !== detail.lossRate) fields.lossRate = loss;
+                await onSave(detail.leafPn, fields);
+              }
+              await onApplyCalc(detail.leafPn, calcResult);
+              setSaving(false);
+            }}
             disabled={saving}
-            className="w-full mt-2 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
+            className="flex-1 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs rounded-lg transition-colors disabled:opacity-50"
           >
-            {saving ? '저장 중...' : '기준정보 마스터에 저장'}
+            {saving ? '적용 중...' : `₩${Math.round(calcResult).toLocaleString()} 적용`}
           </button>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -239,11 +261,21 @@ const BomTreePopup: React.FC<{
   );
 
   const handleCalcSave = async (leafPn: string, fields: { netWeight?: number; runnerWeight?: number; cavity?: number; lossRate?: number }) => {
-    const ok = await referenceInfoService.updateFields(leafPn, fields);
-    if (ok) {
-      onRefInfoUpdate();
-      setCalcOpenIdx(null);
+    await referenceInfoService.updateFields(leafPn, fields);
+  };
+
+  const handleCalcApply = async (leafPn: string, calcPrice: number) => {
+    // 표준재료비(사출재료비)를 산출값으로 업데이트
+    await itemStandardCostService.updateResinCost(leafPn, calcPrice);
+    // 팝업 내 로컬 상태도 즉시 반영
+    const idx = calcOpenIdx;
+    if (idx !== null) {
+      const updated = [...localLeaves];
+      updated[idx] = { ...updated[idx], unitPrice: calcPrice, cost: updated[idx].totalQty * calcPrice, priceSource: '사출(적용)' };
+      setLocalLeaves(updated);
     }
+    setCalcOpenIdx(null);
+    onRefInfoUpdate(); // 전체 재계산
   };
 
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
@@ -457,6 +489,7 @@ const BomTreePopup: React.FC<{
           actualPrice={localLeaves[calcOpenIdx].unitPrice}
           priceSource={localLeaves[calcOpenIdx].priceSource}
           onSave={handleCalcSave}
+          onApplyCalc={handleCalcApply}
           onClose={() => setCalcOpenIdx(null)}
         />
       )}
