@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useColumnResize } from '../hooks/useColumnResize';
 import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
@@ -58,6 +59,9 @@ interface GapRow {
 }
 
 const BomMasterUploadView: React.FC = () => {
+  // --- Column Resize (9 columns) ---
+  const bomResize = useColumnResize([120, 120, 140, 50, 70, 70, 70, 80, 80]);
+
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>(INITIAL_STATUS);
   const [qualityIssues, setQualityIssues] = useState<DataQualityIssue[]>([]);
   const [assembledBom, setAssembledBom] = useState<AssembledBomInfo[]>([]);
@@ -915,26 +919,30 @@ const BomMasterUploadView: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-lg shadow overflow-hidden max-h-96 overflow-y-auto">
-            <table className="min-w-full text-xs">
+            <table className="text-xs" style={{ tableLayout: 'fixed', minWidth: bomResize.widths.reduce((a, b) => a + b, 0) }}>
               <thead className="bg-gray-50 sticky top-0">
                 <tr>
-                  <th className="px-3 py-2 text-left text-gray-600 font-medium">모품번</th>
-                  <th className="px-3 py-2 text-left text-gray-600 font-medium">자품번</th>
-                  <th className="px-3 py-2 text-left text-gray-600 font-medium">자품명</th>
-                  <th className="px-3 py-2 text-right text-gray-600 font-medium">Lv</th>
-                  <th className="px-3 py-2 text-right text-gray-600 font-medium">소요량</th>
-                  <th className="px-3 py-2 text-left text-gray-600 font-medium">공정</th>
-                  <th className="px-3 py-2 text-left text-gray-600 font-medium">조달</th>
-                  <th className="px-3 py-2 text-right text-gray-600 font-medium">NET중량</th>
-                  <th className="px-3 py-2 text-right text-gray-600 font-medium">재질단가</th>
+                  {['모품번','자품번','자품명','Lv','소요량','공정','조달','NET중량','재질단가'].map((label, ci) => (
+                    <th
+                      key={ci}
+                      className={`px-3 py-2 text-gray-600 font-medium whitespace-nowrap ${ci >= 3 && ci !== 5 && ci !== 6 ? 'text-right' : 'text-left'}`}
+                      style={bomResize.getHeaderStyle(ci)}
+                    >
+                      {label}
+                      <div
+                        onMouseDown={e => bomResize.startResize(ci, e)}
+                        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }}
+                      />
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredBom.map((row, idx) => (
                   <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-3 py-1.5 font-mono text-gray-700 max-w-28 truncate">{row.parentPn}</td>
-                    <td className="px-3 py-1.5 font-mono text-gray-700 max-w-28 truncate">{row.childPn}</td>
-                    <td className="px-3 py-1.5 text-gray-600 max-w-32 truncate">{row.childName}</td>
+                    <td className="px-3 py-1.5 font-mono text-gray-700 overflow-hidden text-ellipsis whitespace-nowrap">{row.parentPn}</td>
+                    <td className="px-3 py-1.5 font-mono text-gray-700 overflow-hidden text-ellipsis whitespace-nowrap">{row.childPn}</td>
+                    <td className="px-3 py-1.5 text-gray-600 overflow-hidden text-ellipsis whitespace-nowrap">{row.childName}</td>
                     <td className="px-3 py-1.5 text-right text-gray-500">{row.level}</td>
                     <td className="px-3 py-1.5 text-right text-gray-600">{row.qty}</td>
                     <td className="px-3 py-1.5 text-gray-500">{row.processType || '-'}</td>

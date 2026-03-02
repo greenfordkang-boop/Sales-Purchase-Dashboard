@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useColumnResize } from '../hooks/useColumnResize';
 import MetricCard from './MetricCard';
 import {
   BomMasterRecord,
@@ -44,6 +45,9 @@ import {
 // ============================================
 
 const BomExplosionView: React.FC = () => {
+  // --- Column Resize ---
+  const fwdResize = useColumnResize([56, 180, 150, 80, 96, 80, 96, 80, 80, 96, 96]);
+
   // --- Data State ---
   const [bomRecords, setBomRecords] = useState<BomMasterRecord[]>([]);
   const [productCodes, setProductCodes] = useState<ProductCodeRecord[]>([]);
@@ -447,7 +451,7 @@ const BomExplosionView: React.FC = () => {
             </button>
           </div>
         </td>
-        <td className="px-3 py-2 text-xs text-slate-700 truncate max-w-[200px]" title={node.name}>
+        <td className="px-3 py-2 text-xs text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap" title={node.name}>
           {node.name}
         </td>
         <td className="px-3 py-2 text-right text-xs font-mono text-slate-600">
@@ -718,20 +722,22 @@ const BomExplosionView: React.FC = () => {
               </div>
 
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
+                <table className="text-xs text-left" style={{ tableLayout: 'fixed', minWidth: fwdResize.widths.reduce((a, b) => a + b, 0) }}>
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="px-3 py-2.5 text-center w-14">레벨</th>
-                      <th className="px-3 py-2.5 min-w-[180px]">품번 (Part No)</th>
-                      <th className="px-3 py-2.5 min-w-[150px]">품명</th>
-                      <th className="px-3 py-2.5 text-right w-20">단위수량</th>
-                      <th className="px-3 py-2.5 text-right w-24">누적소요량</th>
-                      <th className="px-3 py-2.5 w-20">부품유형</th>
-                      <th className="px-3 py-2.5 w-24">협력업체</th>
-                      <th className="px-3 py-2.5 w-20">공정</th>
-                      <th className="px-3 py-2.5 w-20">조달</th>
-                      <th className="px-2 py-2.5 text-right w-24">단가</th>
-                      <th className="px-2 py-2.5 text-right w-24">금액</th>
+                      {['레벨','품번 (Part No)','품명','단위수량','누적소요량','부품유형','협력업체','공정','조달','단가','금액'].map((label, ci) => (
+                        <th
+                          key={ci}
+                          className={`px-3 py-2.5 whitespace-nowrap ${ci === 0 ? 'text-center' : ci === 3 || ci === 4 || ci >= 9 ? 'text-right' : ''}`}
+                          style={fwdResize.getHeaderStyle(ci)}
+                        >
+                          {label}
+                          <div
+                            onMouseDown={e => fwdResize.startResize(ci, e)}
+                            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }}
+                          />
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">

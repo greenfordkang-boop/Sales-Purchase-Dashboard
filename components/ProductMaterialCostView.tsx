@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useColumnResize } from '../hooks/useColumnResize';
 import * as XLSX from 'xlsx';
 import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
@@ -809,6 +810,9 @@ const BomTreePopup: React.FC<{
 // ============================================================
 
 const ProductMaterialCostView: React.FC = () => {
+  // --- Column Resize (18 columns) ---
+  const mainResize = useColumnResize([80, 70, 60, 100, 100, 140, 60, 60, 70, 60, 100, 90, 90, 70, 90, 100, 100, 40]);
+
   const [loading, setLoading] = useState(true);
   const [baseRows, setBaseRows] = useState<ProductRow[]>([]);
   const [actualRevenue, setActualRevenue] = useState<ItemRevenueRow[]>([]);
@@ -1683,14 +1687,21 @@ const ProductMaterialCostView: React.FC = () => {
     }
   };
 
-  const SortHeader: React.FC<{ label: string; k: keyof ProductRow; align?: string }> = ({ label, k, align = 'left' }) => (
+  const SortHeader: React.FC<{ label: string; k: keyof ProductRow; align?: string; colIndex?: number }> = ({ label, k, align = 'left', colIndex }) => (
     <th
       className={`px-3 py-2.5 whitespace-nowrap cursor-pointer hover:bg-slate-100 select-none transition-colors ${align === 'right' ? 'text-right' : 'text-left'}`}
+      style={colIndex != null ? mainResize.getHeaderStyle(colIndex) : undefined}
       onClick={() => handleSort(k)}
     >
       {label}
       {sortConfig.key === k && (
         <span className="ml-1 text-blue-500">{sortConfig.dir === 'asc' ? '↑' : '↓'}</span>
+      )}
+      {colIndex != null && (
+        <div
+          onMouseDown={e => { e.stopPropagation(); mainResize.startResize(colIndex, e); }}
+          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }}
+        />
       )}
     </th>
   );
@@ -1789,27 +1800,27 @@ const ProductMaterialCostView: React.FC = () => {
       {/* 테이블 */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="text-xs" style={{ tableLayout: 'fixed', minWidth: mainResize.widths.reduce((a, b) => a + b, 0) }}>
             <thead className="bg-slate-50 text-slate-600 text-[11px]">
               <tr>
-                <SortHeader label="거래선" k="customer" />
-                <SortHeader label="차종" k="model" />
-                <SortHeader label="단계" k="stage" />
-                <th className="px-3 py-2.5 text-left whitespace-nowrap">P.N</th>
-                <th className="px-3 py-2.5 text-left whitespace-nowrap">NEW P.N</th>
-                <SortHeader label="품목명" k="partName" />
-                <SortHeader label="Type" k="type" />
-                <SortHeader label="구분" k="category" />
-                <SortHeader label="부품유형" k="processType" />
-                <SortHeader label="조달" k="supplyType" />
-                <SortHeader label="협력업체" k="supplier" />
-                <SortHeader label="판매단가" k="unitPrice" align="right" />
-                <SortHeader label="재료비/EA" k="materialCost" align="right" />
-                <SortHeader label="재료비율" k="materialRatio" align="right" />
-                <SortHeader label={`${periodLabel} 수량`} k="yearlyQty" align="right" />
-                <SortHeader label={`${periodLabel} 매출액`} k="yearlyRevenue" align="right" />
-                <SortHeader label={`${periodLabel} 재료비`} k="yearlyMaterialCost" align="right" />
-                <th className="px-2 py-2.5 text-center whitespace-nowrap text-[10px]">품질</th>
+                <SortHeader label="거래선" k="customer" colIndex={0} />
+                <SortHeader label="차종" k="model" colIndex={1} />
+                <SortHeader label="단계" k="stage" colIndex={2} />
+                <th className="px-3 py-2.5 text-left whitespace-nowrap" style={mainResize.getHeaderStyle(3)}>P.N<div onMouseDown={e => mainResize.startResize(3, e)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }} /></th>
+                <th className="px-3 py-2.5 text-left whitespace-nowrap" style={mainResize.getHeaderStyle(4)}>NEW P.N<div onMouseDown={e => mainResize.startResize(4, e)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }} /></th>
+                <SortHeader label="품목명" k="partName" colIndex={5} />
+                <SortHeader label="Type" k="type" colIndex={6} />
+                <SortHeader label="구분" k="category" colIndex={7} />
+                <SortHeader label="부품유형" k="processType" colIndex={8} />
+                <SortHeader label="조달" k="supplyType" colIndex={9} />
+                <SortHeader label="협력업체" k="supplier" colIndex={10} />
+                <SortHeader label="판매단가" k="unitPrice" align="right" colIndex={11} />
+                <SortHeader label="재료비/EA" k="materialCost" align="right" colIndex={12} />
+                <SortHeader label="재료비율" k="materialRatio" align="right" colIndex={13} />
+                <SortHeader label={`${periodLabel} 수량`} k="yearlyQty" align="right" colIndex={14} />
+                <SortHeader label={`${periodLabel} 매출액`} k="yearlyRevenue" align="right" colIndex={15} />
+                <SortHeader label={`${periodLabel} 재료비`} k="yearlyMaterialCost" align="right" colIndex={16} />
+                <th className="px-2 py-2.5 text-center whitespace-nowrap text-[10px]" style={mainResize.getHeaderStyle(17)}>품질<div onMouseDown={e => mainResize.startResize(17, e)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 4, cursor: 'col-resize' }} /></th>
               </tr>
             </thead>
             <tbody>
@@ -1846,7 +1857,7 @@ const ProductMaterialCostView: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 font-mono text-[11px]">{r.partNo}</td>
                     <td className="px-3 py-2 font-mono text-[11px]">{r.newPartNo}</td>
-                    <td className="px-3 py-2 max-w-[120px] truncate text-[11px]" title={r.partName}>{r.partName || '-'}</td>
+                    <td className="px-3 py-2 overflow-hidden text-ellipsis whitespace-nowrap text-[11px]" title={r.partName}>{r.partName || '-'}</td>
                     <td className="px-3 py-2">{r.type || '-'}</td>
                     <td className="px-3 py-2">
                       <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium">{r.category || '-'}</span>
@@ -1871,7 +1882,7 @@ const ProductMaterialCostView: React.FC = () => {
                         }`}>{r.supplyType}</span>
                       ) : <span className="text-slate-300">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-[10px] text-slate-600 max-w-[100px] truncate" title={r.supplier}>{r.supplier || '-'}</td>
+                    <td className="px-3 py-2 text-[10px] text-slate-600 overflow-hidden text-ellipsis whitespace-nowrap" title={r.supplier}>{r.supplier || '-'}</td>
                     <td className="px-3 py-2 text-right font-mono">{fmt(r.unitPrice)}</td>
                     <td
                       className="px-3 py-2 text-right font-mono font-semibold cursor-pointer hover:bg-blue-100 rounded transition-colors relative group"
