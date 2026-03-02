@@ -261,12 +261,31 @@ const BomExplosionView: React.FC = () => {
     };
   }, [selectedPn, forwardMap, refInfoMap, productCodes, refInfo]);
 
-  // --- Reverse Paths ---
+  // --- Reverse Paths (with customerPn-based fallback) ---
   const reversePaths = useMemo(() => {
     if (!selectedPn) return [];
-    const raw = expandReversePaths(selectedPn, reverseMap);
+
+    let expandPn = selectedPn;
+    const normalizedSelected = normalizePn(selectedPn);
+
+    // reverseMap에 없으면 customerPn으로 BOM 코드 찾기
+    if (!reverseMap.has(normalizedSelected)) {
+      const pc = productCodes.find(p => normalizePn(p.productCode) === normalizedSelected);
+      const selectedRef = refInfoMap.get(normalizedSelected);
+      const customerPn = pc?.customerPn || selectedRef?.customerPn;
+
+      if (customerPn) {
+        const custNorm = normalizePn(customerPn);
+        const candidate = refInfo.find(
+          ri => ri.customerPn && normalizePn(ri.customerPn) === custNorm && reverseMap.has(normalizePn(ri.itemCode)),
+        );
+        if (candidate) expandPn = candidate.itemCode;
+      }
+    }
+
+    const raw = expandReversePaths(expandPn, reverseMap);
     return enrichReversePaths(raw, bomRecords, refInfo, productCodes);
-  }, [selectedPn, reverseMap, bomRecords, refInfo, productCodes]);
+  }, [selectedPn, reverseMap, bomRecords, refInfo, productCodes, refInfoMap]);
 
   // --- Tree Metrics ---
   const treeMetrics = useMemo(() => {
