@@ -213,11 +213,53 @@ const BomExplosionView: React.FC = () => {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // --- Forward Tree ---
-  const forwardTree = useMemo(() => {
-    if (!selectedPn) return null;
-    return expandForwardTree(selectedPn, forwardMap, refInfoMap);
-  }, [selectedPn, forwardMap, refInfoMap]);
+  // --- Forward Tree (with customerPn-based fallback for product codes) ---
+  const { forwardTree, bomRootPn } = useMemo(() => {
+    if (!selectedPn) return { forwardTree: null, bomRootPn: '' };
+
+    const normalizedSelected = normalizePn(selectedPn);
+
+    // 1) Direct expansion: selectedPn이 forwardMap에 있으면 바로 전개
+    if (forwardMap.has(normalizedSelected)) {
+      return {
+        forwardTree: expandForwardTree(selectedPn, forwardMap, refInfoMap),
+        bomRootPn: '',
+      };
+    }
+
+    // 2) CustomerPn fallback: 제품코드(AAA) → 고객P/N → BOM 공정코드(HVS/IBH) 자동 연결
+    const pc = productCodes.find(p => normalizePn(p.productCode) === normalizedSelected);
+    const selectedRef = refInfoMap.get(normalizedSelected);
+    const customerPn = pc?.customerPn || selectedRef?.customerPn;
+
+    if (customerPn) {
+      const custNorm = normalizePn(customerPn);
+      // 같은 고객P/N을 가진 refInfo 중 forwardMap에 있는 항목 찾기
+      const bomRoots = refInfo
+        .filter(ri => ri.customerPn && normalizePn(ri.customerPn) === custNorm && forwardMap.has(normalizePn(ri.itemCode)))
+        .sort((a, b) => {
+          // children이 더 많은 (BOM 루트에 가까운) 항목 우선
+          const aLen = forwardMap.get(normalizePn(a.itemCode))?.length || 0;
+          const bLen = forwardMap.get(normalizePn(b.itemCode))?.length || 0;
+          return bLen - aLen;
+        });
+
+      if (bomRoots.length > 0) {
+        const root = bomRoots[0];
+        const tree = expandForwardTree(root.itemCode, forwardMap, refInfoMap);
+        // 루트 노드를 제품코드 정보로 대체 (하위 트리는 유지)
+        tree.pn = selectedPn;
+        tree.name = pc?.productName || selectedRef?.itemName || tree.name;
+        return { forwardTree: tree, bomRootPn: root.itemCode };
+      }
+    }
+
+    // 3) Fallback: 그대로 전개 (children 없음)
+    return {
+      forwardTree: expandForwardTree(selectedPn, forwardMap, refInfoMap),
+      bomRootPn: '',
+    };
+  }, [selectedPn, forwardMap, refInfoMap, productCodes, refInfo]);
 
   // --- Reverse Paths ---
   const reversePaths = useMemo(() => {
@@ -706,10 +748,17 @@ const BomExplosionView: React.FC = () => {
           {mode === 'forward' && forwardTree && (
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
-                  <span className="w-1 h-5 bg-indigo-600 rounded-full" />
-                  정전개 트리 (Forward Explosion)
-                </h3>
+                <div>
+                  <h3 className="font-black text-slate-800 flex items-center gap-2">
+                    <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                    정전개 트리 (Forward Explosion)
+                  </h3>
+                  {bomRootPn && (
+                    <p className="text-[11px] text-amber-600 mt-1 ml-4">
+                      제품코드 → BOM 자동연결: <span className="font-mono font-bold">{bomRootPn}</span> (고객P/N 기준)
+                    </p>
+                  )}
+                </div>
                 <button
                   onClick={handleDownloadForward}
                   className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
