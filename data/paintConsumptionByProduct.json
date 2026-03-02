@@ -1,0 +1,1781 @@
+[
+  {
+    "itemCode": "MVP2KBZZSQF1",
+    "itemName": "VP2NG_KNOB BODY",
+    "custPN": "03041-00283-2",
+    "customer": "모트렉스",
+    "spec": "BODY",
+    "totalProdQty": 79514,
+    "totalPaintG": 231559,
+    "paintGPerEa": 2.91,
+    "totalPaintCost": 2015143284,
+    "paintCostPerEa": 25343,
+    "matCodes": [
+      "PHT0231",
+      "PSP0351"
+    ],
+    "paintCodes": [
+      "SHT0231",
+      "XHT0231",
+      "SSP0351",
+      "XSP0351"
+    ],
+    "productionDays": 5
+  },
+  {
+    "itemCode": "LJAPKBZZSPP1",
+    "itemName": "JAPE_KNOB BODY",
+    "custPN": "MEY65294201",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 50237,
+    "totalPaintG": 67459,
+    "paintGPerEa": 1.34,
+    "totalPaintCost": 579484738,
+    "paintCostPerEa": 11535,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "LBCXKDCZSQK1",
+    "itemName": "BC3_KNOB CAP",
+    "custPN": "MBL68497501",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 40360,
+    "totalPaintG": 53636,
+    "paintGPerEa": 1.33,
+    "totalPaintCost": 514617610,
+    "paintCostPerEa": 12751,
+    "matCodes": [
+      "PHT0251",
+      "PTA0371"
+    ],
+    "paintCodes": [
+      "SHT0251",
+      "STA0371"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "MVP2CRZZSQF1",
+    "itemName": "VP2NG_COVER REAR",
+    "custPN": "03011-00276-2",
+    "customer": "모트렉스",
+    "spec": "REAR",
+    "totalProdQty": 39106,
+    "totalPaintG": 862653,
+    "paintGPerEa": 22.06,
+    "totalPaintCost": 7361196251,
+    "paintCostPerEa": 188237,
+    "matCodes": [
+      "PSP0351",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "XSP0351",
+      "XHT0231",
+      "SHT0231",
+      "SSP0351"
+    ],
+    "productionDays": 12
+  },
+  {
+    "itemCode": "LJAPKDRZSPG1",
+    "itemName": "JAPE_DECO RING",
+    "custPN": "MCR68208301",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 35252,
+    "totalPaintG": 53350,
+    "paintGPerEa": 1.51,
+    "totalPaintCost": 450884641,
+    "paintCostPerEa": 12790,
+    "matCodes": [
+      "PNW0621",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "SNW0621",
+      "SHT0161",
+      "XHT0161"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "LJAPKCSLSPP2",
+    "itemName": "JAPE_COVER SCREW L",
+    "custPN": "MCK71150201",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 29862,
+    "totalPaintG": 95221,
+    "paintGPerEa": 3.19,
+    "totalPaintCost": 834236227,
+    "paintCostPerEa": 27936,
+    "matCodes": [
+      "PSP1021",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "XSP1021",
+      "SHT0161",
+      "XHT0161",
+      "SSP1021"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LJAPKCSRSPP2",
+    "itemName": "JAPE_COVER SCREW R",
+    "custPN": "MCK71142001",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 29600,
+    "totalPaintG": 94002,
+    "paintGPerEa": 3.18,
+    "totalPaintCost": 823658566,
+    "paintCostPerEa": 27826,
+    "matCodes": [
+      "PSP1021",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "XSP1021",
+      "SHT0161",
+      "XHT0161",
+      "SSP1021"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LJAPPRZZSPP1",
+    "itemName": "JAPE_PANEL REAR",
+    "custPN": "MGC66200201",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 29013,
+    "totalPaintG": 229188,
+    "paintGPerEa": 7.9,
+    "totalPaintCost": 2014210418,
+    "paintCostPerEa": 69424,
+    "matCodes": [
+      "PSP1021",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "XSP1021",
+      "XHT0161",
+      "SHT0161",
+      "SSP1021"
+    ],
+    "productionDays": 7
+  },
+  {
+    "itemCode": "DJAXCPCLSPP1",
+    "itemName": "JA_PLATE-CONSOLE UPR COVER LHD",
+    "custPN": "84655G6000",
+    "customer": "동국실업",
+    "spec": "FRONT",
+    "totalProdQty": 27116,
+    "totalPaintG": 242792,
+    "paintGPerEa": 8.95,
+    "totalPaintCost": 2072008111,
+    "paintCostPerEa": 76413,
+    "matCodes": [
+      "PNW0451",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "SHT0161",
+      "XNW0451",
+      "XHT0161"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT4ZSPP1",
+    "itemName": "JAPE_BUTTON 4",
+    "custPN": "MBG67704301",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 23250,
+    "totalPaintG": 38220,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 327597216,
+    "paintCostPerEa": 14090,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT1ZSPP1",
+    "itemName": "JAPE_BUTTON 1",
+    "custPN": "MBG67704201",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 23137,
+    "totalPaintG": 37994,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 325656814,
+    "paintCostPerEa": 14075,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT3ZSPP1",
+    "itemName": "JAPE_BUTTON 3",
+    "custPN": "MBG67684901",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 23130,
+    "totalPaintG": 37984,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 325578833,
+    "paintCostPerEa": 14076,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT5ZSPP1",
+    "itemName": "JAPE_BUTTON 5",
+    "custPN": "MBG67645201",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 23115,
+    "totalPaintG": 37903,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 324886658,
+    "paintCostPerEa": 14055,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT6ZSPP1",
+    "itemName": "JAPE_BUTTON 6",
+    "custPN": "MBG67685001",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 23043,
+    "totalPaintG": 37848,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 324420291,
+    "paintCostPerEa": 14079,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT7ZSPP1",
+    "itemName": "JAPE_BUTTON 7",
+    "custPN": "MBG67685101",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 22999,
+    "totalPaintG": 37770,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 323746732,
+    "paintCostPerEa": 14077,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT2ZSPP1",
+    "itemName": "JAPE_BUTTON 2",
+    "custPN": "MBG67645101",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 22878,
+    "totalPaintG": 37544,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 321812448,
+    "paintCostPerEa": 14066,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LJAPBT8ZSPP1",
+    "itemName": "JAPE_BUTTON 8",
+    "custPN": "MBG67685201",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 22701,
+    "totalPaintG": 37233,
+    "paintGPerEa": 1.64,
+    "totalPaintCost": 319138828,
+    "paintCostPerEa": 14058,
+    "matCodes": [
+      "PHT0161",
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SHT0161",
+      "XHT0161",
+      "SNW0621"
+    ],
+    "productionDays": 6
+  },
+  {
+    "itemCode": "LPDPKDCZHQK1",
+    "itemName": "PD PE_KNOB CAP",
+    "custPN": "MEY65194001",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 21740,
+    "totalPaintG": 53570,
+    "paintGPerEa": 2.46,
+    "totalPaintCost": 512604652,
+    "paintCostPerEa": 23579,
+    "matCodes": [
+      "PHT0251",
+      "PTA0371"
+    ],
+    "paintCodes": [
+      "SHT0251",
+      "STA0371"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "LJAPKDCZHPN1",
+    "itemName": "JAPE_DECO KNOB CAP",
+    "custPN": "MBL68479001",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 21240,
+    "totalPaintG": 27498,
+    "paintGPerEa": 1.29,
+    "totalPaintCost": 392387458,
+    "paintCostPerEa": 18474,
+    "matCodes": [
+      "PDR0131",
+      "PDR0141"
+    ],
+    "paintCodes": [
+      "SDR0131",
+      "SDR0141"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LPD2PRZZSQS1",
+    "itemName": "PD_PE2_PANEL REAR",
+    "custPN": "MCK71675801",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 11382,
+    "totalPaintG": 204886,
+    "paintGPerEa": 18,
+    "totalPaintCost": 1777096524,
+    "paintCostPerEa": 156132,
+    "matCodes": [
+      "PNW0451",
+      "PHT0191"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "XHT0191"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "MVP2KCLZSQF1",
+    "itemName": "VP2NG_KNOB_CAP_LH",
+    "custPN": "03041-00286-2",
+    "customer": "모트렉스",
+    "spec": "CAP",
+    "totalProdQty": 10000,
+    "totalPaintG": 22871,
+    "paintGPerEa": 2.29,
+    "totalPaintCost": 197273859,
+    "paintCostPerEa": 19727,
+    "matCodes": [
+      "PSP0351",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SSP0351",
+      "SHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "EBL7BT4ZHRC1",
+    "itemName": "BL7m_DATC_BUTTON Rr DEF",
+    "custPN": "FVLAH1196-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 9698,
+    "totalPaintG": 23873,
+    "paintGPerEa": 2.46,
+    "totalPaintCost": 326218455,
+    "paintCostPerEa": 33638,
+    "matCodes": [
+      "PPC0551",
+      "PHG0981"
+    ],
+    "paintCodes": [
+      "SPC0551",
+      "SHG0981"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "EBL7BT3ZHRC1",
+    "itemName": "BL7m_DATC_BUTTON Fr DEF",
+    "custPN": "FVLAH1201-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 9017,
+    "totalPaintG": 21897,
+    "paintGPerEa": 2.43,
+    "totalPaintCost": 299938993,
+    "paintCostPerEa": 33264,
+    "matCodes": [
+      "PPC0551",
+      "PHG0981"
+    ],
+    "paintCodes": [
+      "SPC0551",
+      "SHG0981"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "EBL7BT2ZSRC1",
+    "itemName": "BL7m_DATC_BUTTON AUTO",
+    "custPN": "FVLAH1207-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 8946,
+    "totalPaintG": 21734,
+    "paintGPerEa": 2.43,
+    "totalPaintCost": 297639567,
+    "paintCostPerEa": 33271,
+    "matCodes": [
+      "PPC0551",
+      "PHG0981"
+    ],
+    "paintCodes": [
+      "SPC0551",
+      "SHG0981"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "EBL7BT1ZSRC1",
+    "itemName": "BL7m_DATC_BUTTON OFF",
+    "custPN": "FVLAH1208-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 8884,
+    "totalPaintG": 21588,
+    "paintGPerEa": 2.43,
+    "totalPaintCost": 295534780,
+    "paintCostPerEa": 33266,
+    "matCodes": [
+      "PPC0551",
+      "PHG0981"
+    ],
+    "paintCodes": [
+      "SPC0551",
+      "SHG0981"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "EBL7BTXASTK1",
+    "itemName": "BL7m_MTC_BUTTON B(REC)",
+    "custPN": "CVLBH1569-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7939,
+    "totalPaintG": 9950,
+    "paintGPerEa": 1.25,
+    "totalPaintCost": 85684028,
+    "paintCostPerEa": 10793,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT5ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON VENT",
+    "custPN": "CVLAH1197-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7662,
+    "totalPaintG": 9551,
+    "paintGPerEa": 1.25,
+    "totalPaintCost": 82245025,
+    "paintCostPerEa": 10734,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT0ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON TEMP",
+    "custPN": "CVLAH1204-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7638,
+    "totalPaintG": 9494,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 81755397,
+    "paintCostPerEa": 10704,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT8ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON MIX",
+    "custPN": "CVLAH1200-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7545,
+    "totalPaintG": 9380,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 80772341,
+    "paintCostPerEa": 10705,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7CBZZSTK1",
+    "itemName": "BL7m_MTC_CAP B",
+    "custPN": "CVLBH2042-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7522,
+    "totalPaintG": 9326,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 80306194,
+    "paintCostPerEa": 10676,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT1MSTK1",
+    "itemName": "BL7m_MTC_BUTTON OFF",
+    "custPN": "CVLAH1208-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7481,
+    "totalPaintG": 9292,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 80013112,
+    "paintCostPerEa": 10696,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT4ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON Rr DEF",
+    "custPN": "CVLAH1196-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7478,
+    "totalPaintG": 9311,
+    "paintGPerEa": 1.25,
+    "totalPaintCost": 80178032,
+    "paintCostPerEa": 10722,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7CAZZSTK1",
+    "itemName": "BL7m_MTC_CAP A",
+    "custPN": "CVLAH2042-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7471,
+    "totalPaintG": 9265,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 79783895,
+    "paintCostPerEa": 10679,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT2MSTK1",
+    "itemName": "BL7m_MTC_BUTTON BLOWER",
+    "custPN": "CVLAH1205-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7455,
+    "totalPaintG": 9463,
+    "paintGPerEa": 1.27,
+    "totalPaintCost": 81541514,
+    "paintCostPerEa": 10938,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "EBL7BT9ASTK1",
+    "itemName": "BL7m_MTC_BUTTON A(A/C)",
+    "custPN": "CVLBH1568-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7451,
+    "totalPaintG": 9239,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 79560739,
+    "paintCostPerEa": 10678,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT6ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON B/L",
+    "custPN": "CVLAH1198-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7444,
+    "totalPaintG": 9230,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 79481047,
+    "paintCostPerEa": 10677,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT7ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON FLR",
+    "custPN": "CVLAH1199-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7442,
+    "totalPaintG": 9229,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 79469397,
+    "paintCostPerEa": 10679,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "EBL7BT3ZSTK1",
+    "itemName": "BL7m_MTC_BUTTON Fr DEF",
+    "custPN": "CVLAH1201-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 7397,
+    "totalPaintG": 9171,
+    "paintGPerEa": 1.24,
+    "totalPaintCost": 78973674,
+    "paintCostPerEa": 10676,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LBCXKBZZSQM1",
+    "itemName": "BC3_KNOB BODY",
+    "custPN": "MEY65274301",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 6855,
+    "totalPaintG": 14046,
+    "paintGPerEa": 2.05,
+    "totalPaintCost": 118936000,
+    "paintCostPerEa": 17350,
+    "matCodes": [
+      "PNW0451"
+    ],
+    "paintCodes": [
+      "SNW0451"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LCDCKDRZHQU1",
+    "itemName": "CD CUV_DECO KNOB RING",
+    "custPN": "MEY64953801",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 5934,
+    "totalPaintG": 20410,
+    "paintGPerEa": 3.44,
+    "totalPaintCost": 191462051,
+    "paintCostPerEa": 32265,
+    "matCodes": [
+      "PSP0331",
+      "PTA0381"
+    ],
+    "paintCodes": [
+      "SSP0331",
+      "STA0381"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LJXFBTAZSSV1",
+    "itemName": "ccRC_JX FL_BUTTON ARRAY",
+    "custPN": "MBG67869801",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 5540,
+    "totalPaintG": 31079,
+    "paintGPerEa": 5.61,
+    "totalPaintCost": 302924544,
+    "paintCostPerEa": 54680,
+    "matCodes": [
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SHT0231",
+      "XHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXECRZNSRM1",
+    "itemName": "AX_EV_REAR COVER_NNB",
+    "custPN": "MCK71719803",
+    "customer": "LG전자",
+    "spec": "FRONT",
+    "totalProdQty": 5225,
+    "totalPaintG": 95560,
+    "paintGPerEa": 18.29,
+    "totalPaintCost": 1010240907,
+    "paintCostPerEa": 193348,
+    "matCodes": [
+      "PDR1791"
+    ],
+    "paintCodes": [
+      "SDR1791"
+    ],
+    "productionDays": 5
+  },
+  {
+    "itemCode": "EBL7BAWKSTK2",
+    "itemName": "BL7m_MTC_BEZEL FRONT A_WK G6",
+    "custPN": "CVLAH1635-00",
+    "customer": "동아전기부품",
+    "spec": "FRONT",
+    "totalProdQty": 5161,
+    "totalPaintG": 28758,
+    "paintGPerEa": 5.57,
+    "totalPaintCost": 230067174,
+    "paintCostPerEa": 44578,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "XPR1391"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "EBL7KRZDSTO1",
+    "itemName": "BL7m_DATC_KNOB RING",
+    "custPN": "FVLBH1823-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 4813,
+    "totalPaintG": 12682,
+    "paintGPerEa": 2.63,
+    "totalPaintCost": 105130640,
+    "paintCostPerEa": 21843,
+    "matCodes": [
+      "PDP0891"
+    ],
+    "paintCodes": [
+      "SDP0891"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "EBL7KBZDSTK1",
+    "itemName": "BL7m_DATC_KNOB TEMP",
+    "custPN": "FVLBH1802-00",
+    "customer": "동아전기부품",
+    "spec": "BUTTON",
+    "totalProdQty": 4712,
+    "totalPaintG": 6291,
+    "paintGPerEa": 1.34,
+    "totalPaintCost": 54114762,
+    "paintCostPerEa": 11484,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "SPR1391"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXECSLNSRM1",
+    "itemName": "AX_EV_CAP SCREW L_NNB",
+    "custPN": "MBL68749003",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 4704,
+    "totalPaintG": 52111,
+    "paintGPerEa": 11.08,
+    "totalPaintCost": 559589231,
+    "paintCostPerEa": 118960,
+    "matCodes": [
+      "PDR1791"
+    ],
+    "paintCodes": [
+      "SDR1791"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LAXECSMNSRM1",
+    "itemName": "AX_EV_CAP SCREW M_NNB",
+    "custPN": "MBL68749103",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 4635,
+    "totalPaintG": 51423,
+    "paintGPerEa": 11.09,
+    "totalPaintCost": 552190380,
+    "paintCostPerEa": 119135,
+    "matCodes": [
+      "PDR1791"
+    ],
+    "paintCodes": [
+      "SDR1791"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LAXECSRNSRM1",
+    "itemName": "AX_EV_CAP SCREW R_NNB",
+    "custPN": "MBL68749203",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 4623,
+    "totalPaintG": 51228,
+    "paintGPerEa": 11.08,
+    "totalPaintCost": 550077083,
+    "paintCostPerEa": 118987,
+    "matCodes": [
+      "PDR1791"
+    ],
+    "paintCodes": [
+      "SDR1791"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "LJXFSCRCSQS1",
+    "itemName": "ccRC_JX FL_CAP SCREW",
+    "custPN": "MBL68735401",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 4426,
+    "totalPaintG": 54777,
+    "paintGPerEa": 12.38,
+    "totalPaintCost": 511341826,
+    "paintCostPerEa": 115531,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "XNW0451",
+      "XHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LCDCKDCZSPU1",
+    "itemName": "CD CUV_DECO KNOB CAP",
+    "custPN": "MEY64914001",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 4416,
+    "totalPaintG": 24135,
+    "paintGPerEa": 5.47,
+    "totalPaintCost": 208080273,
+    "paintCostPerEa": 47120,
+    "matCodes": [
+      "PNW0451"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "LJXFCRMLSQS1",
+    "itemName": "ccRC_JX FL_COVER REAR_MONITOR L",
+    "custPN": "MCK71749902",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 3580,
+    "totalPaintG": 108898,
+    "paintGPerEa": 30.42,
+    "totalPaintCost": 988407179,
+    "paintCostPerEa": 276091,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "SHT0231",
+      "XHT0231"
+    ],
+    "productionDays": 3
+  },
+  {
+    "itemCode": "LCDCKBZZSPU1",
+    "itemName": "CD CUV_KNOB BODY",
+    "custPN": "MEY64953701",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 3250,
+    "totalPaintG": 18097,
+    "paintGPerEa": 5.57,
+    "totalPaintCost": 156912822,
+    "paintCostPerEa": 48281,
+    "matCodes": [
+      "PNW0451"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "LJXFCRMRSQS1",
+    "itemName": "ccRC_JX FL_COVER REAR_MONITOR R",
+    "custPN": "MCK71749901",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 3148,
+    "totalPaintG": 122971,
+    "paintGPerEa": 39.06,
+    "totalPaintCost": 1125297492,
+    "paintCostPerEa": 357464,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "SHT0231",
+      "XHT0231"
+    ],
+    "productionDays": 4
+  },
+  {
+    "itemCode": "DJAXCPCRSPP1",
+    "itemName": "JA_PLATE-CONSOLE UPR COVER RHD",
+    "custPN": "84655G6900",
+    "customer": "동국실업",
+    "spec": "FRONT",
+    "totalProdQty": 2424,
+    "totalPaintG": 20171,
+    "paintGPerEa": 8.32,
+    "totalPaintCost": 169189279,
+    "paintCostPerEa": 69798,
+    "matCodes": [
+      "PNW0451",
+      "PHT0161"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "SHT0161"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "EBL7BAEGSUW2",
+    "itemName": "BL7m_MTC_BEZEL FRONT A_EG6",
+    "custPN": "CVLDH1635-00",
+    "customer": "동아전기부품",
+    "spec": "FRONT",
+    "totalProdQty": 2348,
+    "totalPaintG": 23380,
+    "paintGPerEa": 9.96,
+    "totalPaintCost": 433012995,
+    "paintCostPerEa": 184418,
+    "matCodes": [
+      "PSP1521",
+      "PSP1531"
+    ],
+    "paintCodes": [
+      "XSP1521",
+      "XSP1531"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LJXFCHZZSQS1",
+    "itemName": "ccRC_JX FL_COVER HINGE",
+    "custPN": "MCK71750001",
+    "customer": "LG전자",
+    "spec": "HINGE",
+    "totalProdQty": 1840,
+    "totalPaintG": 19361,
+    "paintGPerEa": 10.52,
+    "totalPaintCost": 182583778,
+    "paintCostPerEa": 99230,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "SHT0231",
+      "XHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LRS5CRMRSQS1",
+    "itemName": "ccRC_RS4 25MY_COVER REAR_MONITOR R",
+    "custPN": "MCK71925401",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 1708,
+    "totalPaintG": 30151,
+    "paintGPerEa": 17.65,
+    "totalPaintCost": 272788334,
+    "paintCostPerEa": 159712,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "SHT0231",
+      "XHT0231"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "LADPKBZZSPH1",
+    "itemName": "AD PE_KNOB BODY",
+    "custPN": "MEY64653901",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 1531,
+    "totalPaintG": 6638,
+    "paintGPerEa": 4.34,
+    "totalPaintCost": 145397400,
+    "paintCostPerEa": 94969,
+    "matCodes": [
+      "PDR0081"
+    ],
+    "paintCodes": [
+      "SDR0081"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "EBL7OBZZHTK1",
+    "itemName": "BL7m_DATC_OVERLAY B",
+    "custPN": "FVLAH2050-00",
+    "customer": "동아전기부품",
+    "spec": "FRONT",
+    "totalProdQty": 1500,
+    "totalPaintG": 7454,
+    "paintGPerEa": 4.97,
+    "totalPaintCost": 59607920,
+    "paintCostPerEa": 39739,
+    "matCodes": [
+      "PPR1391"
+    ],
+    "paintCodes": [
+      "XPR1391"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LADPKDCZHPN1",
+    "itemName": "AD PE_DECO KNOB CAP",
+    "custPN": "MEY64653801",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 1490,
+    "totalPaintG": 10012,
+    "paintGPerEa": 6.72,
+    "totalPaintCost": 166549914,
+    "paintCostPerEa": 111778,
+    "matCodes": [
+      "PDR0141"
+    ],
+    "paintCodes": [
+      "SDR0141"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LHRXBTAZSQI1",
+    "itemName": "HIGHROOF_BUTTON ARRAY",
+    "custPN": "MBG30082701",
+    "customer": "LG전자",
+    "spec": "",
+    "totalProdQty": 1395,
+    "totalPaintG": 17312,
+    "paintGPerEa": 12.41,
+    "totalPaintCost": 149339839,
+    "paintCostPerEa": 107054,
+    "matCodes": [
+      "PHT0231",
+      "PSP0351"
+    ],
+    "paintCodes": [
+      "SHT0231",
+      "XHT0231",
+      "SSP0351"
+    ],
+    "productionDays": 2
+  },
+  {
+    "itemCode": "EBL7BFEGSUJ2",
+    "itemName": "BL7m_DATC_BEZEL PANEL_EG6",
+    "custPN": "FVLCH1635-00",
+    "customer": "동아전기부품",
+    "spec": "FRONT",
+    "totalProdQty": 1358,
+    "totalPaintG": 13522,
+    "paintGPerEa": 9.96,
+    "totalPaintCost": 250439372,
+    "paintCostPerEa": 184418,
+    "matCodes": [
+      "PSP1521",
+      "PSP1531"
+    ],
+    "paintCodes": [
+      "XSP1521",
+      "XSP1531"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "EBL7BFOFSUJ2",
+    "itemName": "BL7m_DATC_BEZEL PANEL_OFM",
+    "custPN": "FVLBH1635-01",
+    "customer": "동아전기부품",
+    "spec": "FRONT",
+    "totalProdQty": 1042,
+    "totalPaintG": 19200,
+    "paintGPerEa": 18.43,
+    "totalPaintCost": 408227384,
+    "paintCostPerEa": 391773,
+    "matCodes": [
+      "PDR1411"
+    ],
+    "paintCodes": [
+      "XDR1411"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "MADPPFZMSQM1",
+    "itemName": "AD PE_PANEL FRONT_MIC",
+    "custPN": "RC61Z258A",
+    "customer": "모트렉스",
+    "spec": "FRONT",
+    "totalProdQty": 1040,
+    "totalPaintG": 8600,
+    "paintGPerEa": 8.27,
+    "totalPaintCost": 73841886,
+    "paintCostPerEa": 71002,
+    "matCodes": [
+      "PNW0451"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LNH2CHZZSQS1",
+    "itemName": "NH2 CCRC COVER HINGE",
+    "custPN": "MCK30074501",
+    "customer": "한빛티앤아이",
+    "spec": "",
+    "totalProdQty": 670,
+    "totalPaintG": 9295,
+    "paintGPerEa": 13.87,
+    "totalPaintCost": 80742567,
+    "paintCostPerEa": 120511,
+    "matCodes": [
+      "PNW0451"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LRS5CRMLSQS1",
+    "itemName": "ccRC_RS4 25MY_COVER REAR_MONITOR L",
+    "custPN": "MCK71925402",
+    "customer": "LG전자",
+    "spec": "",
+    "totalProdQty": 612,
+    "totalPaintG": 34639,
+    "paintGPerEa": 56.6,
+    "totalPaintCost": 319340832,
+    "paintCostPerEa": 521799,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "XHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LGBXKBZZSQS1",
+    "itemName": "GB_BODY",
+    "custPN": "MEY63074001",
+    "customer": "LG전자",
+    "spec": "",
+    "totalProdQty": 588,
+    "totalPaintG": 6736,
+    "paintGPerEa": 11.46,
+    "totalPaintCost": 57626071,
+    "paintCostPerEa": 98004,
+    "matCodes": [
+      "PNW0451",
+      "PHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "SHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXECZYGSRM1",
+    "itemName": "AX_EV_REAR COVER_YGN",
+    "custPN": "MCK71719802",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 529,
+    "totalPaintG": 9397,
+    "paintGPerEa": 17.76,
+    "totalPaintCost": 110776170,
+    "paintCostPerEa": 209407,
+    "matCodes": [
+      "PDR1611"
+    ],
+    "paintCodes": [
+      "SDR1611"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXESLYGSRM1",
+    "itemName": "AX_EV_CAP SCREW L_YGN",
+    "custPN": "MBL68749002",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 510,
+    "totalPaintG": 9060,
+    "paintGPerEa": 17.76,
+    "totalPaintCost": 106797442,
+    "paintCostPerEa": 209407,
+    "matCodes": [
+      "PDR1611"
+    ],
+    "paintCodes": [
+      "SDR1611"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXESRYGSRM1",
+    "itemName": "AX_EV_CAP SCREW R_YGN",
+    "custPN": "MBL68749202",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 505,
+    "totalPaintG": 8971,
+    "paintGPerEa": 17.76,
+    "totalPaintCost": 105750408,
+    "paintCostPerEa": 209407,
+    "matCodes": [
+      "PDR1611"
+    ],
+    "paintCodes": [
+      "SDR1611"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LAXESMYGSRM1",
+    "itemName": "AX_EV_CAP SCREW M_YGN",
+    "custPN": "MBL68749102",
+    "customer": "LG전자",
+    "spec": "SCREW",
+    "totalProdQty": 501,
+    "totalPaintG": 8900,
+    "paintGPerEa": 17.76,
+    "totalPaintCost": 104912781,
+    "paintCostPerEa": 209407,
+    "matCodes": [
+      "PDR1611"
+    ],
+    "paintCodes": [
+      "SDR1611"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "MNERBRZZSSY1",
+    "itemName": "DSP_BEZEL_REAR",
+    "custPN": "03311-00007-2",
+    "customer": "모트렉스",
+    "spec": "REAR",
+    "totalProdQty": 400,
+    "totalPaintG": 1861,
+    "paintGPerEa": 4.65,
+    "totalPaintCost": 16323587,
+    "paintCostPerEa": 40809,
+    "matCodes": [
+      "PSP1021"
+    ],
+    "paintCodes": [
+      "SSP1021",
+      "XSP1021"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LACXPFZZSPW1",
+    "itemName": "AC3_PANEL FRONT",
+    "custPN": "MBN65663001",
+    "customer": "LG전자",
+    "spec": "FRONT",
+    "totalProdQty": 332,
+    "totalPaintG": 15776,
+    "paintGPerEa": 47.52,
+    "totalPaintCost": 151843184,
+    "paintCostPerEa": 457359,
+    "matCodes": [
+      "PSP1021",
+      "PHT0232"
+    ],
+    "paintCodes": [
+      "XSP1021",
+      "XHT0232"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LIKPKBZZSPO1",
+    "itemName": "IK_PE2_KNOB BODY",
+    "custPN": "MEY65470601",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 324,
+    "totalPaintG": 6964,
+    "paintGPerEa": 21.49,
+    "totalPaintCost": 62592812,
+    "paintCostPerEa": 193188,
+    "matCodes": [
+      "PNW0451",
+      "SHT0231"
+    ],
+    "paintCodes": [
+      "SNW0451",
+      "XNW0451",
+      "SHT0231"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LJGXCSLZSQI2",
+    "itemName": "JG_COVER SIDE LH(양산)",
+    "custPN": "MCK30069801",
+    "customer": "LG전자",
+    "spec": "",
+    "totalProdQty": 315,
+    "totalPaintG": 5699,
+    "paintGPerEa": 18.09,
+    "totalPaintCost": 48997092,
+    "paintCostPerEa": 155546,
+    "matCodes": [
+      "PHT0231",
+      "PSP0351"
+    ],
+    "paintCodes": [
+      "SHT0231",
+      "XHT0231",
+      "SSP0351"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LJGXCSRZSQI2",
+    "itemName": "JG_COVER SIDE RH(양산)",
+    "custPN": "MCK30069901",
+    "customer": "LG전자",
+    "spec": "",
+    "totalProdQty": 312,
+    "totalPaintG": 5644,
+    "paintGPerEa": 18.09,
+    "totalPaintCost": 48530453,
+    "paintCostPerEa": 155546,
+    "matCodes": [
+      "PHT0231",
+      "PSP0351"
+    ],
+    "paintCodes": [
+      "SHT0231",
+      "XHT0231",
+      "SSP0351"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "MNERCR0ZSBH1",
+    "itemName": "MOTIONAL RSE_COVER REAR",
+    "custPN": "03011-00215-2",
+    "customer": "모트렉스",
+    "spec": "REAR",
+    "totalProdQty": 247,
+    "totalPaintG": 29932,
+    "paintGPerEa": 121.18,
+    "totalPaintCost": 207928960,
+    "paintCostPerEa": 841818,
+    "matCodes": [
+      "PPR1451"
+    ],
+    "paintCodes": [
+      "XPR1451"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LRJPCRFZSSV2",
+    "itemName": "RJ PE_COVER REAR (전석)",
+    "custPN": "MCK71414602",
+    "customer": "LG전자",
+    "spec": "REAR",
+    "totalProdQty": 240,
+    "totalPaintG": 23400,
+    "paintGPerEa": 97.5,
+    "totalPaintCost": 222637519,
+    "paintCostPerEa": 927656,
+    "matCodes": [
+      "PSP1021",
+      "PHT1001"
+    ],
+    "paintCodes": [
+      "XSP1021",
+      "XHT1001"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTL1STU1",
+    "itemName": "FE_BUTTON L1",
+    "custPN": "MBG66763301",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 148,
+    "totalPaintG": 1856,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 16470415,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTR1STU1",
+    "itemName": "FE_BUTTON R1",
+    "custPN": "MBG66364401",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 140,
+    "totalPaintG": 1756,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 15580122,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTL4STU1",
+    "itemName": "FE_BUTTON L4",
+    "custPN": "MBG66364301",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 139,
+    "totalPaintG": 1744,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 15468835,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTR4STU1",
+    "itemName": "FE_BUTTON R4",
+    "custPN": "MBG66763601",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 101,
+    "totalPaintG": 1267,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 11239945,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTL2STU1",
+    "itemName": "FE_BUTTON L2",
+    "custPN": "MBG66364101",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 100,
+    "totalPaintG": 1254,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 11128659,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTR2STU1",
+    "itemName": "FE_BUTTON R2",
+    "custPN": "MBG66763501",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 100,
+    "totalPaintG": 1254,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 11128659,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "MNERBTBZSSZ1",
+    "itemName": "MOTIONAL RSE_BUTTON_B",
+    "custPN": "02651-00420-2",
+    "customer": "모트렉스",
+    "spec": "BUTTON",
+    "totalProdQty": 99,
+    "totalPaintG": 3386,
+    "paintGPerEa": 34.21,
+    "totalPaintCost": 68399896,
+    "paintCostPerEa": 690908,
+    "matCodes": [
+      "PPR1181"
+    ],
+    "paintCodes": [
+      "SPR1181"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "MNERBTAZSSZ1",
+    "itemName": "MOTIONAL RSE_BUTTON_A",
+    "custPN": "02651-00419-2",
+    "customer": "모트렉스",
+    "spec": "BUTTON",
+    "totalProdQty": 96,
+    "totalPaintG": 3284,
+    "paintGPerEa": 34.21,
+    "totalPaintCost": 66327172,
+    "paintCostPerEa": 690908,
+    "matCodes": [
+      "PPR1181"
+    ],
+    "paintCodes": [
+      "SPR1181"
+    ],
+    "productionDays": 1
+  },
+  {
+    "itemCode": "LFEXBTL3STU1",
+    "itemName": "FE_BUTTON L3",
+    "custPN": "MBG66763401",
+    "customer": "LG전자",
+    "spec": "BUTTON",
+    "totalProdQty": 92,
+    "totalPaintG": 1154,
+    "paintGPerEa": 12.54,
+    "totalPaintCost": 10238366,
+    "paintCostPerEa": 111287,
+    "matCodes": [
+      "PNW0621"
+    ],
+    "paintCodes": [
+      "SNW0621"
+    ],
+    "productionDays": 1
+  }
+]

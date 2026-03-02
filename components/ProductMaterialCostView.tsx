@@ -9,6 +9,7 @@ import { bomMasterService, productCodeService, referenceInfoService, materialCod
 import { PaintMixRatio } from '../utils/standardMaterialParser';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import fallbackMaterialCodes from '../data/materialCodes.json';
+import paintConsumptionData from '../data/paintConsumptionByProduct.json';
 import { downloadCSV } from '../utils/csvExport';
 
 // ============================================================
@@ -78,7 +79,8 @@ interface ProductRow {
   forecastMonthlyQty: number[];     // 월별 계획 수량 [0..11]
   forecastMonthlyRevenue: number[]; // 월별 계획 매출 [0..11]
   dataQuality: 'high' | 'medium' | 'low'; // 데이터 품질
-  paintCost: number;               // 도장재료비 (기준정보 기반)
+  paintCost: number;               // 도장재료비
+  paintSource: 'measured' | 'calculated' | 'none'; // 도장재료비 출처
   processType: string;             // 부품유형 (사출, 도장, 조립 등)
   supplyType: string;              // 조달구분 (자작, 구매, 외주)
   supplier: string;                // 협력업체
@@ -740,19 +742,36 @@ const BomTreePopup: React.FC<{
                   </div>
                 )}
                 {row.productPaintDetail && row.productPaintDetail.coats.length > 0 && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg px-4 py-3">
-                    <div className="text-[10px] font-bold text-purple-600 mb-2">도장재료비 산출근거</div>
+                  <div className={`border rounded-lg px-4 py-3 ${row.paintSource === 'measured' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}>
+                    <div className={`text-[10px] font-bold mb-2 ${row.paintSource === 'measured' ? 'text-green-600' : 'text-purple-600'}`}>
+                      {row.paintSource === 'measured' ? '도장재료비 (실적 기반)' : '도장재료비 산출근거 (기준정보)'}
+                    </div>
                     <div className="space-y-1 text-[11px]">
-                      {row.productPaintDetail.coats.map((c, i) => (
-                        <div key={i} className="flex justify-between">
-                          <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
-                          <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g = ₩{Math.round(c.cost).toLocaleString()}</span>
-                        </div>
-                      ))}
-                      <div className="border-t border-purple-200 my-1" />
+                      {row.paintSource === 'measured' ? (
+                        row.productPaintDetail.coats.map((c, i) => (
+                          <div key={i}>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">도장량</span>
+                              <span className="font-mono">{Number(c.qtyGrams).toFixed(2)}g/EA</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">도장재료비</span>
+                              <span className="font-mono">₩{Math.round(c.cost).toLocaleString()}/EA</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        row.productPaintDetail.coats.map((c, i) => (
+                          <div key={i} className="flex justify-between">
+                            <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
+                            <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g = ₩{Math.round(c.cost).toLocaleString()}</span>
+                          </div>
+                        ))
+                      )}
+                      <div className={`border-t my-1 ${row.paintSource === 'measured' ? 'border-green-200' : 'border-purple-200'}`} />
                       <div className="flex justify-between items-center font-bold">
-                        <span className="text-purple-700">도장 합계</span>
-                        <span className="font-mono text-purple-700 text-sm">₩{Math.round(row.productPaintDetail.totalCalcCost).toLocaleString()}</span>
+                        <span className={row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}>도장 합계</span>
+                        <span className={`font-mono text-sm ${row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}`}>₩{Math.round(row.productPaintDetail.totalCalcCost).toLocaleString()}</span>
                       </div>
                     </div>
                   </div>
@@ -937,6 +956,15 @@ const ProductMaterialCostView: React.FC = () => {
         };
         if (pm.paintCode) paintMixMap.set(normalizePn(pm.paintCode), enriched);
         if (pm.mainCode) paintMixMap.set(normalizePn(pm.mainCode), enriched);
+      }
+
+      // 실측 도장소요량 맵 (paintConsumptionByProduct.json)
+      // costPerEa는 원/g 스케일이므로 /1000 적용 → 원/EA
+      const paintConsumptionMap = new Map<string, { paintGPerEa: number; paintCostPerEa: number }>();
+      for (const pc of paintConsumptionData) {
+        const entry = { paintGPerEa: pc.paintGPerEa, paintCostPerEa: pc.paintCostPerEa / 1000 };
+        paintConsumptionMap.set(normalizePn(pc.itemCode), entry);
+        if (pc.custPN) paintConsumptionMap.set(normalizePn(pc.custPN), entry);
       }
 
       // 도료단가 헬퍼: paintMixMap → 배합가, fallback → priceMap 직접 조회
@@ -1208,10 +1236,12 @@ const ProductMaterialCostView: React.FC = () => {
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
+
         }
 
-        // [프로그램 수정] 도장재료비 자동 산입: 기준정보 paintQty × 재질단가
+        // [도장재료비 자동 산입] 1순위: 실측 데이터, 2순위: 기준정보 paintQty × 배합가
         let paintCost = 0;
+        let paintSource: 'measured' | 'calculated' | 'none' = 'none';
         // refInfo 매칭: forecast P/N → 직접 → custToInternal → internalToCust → partNo도 시도
         const productRef = refInfoMap.get(forecastPn)
           || refInfoMap.get(custToInternal.get(forecastPn) || '')
@@ -1220,8 +1250,28 @@ const ProductMaterialCostView: React.FC = () => {
           || (f.partNo ? refInfoMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined)
           || (f.newPartNo ? refInfoMap.get(custToInternal.get(normalizePn(f.newPartNo)) || '') : undefined);
         if (productRef) _debugRefMatched++; else _debugRefMissed++;
-        // [도장재료비 자동 산입] 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도, paintMixMap 배합가 사용
-        if (productRef && /도장/i.test(productRef.processType || '')) {
+
+        // 1순위: 실측 도장소요량 데이터 (paintConsumptionByProduct.json)
+        const measured = paintConsumptionMap.get(forecastPn)
+          || paintConsumptionMap.get(custToInternal.get(forecastPn) || '')
+          || paintConsumptionMap.get(internalToCust.get(forecastPn) || '')
+          || (f.partNo ? paintConsumptionMap.get(normalizePn(f.partNo)) : undefined)
+          || (f.newPartNo ? paintConsumptionMap.get(normalizePn(f.newPartNo)) : undefined);
+
+        if (measured && measured.paintCostPerEa > 0) {
+          paintCost = measured.paintCostPerEa;
+          paintSource = 'measured';
+          bomLeaves.push({
+            childPn: `PAINT_${forecastPn}`,
+            childName: `도장재료 (실적 ${measured.paintGPerEa}g/EA)`,
+            qty: 1, totalQty: 1,
+            unitPrice: paintCost, cost: paintCost,
+            priceSource: '실적 도장',
+            depth: 0, partType: '도장', supplier: '',
+          });
+          bomMaterialCost += paintCost;
+        } else if (productRef && /도장/i.test(productRef.processType || '')) {
+          // 2순위: 기존 로직 (기준정보 paintQty × 배합가)
           const paintRawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
           const paintQtys = [productRef.paintQty1, productRef.paintQty2];
           for (let paintIdx = 0; paintIdx < paintRawCodes.length; paintIdx++) {
@@ -1241,6 +1291,7 @@ const ProductMaterialCostView: React.FC = () => {
               });
             }
           }
+          if (paintCost > 0) paintSource = 'calculated';
           bomMaterialCost += paintCost;
         }
 
@@ -1369,20 +1420,35 @@ const ProductMaterialCostView: React.FC = () => {
               }
             }
           }
-          // 도장 산출근거 — 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도, paintMixMap 배합가 사용
-          const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
-          const pQtys = [productRef.paintQty1, productRef.paintQty2];
-          const pCoats: PaintCalcDetail['coats'] = [];
-          for (let pI = 0; pI < paintRawCodesP.length; pI++) {
-            const raw = paintRawCodesP[pI];
-            const { price: pp, name: pName } = getPaintBlendedPrice(raw);
-            const pq = pQtys[pI] || 0;
-            if (pp > 0 || pq > 0) {
-              pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
+          // 도장 산출근거 — 실측 우선, fallback: 기준정보 paintQty × 배합가
+          if (measured && measured.paintCostPerEa > 0) {
+            // 실측 데이터 기반 도장 산출근거
+            productPaintDetail = {
+              leafPn: productRef.itemCode || forecastPn,
+              coats: [{
+                rawCode: '실적',
+                rawName: '도장재료 (1~2월 실적 기반)',
+                pricePerKg: 0,
+                qtyGrams: measured.paintGPerEa,
+                cost: measured.paintCostPerEa,
+              }],
+              totalCalcCost: measured.paintCostPerEa,
+            };
+          } else {
+            const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
+            const pQtys = [productRef.paintQty1, productRef.paintQty2];
+            const pCoats: PaintCalcDetail['coats'] = [];
+            for (let pI = 0; pI < paintRawCodesP.length; pI++) {
+              const raw = paintRawCodesP[pI];
+              const { price: pp, name: pName } = getPaintBlendedPrice(raw);
+              const pq = pQtys[pI] || 0;
+              if (pp > 0 || pq > 0) {
+                pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
+              }
             }
-          }
-          if (pCoats.length > 0) {
-            productPaintDetail = { leafPn: productRef.itemCode || forecastPn, coats: pCoats, totalCalcCost: pCoats.reduce((s, c) => s + c.cost, 0) };
+            if (pCoats.length > 0) {
+              productPaintDetail = { leafPn: productRef.itemCode || forecastPn, coats: pCoats, totalCalcCost: pCoats.reduce((s, c) => s + c.cost, 0) };
+            }
           }
         }
 
@@ -1410,6 +1476,7 @@ const ProductMaterialCostView: React.FC = () => {
           forecastMonthlyRevenue: f.monthlyRevenue || new Array(12).fill(0),
           dataQuality,
           paintCost,
+          paintSource,
           processType: productRef?.processType || '',
           supplyType: productRef?.supplyType || '',
           supplier: productRef?.supplier || '',
