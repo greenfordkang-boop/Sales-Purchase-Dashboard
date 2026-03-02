@@ -188,6 +188,7 @@ const MRPView: React.FC = () => {
   });
   const priceFileRef = useRef<HTMLInputElement>(null);
   const [viewMode, setViewMode] = useState<'flat' | 'tree'>('flat');
+  const [monthlyMode, setMonthlyMode] = useState<'qty' | 'cost'>('qty');
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const bomRelationsRef = useRef<Map<string, BomRecord[]>>(new Map());
   const bomRootsRef = useRef<string[]>([]);
@@ -389,8 +390,13 @@ const MRPView: React.FC = () => {
         const monthMatch = sortConfig.key.match(/^month_(\d+)$/);
         if (monthMatch) {
           const mi = parseInt(monthMatch[1], 10);
-          aVal = a.monthlyQty[mi] || 0;
-          bVal = b.monthlyQty[mi] || 0;
+          if (monthlyMode === 'cost') {
+            aVal = a.unitPrice > 0 ? (a.monthlyQty[mi] || 0) * a.unitPrice : 0;
+            bVal = b.unitPrice > 0 ? (b.monthlyQty[mi] || 0) * b.unitPrice : 0;
+          } else {
+            aVal = a.monthlyQty[mi] || 0;
+            bVal = b.monthlyQty[mi] || 0;
+          }
         } else if (sortConfig.key === 'parentProducts') {
           aVal = a.parentProducts.length;
           bVal = b.parentProducts.length;
@@ -408,7 +414,7 @@ const MRPView: React.FC = () => {
     }
 
     return result;
-  }, [mrpResult, filterType, filterText, sortConfig]);
+  }, [mrpResult, filterType, filterText, sortConfig, monthlyMode]);
 
   const handleSort = (key: string) => {
     setSortConfig(prev =>
@@ -825,6 +831,22 @@ const MRPView: React.FC = () => {
                 전체접기
               </button>
             )}
+            {viewMode === 'flat' && (
+              <div className="flex gap-0.5 bg-gray-100 p-0.5 rounded text-[10px]">
+                <button
+                  onClick={() => setMonthlyMode('qty')}
+                  className={`px-2 py-0.5 rounded ${monthlyMode === 'qty' ? 'bg-white shadow text-blue-600 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  월별수량
+                </button>
+                <button
+                  onClick={() => setMonthlyMode('cost')}
+                  className={`px-2 py-0.5 rounded ${monthlyMode === 'cost' ? 'bg-white shadow text-blue-600 font-semibold' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  월별금액
+                </button>
+              </div>
+            )}
             <button
               onClick={() => { setViewMode(v => v === 'flat' ? 'tree' : 'flat'); setExpandedNodes(new Set()); }}
               className="px-2 py-0.5 text-[10px] border border-gray-300 rounded hover:bg-gray-100"
@@ -852,7 +874,7 @@ const MRPView: React.FC = () => {
                     { key: 'parentProducts', label: '관련제품', align: 'right' },
                     ...Array.from({ length: 12 }, (_, i) => ({
                       key: `month_${i}`,
-                      label: `${i + 1}월`,
+                      label: monthlyMode === 'cost' ? `${i + 1}월(₩)` : `${i + 1}월`,
                       align: 'right' as const,
                     })),
                   ].map(col => (
@@ -896,11 +918,21 @@ const MRPView: React.FC = () => {
                     </td>
                     <MrpCostCell m={m} />
                     <td className="px-3 py-1.5 text-right text-gray-500">{m.parentProducts.length}</td>
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <td key={i} className={`px-3 py-1.5 text-right font-mono ${m.monthlyQty[i] > 0 ? 'text-gray-700' : 'text-gray-300'}`}>
-                        {m.monthlyQty[i] > 0 ? Math.round(m.monthlyQty[i]).toLocaleString() : '-'}
-                      </td>
-                    ))}
+                    {Array.from({ length: 12 }, (_, i) => {
+                      if (monthlyMode === 'cost') {
+                        const cost = m.unitPrice > 0 ? m.monthlyQty[i] * m.unitPrice : 0;
+                        return (
+                          <td key={i} className={`px-3 py-1.5 text-right font-mono ${cost > 0 ? 'text-gray-700' : 'text-gray-300'}`}>
+                            {m.unitPrice <= 0 ? '-' : cost > 0 ? `₩${Math.round(cost).toLocaleString()}` : '-'}
+                          </td>
+                        );
+                      }
+                      return (
+                        <td key={i} className={`px-3 py-1.5 text-right font-mono ${m.monthlyQty[i] > 0 ? 'text-gray-700' : 'text-gray-300'}`}>
+                          {m.monthlyQty[i] > 0 ? Math.round(m.monthlyQty[i]).toLocaleString() : '-'}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -1020,6 +1052,22 @@ const MRPView: React.FC = () => {
               <Bar dataKey="qty" fill={TYPE_COLORS[selectedMaterial.materialType] || '#3b82f6'} radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+
+          {/* 월별 금액 바차트 (단가 있을 때만) */}
+          {selectedMaterial.unitPrice > 0 && (
+            <>
+              <h4 className="text-xs font-medium text-gray-500 mt-3 mb-1">월별 소요금액 (₩)</h4>
+              <ResponsiveContainer minWidth={0} width="100%" height={150}>
+                <BarChart data={selectedMaterial.monthlyQty.map((q, i) => ({ month: `${i + 1}월`, cost: Math.round(q * selectedMaterial.unitPrice) }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1e6 ? `${(v / 1e6).toFixed(0)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : String(v)} />
+                  <Tooltip formatter={(v: number) => [`₩${(v as number).toLocaleString()}`, '금액']} contentStyle={{ fontSize: 10 }} />
+                  <Bar dataKey="cost" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          )}
 
           <div className="mt-2 flex flex-wrap gap-1">
             {selectedMaterial.parentProducts.map((pn, i) => (
