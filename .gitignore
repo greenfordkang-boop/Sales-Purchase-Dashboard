@@ -29,3 +29,25 @@ dist-ssr
 *.sw?
 .vercel
 .env*.local
+
+# Claude Code
+.claude/
+
+# Excel data files
+*.xlsx
+*.xls
+~$*.xlsx
+
+# One-off analysis/test scripts
+analyze-*.cjs
+analyze-*.mjs
+test-*.mjs
+scripts/
+docs/
+
+# Data files
+data/paintConsumptionByProduct.csv
+
+# Supabase local migrations
+supabase/migrations/
+supabase/standard_material_cost_migration.sql
