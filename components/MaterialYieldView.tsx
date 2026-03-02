@@ -1258,6 +1258,22 @@ const MaterialYieldView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {displayRows.length > 0 && (
+                  <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                    <td colSpan={5} className="px-3 py-2 text-right">집계 ({displayRows.length}건)</td>
+                    <td className="px-3 py-2 text-right font-mono">{displayRows.reduce((s, r) => s + r.standardReq, 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right font-mono">{displayRows.reduce((s, r) => s + r.inputQty, 0).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {(() => {
+                        const totalStd = displayRows.reduce((s, r) => s + r.standardReq, 0);
+                        const totalInput = displayRows.reduce((s, r) => s + r.inputQty, 0);
+                        return totalStd > 0 ? `${((totalInput / totalStd) * 100).toFixed(1)}%` : '-';
+                      })()}
+                    </td>
+                    <td className="px-3 py-2"></td>
+                    <td className="px-3 py-2"></td>
+                  </tr>
+                )}
                 {displayRows.map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
                     <td className="px-4 py-3 font-mono font-medium text-slate-800">{row.childPn}</td>

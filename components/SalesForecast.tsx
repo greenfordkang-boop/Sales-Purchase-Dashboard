@@ -1068,6 +1068,13 @@ const SalesForecast: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {filteredItems.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={8} className="px-3 py-2 text-right">집계 ({filteredItems.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{Math.round(filteredTotals.qty).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">{formatWon(filteredTotals.revenue)}</td>
+                      </tr>
+                    )}
                     {filteredItems.map((item) => (
                       <tr key={`${item.no}-${item.partNo}`} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-slate-400 font-mono">{item.no}</td>

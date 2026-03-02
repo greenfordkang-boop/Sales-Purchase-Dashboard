@@ -798,6 +798,13 @@ const PurchaseView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {filteredItems.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={5} className="px-3 py-2 text-right">집계 ({filteredItems.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{filteredTotal.qty.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">₩{Math.round(filteredTotal.amount).toLocaleString()}</td>
+                      </tr>
+                    )}
                     {filteredItems.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-slate-600 font-mono">{item.date}</td>

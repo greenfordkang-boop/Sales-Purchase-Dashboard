@@ -1409,6 +1409,13 @@ const SalesView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {filteredRevenueData.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={3} className="px-3 py-2 text-right">집계 ({filteredRevenueData.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{revenueTotal.totalQty.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">₩{revenueTotal.totalAmount.toLocaleString()}</td>
+                      </tr>
+                    )}
                     {filteredRevenueData.map((item) => (
                       <tr key={item.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-600">{item.month}</td>
@@ -1542,6 +1549,14 @@ const SalesView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {itemRevenueStats.items.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={4} className="px-3 py-2 text-right">집계 ({itemRevenueStats.items.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{itemRevenueStats.totalQty.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">₩{itemRevenueStats.totalAmount.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">100.0%</td>
+                      </tr>
+                    )}
                     {itemRevenueStats.items.map((item, idx) => (
                       <tr key={`${item.model}-${item.partNo}-${idx}`} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-slate-700">{item.model}</td>
