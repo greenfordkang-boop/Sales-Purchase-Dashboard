@@ -221,6 +221,8 @@ const BomExplosionView: React.FC = () => {
 
     // 1) Direct expansion: selectedPn이 forwardMap에 있으면 바로 전개
     if (forwardMap.has(normalizedSelected)) {
+      const childCount = forwardMap.get(normalizedSelected)?.length || 0;
+      console.log(`[BOM전개] 직접전개: ${selectedPn} (children: ${childCount})`);
       return {
         forwardTree: expandForwardTree(selectedPn, forwardMap, refInfoMap),
         bomRootPn: '',
@@ -232,29 +234,43 @@ const BomExplosionView: React.FC = () => {
     const selectedRef = refInfoMap.get(normalizedSelected);
     const customerPn = pc?.customerPn || selectedRef?.customerPn;
 
+    console.log(`[BOM전개] fallback 시도: ${selectedPn}`, {
+      inForwardMap: false,
+      pcFound: !!pc,
+      pcCustomerPn: pc?.customerPn || '(없음)',
+      refFound: !!selectedRef,
+      refCustomerPn: selectedRef?.customerPn || '(없음)',
+      resolvedCustomerPn: customerPn || '(없음)',
+    });
+
     if (customerPn) {
       const custNorm = normalizePn(customerPn);
       // 같은 고객P/N을 가진 refInfo 중 forwardMap에 있는 항목 찾기
-      const bomRoots = refInfo
-        .filter(ri => ri.customerPn && normalizePn(ri.customerPn) === custNorm && forwardMap.has(normalizePn(ri.itemCode)))
+      const allWithCustPn = refInfo.filter(ri => ri.customerPn && normalizePn(ri.customerPn) === custNorm);
+      const bomRoots = allWithCustPn
+        .filter(ri => forwardMap.has(normalizePn(ri.itemCode)))
         .sort((a, b) => {
-          // children이 더 많은 (BOM 루트에 가까운) 항목 우선
           const aLen = forwardMap.get(normalizePn(a.itemCode))?.length || 0;
           const bLen = forwardMap.get(normalizePn(b.itemCode))?.length || 0;
           return bLen - aLen;
         });
 
+      console.log(`[BOM전개] customerPn=${customerPn} → refInfo 매칭: ${allWithCustPn.length}건, forwardMap에 있는 항목: ${bomRoots.length}건`,
+        allWithCustPn.map(ri => `${ri.itemCode}(inBOM:${forwardMap.has(normalizePn(ri.itemCode))})`),
+      );
+
       if (bomRoots.length > 0) {
         const root = bomRoots[0];
         const tree = expandForwardTree(root.itemCode, forwardMap, refInfoMap);
-        // 루트 노드를 제품코드 정보로 대체 (하위 트리는 유지)
         tree.pn = selectedPn;
         tree.name = pc?.productName || selectedRef?.itemName || tree.name;
+        console.log(`[BOM전개] ✅ 자동연결 성공: ${selectedPn} → ${root.itemCode} (children: ${tree.children.length})`);
         return { forwardTree: tree, bomRootPn: root.itemCode };
       }
     }
 
     // 3) Fallback: 그대로 전개 (children 없음)
+    console.log(`[BOM전개] ❌ 연결 실패: ${selectedPn} - BOM에 해당 품번 없음`);
     return {
       forwardTree: expandForwardTree(selectedPn, forwardMap, refInfoMap),
       bomRootPn: '',
