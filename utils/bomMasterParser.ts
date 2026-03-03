@@ -158,9 +158,9 @@ const BOM_HEADERS: Record<string, RegExp> = {
 
 const PRODUCT_CODE_HEADERS: Record<string, RegExp> = {
   productCode: /제품코드|product.*code|품목코드/i,
-  customerPn: /고객사.*p.?n|customer.*p.?n|고객.*품번/i,
+  customerPn: /고객사.*p.?n|customer.*p.?n|고객.*품번|part\s*no/i,
   productName: /제품명|product.*name|품목명|품명/i,
-  customer: /고객사|customer|거래처/i,
+  customer: /고객사(?!\s*p)|customer(?!\s*p)|거래처/i,
   model: /모델|model|품종|차종/i,
 };
 

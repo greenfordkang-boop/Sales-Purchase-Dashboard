@@ -234,15 +234,6 @@ const BomExplosionView: React.FC = () => {
     const selectedRef = refInfoMap.get(normalizedSelected);
     const customerPn = pc?.customerPn || selectedRef?.customerPn;
 
-    console.log(`[BOM전개] fallback 시도: ${selectedPn}`, {
-      inForwardMap: false,
-      pcFound: !!pc,
-      pcCustomerPn: pc?.customerPn || '(없음)',
-      refFound: !!selectedRef,
-      refCustomerPn: selectedRef?.customerPn || '(없음)',
-      resolvedCustomerPn: customerPn || '(없음)',
-    });
-
     if (customerPn) {
       const custNorm = normalizePn(customerPn);
       // 같은 고객P/N을 가진 refInfo 중 forwardMap에 있는 항목 찾기
@@ -255,22 +246,16 @@ const BomExplosionView: React.FC = () => {
           return bLen - aLen;
         });
 
-      console.log(`[BOM전개] customerPn=${customerPn} → refInfo 매칭: ${allWithCustPn.length}건, forwardMap에 있는 항목: ${bomRoots.length}건`,
-        allWithCustPn.map(ri => `${ri.itemCode}(inBOM:${forwardMap.has(normalizePn(ri.itemCode))})`),
-      );
-
       if (bomRoots.length > 0) {
         const root = bomRoots[0];
         const tree = expandForwardTree(root.itemCode, forwardMap, refInfoMap);
         tree.pn = selectedPn;
         tree.name = pc?.productName || selectedRef?.itemName || tree.name;
-        console.log(`[BOM전개] ✅ 자동연결 성공: ${selectedPn} → ${root.itemCode} (children: ${tree.children.length})`);
         return { forwardTree: tree, bomRootPn: root.itemCode };
       }
     }
 
     // 3) Fallback: 그대로 전개 (children 없음)
-    console.log(`[BOM전개] ❌ 연결 실패: ${selectedPn} - BOM에 해당 품번 없음`);
     return {
       forwardTree: expandForwardTree(selectedPn, forwardMap, refInfoMap),
       bomRootPn: '',
