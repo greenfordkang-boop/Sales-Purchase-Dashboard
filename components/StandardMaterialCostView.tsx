@@ -1513,6 +1513,78 @@ const StandardMaterialCostView: React.FC = () => {
       if (mIdx >= 0 && mIdx < 12) actualByMonth[mIdx] += p.amount;
     });
 
+    // ===== item_standard_cost 기반 월별 표준재료비 (autoCalcResult와 동일 엔진) =====
+    if (dataMode === 'master' && masterItemStandardCosts.length > 0) {
+      // enrichedItems: EA단가=0인 품목에 fallback 적용 (autoCalcResult와 동일 로직)
+      const enrichedItems = masterItemStandardCosts.map(item => {
+        const resin = Number(item.resin_cost_per_ea) || 0;
+        const paint = Number(item.paint_cost_per_ea) || 0;
+        const mat = Number(item.material_cost_per_ea) || 0;
+        if (resin > 0 || paint > 0 || mat > 0) return item;
+        const fb = enrichedStdCostMap.get(normalizePn(item.item_code))
+                || enrichedStdCostMap.get(normalizePn(item.customer_pn || ''));
+        if (fb && fb > 0) {
+          return { ...item, material_cost_per_ea: fb };
+        }
+        return item;
+      });
+
+      const iscRows: MonthlySummaryRow[] = [];
+      for (let mi = 0; mi < 12; mi++) {
+        // 매출액: 매출계획 우선, 없으면 매출실적
+        let revenue = 0;
+        if (forecastData.length > 0) {
+          revenue = forecastData.reduce((s, item) => s + (item.monthlyRevenue?.[mi] || 0), 0);
+        }
+        if (revenue <= 0 && itemRevenueData.length > 0) {
+          const mm = String(mi + 1).padStart(2, '0');
+          itemRevenueData.forEach(row => {
+            const dm = row.period?.match(/\d{4}-(\d{1,2})/);
+            const m = dm ? dm[1].padStart(2, '0') : null;
+            if (m === mm) revenue += row.amount || 0;
+          });
+        }
+
+        // forecastQtyMap: 매출계획 수량 (autoCalcResult와 동일)
+        const fqMap = new Map<string, number>();
+        if (forecastData.length > 0) {
+          forecastData.forEach(fc => {
+            const qty = fc.monthlyQty?.[mi] || 0;
+            if (qty > 0) {
+              const pn = normalizePn(fc.partNo || fc.newPartNo || '');
+              if (pn) fqMap.set(pn, (fqMap.get(pn) || 0) + qty);
+              if (fc.newPartNo) {
+                const npn = normalizePn(fc.newPartNo);
+                if (npn && npn !== pn) fqMap.set(npn, (fqMap.get(npn) || 0) + qty);
+              }
+            }
+          });
+        }
+
+        const result = calcFromItemStandardCosts(enrichedItems, mi, revenue, fqMap.size > 0 ? fqMap : undefined);
+
+        const actual = actualByMonth[mi];
+        const diff = result.totalStandard - actual;
+        const stdRatio = result.revenue > 0 ? result.totalStandard / result.revenue : 0;
+        const actRatio = result.revenue > 0 ? actual / result.revenue : 0;
+        const achievement = stdRatio > 0 ? actRatio / stdRatio * 100 : 0;
+
+        iscRows.push({
+          month: MONTH_EN[mi],
+          monthKr: `${String(mi + 1).padStart(2, '0')}월`,
+          revenue: result.revenue,
+          standardCost: result.totalStandard,
+          actualCost: actual,
+          diff,
+          standardRatio: stdRatio,
+          actualRatio: actRatio,
+          achievementRate: achievement,
+        });
+      }
+      console.log('[monthlySummary] item_standard_cost 엔진 사용 (autoCalcResult 동일)', iscRows.map(r => r.standardCost));
+      return iscRows;
+    }
+
     // ===== Excel 기반 월별 표준재료비: 통합 엔진 사용 =====
     if (excelData?.items && excelData.items.length > 0) {
       // P/N 매핑 (매출계획 P/N ↔ 재료비 P/N 브릿지) — 1:N 다중 매핑
@@ -1960,7 +2032,7 @@ const StandardMaterialCostView: React.FC = () => {
     }
 
     return rows;
-  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, masterRefInfo, purchaseData, selectedYear, excelData]);
+  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, masterRefInfo, purchaseData, selectedYear, excelData, masterItemStandardCosts, enrichedStdCostMap]);
 
   // ============================================================
   // GAP ANALYSIS: Excel vs 구매입고 품목별 비교 분석
