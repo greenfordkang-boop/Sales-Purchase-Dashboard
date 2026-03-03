@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useColumnResize } from '../hooks/useColumnResize';
 import * as XLSX from 'xlsx';
-import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
+import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves, expandBomToTree } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
@@ -54,6 +54,7 @@ interface BomLeaf {
   supplier: string;  // 구입처/협력업체
   calcDetail?: CalcDetail;
   paintCalcDetail?: PaintCalcDetail;
+  isIntermediate?: boolean;
 }
 
 interface ProductRow {
@@ -398,7 +399,7 @@ const BomTreePopup: React.FC<{
   const [paintOpenIdx, setPaintOpenIdx] = useState<number | null>(null);
   const [paintAnchorRect, setPaintAnchorRect] = useState<DOMRect | null>(null);
   const [localLeaves, setLocalLeaves] = useState<BomLeaf[]>(() =>
-    [...row.bomLeaves].sort((a, b) => b.cost - a.cost)
+    [...row.bomLeaves] // DFS 트리 순서 유지 (cost 정렬 X)
   );
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
 
@@ -579,14 +580,28 @@ const BomTreePopup: React.FC<{
                 </tr>
               </thead>
               <tbody>
-                {localLeaves.map((leaf, i) => (
-                    <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
-                      <td className="px-3 py-1.5 font-mono text-[11px]">
-                        {leaf.depth > 0 && (
-                          <span className="text-[9px] text-slate-400 bg-slate-100 rounded px-1 py-0.5 mr-1 font-sans">
-                            Lv.{leaf.depth}
-                          </span>
+                {localLeaves.map((leaf, i) =>
+                  leaf.isIntermediate ? (
+                    /* 중간 노드 (서브어셈블리) — 트리 구조 표시용 */
+                    <tr key={i} className="bg-slate-50/60">
+                      <td colSpan={8} className="py-1 text-[10px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
+                        <span className="text-slate-400 mr-0.5">├─</span>
+                        <span className="font-mono font-medium text-slate-500">{leaf.childPn}</span>
+                        <span className="ml-1.5 text-slate-400">{leaf.childName}</span>
+                        {leaf.partType && (
+                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] ${
+                            /조립/.test(leaf.partType) ? 'bg-green-50 text-green-600' :
+                            /사출/.test(leaf.partType) ? 'bg-blue-50 text-blue-600' :
+                            'bg-slate-100 text-slate-500'
+                          }`}>{leaf.partType}</span>
                         )}
+                      </td>
+                    </tr>
+                  ) : (
+                    /* Leaf 노드 — 자재, 단가 표시 */
+                    <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
+                      <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
+                        <span className="text-slate-300 mr-0.5 text-[10px]">└─</span>
                         {leaf.childPn}
                       </td>
                       <td className="px-3 py-1.5 max-w-[160px] truncate">{leaf.childName}</td>
@@ -661,7 +676,6 @@ const BomTreePopup: React.FC<{
                             )}
                           </span>
                         )}
-                        {/* CalcDetailTooltip is rendered at popup level via fixed positioning */}
                       </td>
                       <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
                         leaf.priceSource === '수동입력' ? 'text-purple-700' :
@@ -679,7 +693,8 @@ const BomTreePopup: React.FC<{
                         </span>
                       </td>
                     </tr>
-                  ))}
+                  )
+                )}
                 {/* BOM 소계 */}
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
                   <td colSpan={6} className="px-3 py-2 text-right">
@@ -1188,14 +1203,28 @@ const ProductMaterialCostView: React.FC = () => {
         let bomLeaves: BomLeaf[] = [];
         let bomMaterialCost = 0;
         if (bomParent) {
-          const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
-          bomLeaves = leaves.map(l => {
+          // 트리뷰용: 중간 노드 포함 DFS 전개
+          const treeNodes = expandBomToTree(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
+          bomLeaves = treeNodes.map(node => {
+            // 중간 노드 (서브어셈블리): 표시용, 가격 없음
+            if (!node.isLeaf) {
+              const nodeRef = refInfoMap.get(normalizePn(node.childPn));
+              return {
+                childPn: node.childPn,
+                childName: node.childName || nodeRef?.itemName || '',
+                qty: 0, totalQty: node.totalRequired,
+                unitPrice: 0, cost: 0, priceSource: '',
+                depth: node.depth, partType: node.partType || nodeRef?.processType || '',
+                supplier: node.supplier || nodeRef?.supplier || '',
+                isIntermediate: true,
+              };
+            }
+            // Leaf 노드: 가격 산출 (기존 로직)
+            const l = node;
             const { price, source, calcDetail } = getLeafPrice(l.childPn);
-            // BOM에 유형/구입처가 없으면 기준정보에서 보강
             const leafRef = refInfoMap.get(normalizePn(l.childPn));
             const partType = l.partType || leafRef?.processType || leafRef?.supplyType || '';
             const supplier = l.supplier || leafRef?.supplier || '';
-            // 가격 출처와 무관하게 사출 산출근거 생성 (기준정보에 중량데이터 있으면)
             let finalCalcDetail = calcDetail;
             if (!finalCalcDetail && leafRef) {
               const nw = leafRef.netWeight || 0;
@@ -1224,8 +1253,6 @@ const ProductMaterialCostView: React.FC = () => {
                 }
               }
             }
-            // 도장 유형 leaf → 도료 산출근거 생성
-            // 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도에 도료코드 저장
             let paintCalcDetail: PaintCalcDetail | undefined;
             if (/도장/.test(partType) && leafRef) {
               const paintRawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2, leafRef.rawMaterialCode3, leafRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
@@ -1237,24 +1264,13 @@ const ProductMaterialCostView: React.FC = () => {
                 const { price: pp, name: pName } = getPaintBlendedPrice(raw);
                 const pq = paintQtys[pIdx] || 0;
                 if (pp > 0 || pq > 0) {
-                  coats.push({
-                    rawCode: raw,
-                    rawName: pName,
-                    pricePerKg: pp,
-                    qtyGrams: pq,
-                    cost: (pp * pq / 1000) * lossMultiplier,
-                  });
+                  coats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * lossMultiplier });
                 }
               }
               if (coats.length > 0) {
-                paintCalcDetail = {
-                  leafPn: l.childPn,
-                  coats,
-                  totalCalcCost: coats.reduce((s, c) => s + c.cost, 0),
-                };
+                paintCalcDetail = { leafPn: l.childPn, coats, totalCalcCost: coats.reduce((s, c) => s + c.cost, 0) };
               }
             }
-            // 도장 리프: getLeafPrice가 0이면 paintCalcDetail 도장비를 unitPrice로 사용
             let finalPrice = price;
             let finalSource = source;
             if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
@@ -1264,16 +1280,11 @@ const ProductMaterialCostView: React.FC = () => {
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
-              qty: 0,
-              totalQty: l.totalRequired,
-              unitPrice: finalPrice,
-              cost: l.totalRequired * finalPrice,
-              priceSource: finalSource,
-              depth: l.depth || 0,
-              partType,
-              supplier,
-              calcDetail: finalCalcDetail,
-              paintCalcDetail,
+              qty: 0, totalQty: l.totalRequired,
+              unitPrice: finalPrice, cost: l.totalRequired * finalPrice,
+              priceSource: finalSource, depth: l.depth,
+              partType, supplier,
+              calcDetail: finalCalcDetail, paintCalcDetail,
             };
           });
           bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);

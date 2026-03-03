@@ -411,3 +411,66 @@ export const expandBomToLeaves = (
 
   return results;
 };
+
+/** BOM 트리 노드 (중간 노드 + leaf 모두 포함) */
+export interface BomTreeNode {
+  childPn: string;
+  childName: string;
+  supplier: string;
+  partType: string;
+  totalRequired: number;
+  parentPn: string;
+  depth: number;
+  isLeaf: boolean;
+}
+
+/** 모품번에서 전체 BOM 트리를 DFS 순서로 전개 (중간 노드 포함)
+ *  트리뷰 표시용: 중간 노드(서브어셈블리)도 포함하여 계층 구조 표현 */
+export const expandBomToTree = (
+  parentPn: string,
+  parentQty: number,
+  bomRelations: Map<string, BomRecord[]>,
+  visited?: Set<string>,
+  depth: number = 0,
+  maxDepth: number = 10,
+  forceLeafPns?: Set<string>,
+  alsoEmitPns?: Set<string>,
+): BomTreeNode[] => {
+  const seen = visited || new Set<string>();
+  const normalizedParent = normalizePn(parentPn);
+  if (seen.has(normalizedParent)) return [];
+  seen.add(normalizedParent);
+
+  const children = bomRelations.get(normalizedParent);
+  if (!children || children.length === 0) return [];
+
+  const results: BomTreeNode[] = [];
+  for (const child of children) {
+    const requiredQty = parentQty * child.qty;
+    const normalizedChild = normalizePn(child.childPn);
+    const grandChildren = bomRelations.get(normalizedChild);
+
+    const isLeafType = /원재료|구매|외주/.test(child.partType || '');
+    const isForcedLeaf = forceLeafPns?.has(normalizedChild) || false;
+    const isTerminal = !grandChildren || grandChildren.length === 0 || depth + 1 >= maxDepth || isLeafType || isForcedLeaf;
+
+    if (isTerminal) {
+      results.push({
+        childPn: child.childPn, childName: child.childName, supplier: child.supplier,
+        partType: child.partType || '', totalRequired: requiredQty, parentPn,
+        depth: depth + 1, isLeaf: true,
+      });
+    } else {
+      // alsoEmitPns: 자신도 leaf 가격 보유 + 하위 전개 (도장품 등)
+      const alsoLeaf = alsoEmitPns?.has(normalizedChild) || false;
+      results.push({
+        childPn: child.childPn, childName: child.childName, supplier: child.supplier,
+        partType: child.partType || '', totalRequired: requiredQty, parentPn,
+        depth: depth + 1, isLeaf: alsoLeaf,
+      });
+      const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
+      results.push(...subNodes);
+    }
+  }
+  return results;
+};
