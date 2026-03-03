@@ -337,8 +337,10 @@ const SalesView: React.FC = () => {
 
   // CR Derived
   const crYears = useMemo(() => {
-    const years = Array.from(new Set(crData.map(d => d.year))).sort((a, b) => b - a);
-    return years.length > 0 ? years : [new Date().getFullYear()];
+    const currentYear = new Date().getFullYear();
+    const dataYears = crData.map(d => d.year);
+    const years = Array.from(new Set([currentYear, ...dataYears])).sort((a, b) => b - a);
+    return years;
   }, [crData]);
 
   const crTableData = useMemo(() => {
