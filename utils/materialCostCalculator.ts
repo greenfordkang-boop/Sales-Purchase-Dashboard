@@ -936,11 +936,11 @@ export function calcFromItemStandardCosts(
         source: 'excel',
       });
     } else if (st === '구매') {
-      // amt가 0이면 materialPerEa × qty 사용
-      const purchAmt = amt > 0 ? amt : (materialPerEa > 0 ? materialPerEa * qty : 0);
+      // materialPerEa × qty 우선 (3탭 일치: 제품별재료비 동일 기준), amt fallback
+      const perEa = materialPerEa > 0 ? materialPerEa : (amt > 0 && qty > 0 ? amt / qty : 0);
+      const purchAmt = perEa * qty;
       if (purchAmt <= 0) continue;
       totalPurchase += purchAmt;
-      const perEa = materialPerEa > 0 ? materialPerEa : (purchAmt / qty);
       itemRows.push({
         itemCode: item.item_code,
         customerPn: item.customer_pn,
@@ -959,10 +959,11 @@ export function calcFromItemStandardCosts(
         source: 'excel',
       });
     } else if (st.includes('외주')) {
-      const outsrcAmt = amt > 0 ? amt : (materialPerEa > 0 ? materialPerEa * qty : 0);
+      // materialPerEa × qty 우선 (3탭 일치: 제품별재료비 동일 기준), amt fallback
+      const perEa = materialPerEa > 0 ? materialPerEa : (amt > 0 && qty > 0 ? amt / qty : 0);
+      const outsrcAmt = perEa * qty;
       if (outsrcAmt <= 0) continue;
       totalOutsource += outsrcAmt;
-      const perEa = materialPerEa > 0 ? materialPerEa : (outsrcAmt / qty);
       itemRows.push({
         itemCode: item.item_code,
         customerPn: item.customer_pn,

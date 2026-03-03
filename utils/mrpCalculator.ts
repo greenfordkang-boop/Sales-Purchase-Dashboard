@@ -350,57 +350,134 @@ export function calculateMRP(
 
   }
 
-  // 6-3. BOM 리프 PAINT 제거 + item_standard_cost 기반 PAINT 직접 합산
-  // 표준재료비와 동일: 품목별 paint_cost_per_ea × 자체 생산수량 (BOM 순회 없음)
-  {
-    // (a) BOM 리프에서 생성된 PAINT 엔트리 전부 제거
-    const paintLeafKeys: string[] = [];
-    for (const [code, agg] of materialAgg.entries()) {
-      if (agg.type === 'PAINT') paintLeafKeys.push(code);
-    }
-    for (const key of paintLeafKeys) materialAgg.delete(key);
+  // 6-3. item_standard_cost 기반 전체 자재 비용 (표준재료비 calcFromItemStandardCosts 동일 엔진)
+  // item_standard_cost가 있으면 BOM BFS 결과를 완전 대체 → 3탭 일치
+  if (itemStandardCosts && itemStandardCosts.length > 0) {
+    materialAgg.clear();
 
-    // (b) item_standard_cost에서 paint_cost_per_ea > 0인 품목 직접 합산
-    let paintCount = 0;
-    let paintTotal = 0;
-    if (itemStandardCosts) {
-      for (const isc of itemStandardCosts) {
-        if (isc.paint_cost_per_ea <= 0 || !isc.item_code) continue;
-        if (isc.supply_type?.includes('외주') || isc.supply_type === '구매') continue;
+    const QTY_KEYS: (keyof ItemStandardCost)[] = [
+      'jan_qty','feb_qty','mar_qty','apr_qty','may_qty','jun_qty',
+      'jul_qty','aug_qty','sep_qty','oct_qty','nov_qty','dec_qty',
+    ];
+    const AMT_KEYS: (keyof ItemStandardCost)[] = [
+      'jan_amt','feb_amt','mar_amt','apr_amt','may_amt','jun_amt',
+      'jul_amt','aug_amt','sep_amt','oct_amt','nov_amt','dec_amt',
+    ];
 
-        const normCode = normalizePn(isc.item_code);
-        const normCust = isc.customer_pn ? normalizePn(isc.customer_pn) : '';
+    // Enrich: 모든 per-EA 비용이 0인 품목에 stdCostMap fallback 적용
+    const enrichedISC = itemStandardCosts.map(isc => {
+      const r = Number(isc.resin_cost_per_ea) || 0;
+      const p = Number(isc.paint_cost_per_ea) || 0;
+      const m = Number(isc.material_cost_per_ea) || 0;
+      if (r > 0 || p > 0 || m > 0) return isc;
+      const fb = stdCostMap.get(normalizePn(isc.item_code))
+              || stdCostMap.get(normalizePn(isc.customer_pn || ''));
+      if (fb && fb.eaCost > 0) return { ...isc, material_cost_per_ea: fb.eaCost };
+      return isc;
+    });
 
-        // 월별 생산수량: forecast 매칭 우선, 없으면 item_standard_cost 자체 수량
-        const iscMonthly = [
-          isc.jan_qty, isc.feb_qty, isc.mar_qty, isc.apr_qty,
-          isc.may_qty, isc.jun_qty, isc.jul_qty, isc.aug_qty,
-          isc.sep_qty, isc.oct_qty, isc.nov_qty, isc.dec_qty,
-        ];
-        const fcastQty = forecastQtyMap.get(normCode) || (normCust ? forecastQtyMap.get(normCust) : undefined);
-        const monthlyQty = fcastQty || iscMonthly;
+    for (const isc of enrichedISC) {
+      if (!isc.item_code) continue;
+      const normCode = normalizePn(isc.item_code);
+      const normCust = isc.customer_pn ? normalizePn(isc.customer_pn) : '';
+      const st = isc.supply_type || '';
+      const resinPerEa = Number(isc.resin_cost_per_ea) || 0;
+      const paintPerEa = Number(isc.paint_cost_per_ea) || 0;
+      const materialPerEa = Number(isc.material_cost_per_ea) || 0;
 
-        const totalQty = monthlyQty.reduce((s, q) => s + (q || 0), 0);
-        if (totalQty <= 0) continue;
+      // 월별 수량: item_standard_cost 자체 → forecast fallback
+      const mq = new Array(12).fill(0);
+      let hasQty = false;
+      for (let m = 0; m < 12; m++) {
+        let qty = Number(isc[QTY_KEYS[m]]) || 0;
+        if (qty <= 0) {
+          const fcast = forecastQtyMap.get(normCode) || (normCust ? forecastQtyMap.get(normCust) : undefined);
+          if (fcast) qty = fcast[m] || 0;
+        }
+        mq[m] = qty;
+        if (qty > 0) hasQty = true;
+      }
+      if (!hasQty) continue;
 
-        const paintMatKey = `PAINT_STD:${normCode}`;
-        const mq = new Array(12).fill(0);
-        for (let m = 0; m < 12; m++) mq[m] = monthlyQty[m] || 0;
+      // === calcFromItemStandardCosts 동일 분류 ===
+      const isSelfMade = st === '자작' || (!st && (resinPerEa > 0 || paintPerEa > 0) && !st.includes('구매') && !st.includes('외주'));
 
-        materialAgg.set(paintMatKey, {
-          name: (isc.item_name || normCode) + ' 도장',
-          type: 'PAINT',
-          monthlyQty: mq,
+      if (isSelfMade || (!st && materialPerEa > 0 && resinPerEa <= 0 && paintPerEa <= 0)) {
+        const totalPerEa = materialPerEa > 0 ? materialPerEa : (resinPerEa + paintPerEa);
+        if (totalPerEa <= 0) continue;
+
+        if (resinPerEa > 0) {
+          materialAgg.set(`ISC_RESIN:${normCode}`, {
+            name: (isc.item_name || normCode) + ' 사출',
+            type: 'RESIN',
+            monthlyQty: [...mq],
+            parents: new Set([normCode]),
+            unitPrice: resinPerEa,
+            supplier: '',
+          });
+        }
+        if (paintPerEa > 0) {
+          materialAgg.set(`ISC_PAINT:${normCode}`, {
+            name: (isc.item_name || normCode) + ' 도장',
+            type: 'PAINT',
+            monthlyQty: [...mq],
+            parents: new Set([normCode]),
+            unitPrice: paintPerEa,
+            supplier: '',
+          });
+        }
+        const otherPerEa = Math.max(0, totalPerEa - resinPerEa - paintPerEa);
+        if (otherPerEa > 0) {
+          materialAgg.set(`ISC_MAT:${normCode}`, {
+            name: (isc.item_name || normCode) + ' 기타',
+            type: '구매',
+            monthlyQty: [...mq],
+            parents: new Set([normCode]),
+            unitPrice: otherPerEa,
+            supplier: '',
+          });
+        }
+      } else if (st === '구매') {
+        let perEa = materialPerEa;
+        if (perEa <= 0) {
+          for (let m = 0; m < 12; m++) {
+            const amt = Number(isc[AMT_KEYS[m]]) || 0;
+            if (amt > 0 && mq[m] > 0) { perEa = amt / mq[m]; break; }
+          }
+        }
+        if (perEa <= 0) continue;
+        materialAgg.set(`ISC_PURCH:${normCode}`, {
+          name: isc.item_name || normCode,
+          type: '구매',
+          monthlyQty: [...mq],
           parents: new Set([normCode]),
-          unitPrice: isc.paint_cost_per_ea,
+          unitPrice: perEa,
           supplier: '',
         });
-        paintCount++;
-        paintTotal += totalQty * isc.paint_cost_per_ea;
+      } else if (st.includes('외주')) {
+        let perEa = materialPerEa;
+        if (perEa <= 0) {
+          for (let m = 0; m < 12; m++) {
+            const amt = Number(isc[AMT_KEYS[m]]) || 0;
+            if (amt > 0 && mq[m] > 0) { perEa = amt / mq[m]; break; }
+          }
+        }
+        if (perEa <= 0) continue;
+        materialAgg.set(`ISC_OUTS:${normCode}`, {
+          name: isc.item_name || normCode,
+          type: '외주',
+          monthlyQty: [...mq],
+          parents: new Set([normCode]),
+          unitPrice: perEa,
+          supplier: '',
+        });
       }
     }
-    // debug: PAINT 합산 확인
-    if (typeof console !== 'undefined') console.log(`[MRP] PAINT: ${paintCount}건, ${(paintTotal / 1e8).toFixed(2)}億`);
+    let iscTotal = 0;
+    for (const [, agg] of materialAgg.entries()) {
+      iscTotal += agg.monthlyQty.reduce((s, q) => s + q, 0) * agg.unitPrice;
+    }
+    console.log(`[MRP] item_standard_cost 엔진: ${materialAgg.size}건, ${(iscTotal / 1e8).toFixed(2)}億`);
   }
 
   // 7. 결과 구성
@@ -409,12 +486,12 @@ export function calculateMRP(
   for (const [code, agg] of materialAgg.entries()) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
 
-    // PAINT_STD: item_standard_cost 기반 도장비 — 이미 단가/단위 확정
-    if (code.startsWith('PAINT_STD:')) {
+    // ISC_*: item_standard_cost 기반 엔트리 — 이미 단가/단위 확정
+    if (code.startsWith('ISC_')) {
       materials.push({
-        materialCode: code.replace('PAINT_STD:', ''),
+        materialCode: code.replace(/^ISC_[A-Z]+:/, ''),
         materialName: agg.name,
-        materialType: 'PAINT',
+        materialType: agg.type,
         unit: 'EA',
         requiredQty: Math.round(totalQty),
         unitPrice: agg.unitPrice,
