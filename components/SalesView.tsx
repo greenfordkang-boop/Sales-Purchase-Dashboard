@@ -47,12 +47,17 @@ const SalesView: React.FC = () => {
 
   // 3. CR Data Initializer
   const getInitialCRData = (): CRItem[] => {
-    if (typeof window === 'undefined') return parseCRCSV(INITIAL_CR_CSV);
+    if (typeof window === 'undefined') return parseCRCSV(INITIAL_CR_CSV, 2025);
     try {
       const stored = localStorage.getItem('dashboard_crData');
-      return stored ? JSON.parse(stored) : parseCRCSV(INITIAL_CR_CSV);
+      if (stored) {
+        const parsed: CRItem[] = JSON.parse(stored);
+        // Backward compat: add year=2025 if missing
+        return parsed.map(item => ({ ...item, year: item.year || 2025 }));
+      }
+      return parseCRCSV(INITIAL_CR_CSV, 2025);
     } catch (e) {
-        return parseCRCSV(INITIAL_CR_CSV);
+        return parseCRCSV(INITIAL_CR_CSV, 2025);
     }
   };
 
@@ -97,6 +102,7 @@ const SalesView: React.FC = () => {
   // CR States
   const [crData, setCrData] = useState<CRItem[]>(getInitialCRData);
   const [isEditingCR, setIsEditingCR] = useState(false);
+  const [selectedCRYear, setSelectedCRYear] = useState<number>(new Date().getFullYear());
 
   // RFQ States
   const [rfqData, setRfqData] = useState<RFQItem[]>(getInitialRFQData);
@@ -183,9 +189,11 @@ const SalesView: React.FC = () => {
         try {
           const supabaseCR = await crService.getAll();
           if (supabaseCR && supabaseCR.length > 0) {
-            setCrData(supabaseCR);
-            safeSetItem('dashboard_crData', JSON.stringify(supabaseCR));
-            console.log(`✅ Supabase에서 CR 데이터 로드: ${supabaseCR.length}개`);
+            // Backward compat: ensure year field exists
+            const withYear = supabaseCR.map(item => ({ ...item, year: item.year || 2025 }));
+            setCrData(withYear);
+            safeSetItem('dashboard_crData', JSON.stringify(withYear));
+            console.log(`✅ Supabase에서 CR 데이터 로드: ${withYear.length}개`);
           } else {
             console.log('ℹ️ Supabase CR 데이터 없음 - localStorage 유지');
           }
@@ -328,22 +336,29 @@ const SalesView: React.FC = () => {
 
 
   // CR Derived
+  const crYears = useMemo(() => {
+    const years = Array.from(new Set(crData.map(d => d.year))).sort((a, b) => b - a);
+    return years.length > 0 ? years : [new Date().getFullYear()];
+  }, [crData]);
+
   const crTableData = useMemo(() => {
+    const yearData = crData.filter(d => d.year === selectedCRYear);
     const months = Array.from({ length: 12 }, (_, i) => `${i + 1}월`);
-    const mapped = months.map(m => crData.find(d => d.month === m) || { month: m, totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0 });
+    const emptyItem = { year: selectedCRYear, month: '', totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0 };
+    const mapped = months.map(m => yearData.find(d => d.month === m) || { ...emptyItem, month: m });
     const total = mapped.reduce((acc, cur) => ({
         month: '합계',
         totalSales: acc.totalSales + cur.totalSales,
         lgSales: acc.lgSales + cur.lgSales,
         lgCR: acc.lgCR + cur.lgCR,
-        lgDefense: acc.lgDefense + cur.lgDefense, 
+        lgDefense: acc.lgDefense + cur.lgDefense,
         mtxSales: acc.mtxSales + cur.mtxSales,
         mtxCR: acc.mtxCR + cur.mtxCR,
         mtxDefense: acc.mtxDefense + cur.mtxDefense
     }), { month: '합계', totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0 });
     if (mapped.length > 0) { total.lgDefense = Math.round(total.lgDefense / mapped.length); total.mtxDefense = Math.round(total.mtxDefense / mapped.length); }
     return { monthly: mapped, total };
-  }, [crData]);
+  }, [crData, selectedCRYear]);
 
   // RFQ Derived
   const rfqMetrics = useMemo(() => {
@@ -744,13 +759,16 @@ const SalesView: React.FC = () => {
     if (file) {
       const reader = new FileReader();
       reader.onload = (event) => {
-        const parsed = parseCRCSV(event.target?.result as string);
-        setCrData(parsed);
-        // localStorage는 useEffect에서 자동 저장됨
-        // Supabase 백그라운드 저장
+        const parsed = parseCRCSV(event.target?.result as string, selectedCRYear);
+        // Merge: replace only the selected year's data
+        setCrData(prev => {
+          const otherYears = prev.filter(d => d.year !== selectedCRYear);
+          return [...otherYears, ...parsed];
+        });
+        // Supabase 백그라운드 저장 (해당 년도만)
         if (isSupabaseConfigured()) {
-          crService.saveAll(parsed)
-            .then(() => console.log('✅ CR 데이터 Supabase 동기화 완료'))
+          crService.saveByYear(parsed, selectedCRYear)
+            .then(() => console.log(`✅ ${selectedCRYear}년 CR 데이터 Supabase 동기화 완료`))
             .catch(err => console.error('Supabase 동기화 실패:', err));
         }
       };
@@ -1027,12 +1045,12 @@ const SalesView: React.FC = () => {
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
     const numValue = parseFloat(value); const finalVal = isNaN(numValue) ? 0 : numValue;
     setCrData(prev => {
-      const exists = prev.some(item => item.month === month);
+      const exists = prev.some(item => item.year === selectedCRYear && item.month === month);
       if (exists) {
-        return prev.map(item => item.month === month ? { ...item, [field]: finalVal } : item);
+        return prev.map(item => (item.year === selectedCRYear && item.month === month) ? { ...item, [field]: finalVal } : item);
       }
-      // crData에 해당 월이 없으면 새로 추가
-      const newItem: CRItem = { month, totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0, [field]: finalVal };
+      // crData에 해당 년도/월이 없으면 새로 추가
+      const newItem: CRItem = { year: selectedCRYear, month, totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0, [field]: finalVal };
       return [...prev, newItem];
     });
   };
@@ -1867,9 +1885,27 @@ const SalesView: React.FC = () => {
                      </h2>
                      <p className="text-sm text-slate-500 mt-1">고객사별 CR 목표 대비 달성률 및 VI 비율 분석 (월별 상세)</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                     <select
+                        value={selectedCRYear}
+                        onChange={(e) => setSelectedCRYear(parseInt(e.target.value))}
+                        className="px-3 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-blue-400"
+                     >
+                        {crYears.map(y => <option key={y} value={y}>{y}년</option>)}
+                     </select>
                      <button
-                        onClick={() => setIsEditingCR(!isEditingCR)}
+                        onClick={() => {
+                          if (isEditingCR) {
+                            // 편집 종료 시 해당 년도 데이터 Supabase에 저장
+                            const yearData = crData.filter(d => d.year === selectedCRYear);
+                            if (isSupabaseConfigured()) {
+                              crService.saveByYear(yearData, selectedCRYear)
+                                .then(() => console.log(`✅ ${selectedCRYear}년 CR 데이터 저장 완료`))
+                                .catch(err => console.error('CR 저장 실패:', err));
+                            }
+                          }
+                          setIsEditingCR(!isEditingCR);
+                        }}
                         className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${isEditingCR ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                      >
                         {isEditingCR ? '💾 편집 종료 (저장)' : '✏️ 실적 직접 입력'}

@@ -843,10 +843,11 @@ export const crService = {
       return stored ? JSON.parse(stored) : [];
     }
 
-    const data = await fetchAllRows('cr_data', 'month');
+    const data = await fetchAllRows('cr_data', 'year', { ascending: true }, { column: 'month', ascending: true });
 
     return data
       ?.map((row: any) => ({
+        year: typeof row.year === 'number' ? row.year : Number(row.year) || 2025,
         month: row.month,
         totalSales: row.total_sales || 0,
         lgSales: row.lg_sales || 0,
@@ -873,6 +874,7 @@ export const crService = {
     if (deleteError) handleError(deleteError, 'cr delete');
 
     const rows = data.map(item => ({
+      year: item.year,
       month: item.month,
       total_sales: item.totalSales,
       lg_sales: item.lgSales,
@@ -886,6 +888,52 @@ export const crService = {
     await insertInBatches('cr_data', rows);
 
     safeSetItem('dashboard_crData', JSON.stringify(data));
+  },
+
+  async saveByYear(data: CRItem[], year: number): Promise<void> {
+    if (!isSupabaseConfigured()) {
+      const stored = localStorage.getItem('dashboard_crData');
+      const existing: CRItem[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(item => item.year !== year);
+      const merged = [...filtered, ...data];
+      safeSetItem('dashboard_crData', JSON.stringify(merged));
+      return;
+    }
+
+    try {
+      const { error: deleteError } = await supabase!
+        .from('cr_data')
+        .delete()
+        .eq('year', year);
+
+      if (deleteError) {
+        console.error('Error deleting CR data for year', year, deleteError);
+      }
+
+      const rows = data.map(item => ({
+        year: item.year,
+        month: item.month,
+        total_sales: item.totalSales,
+        lg_sales: item.lgSales,
+        lg_cr: item.lgCR,
+        lg_defense: item.lgDefense,
+        mtx_sales: item.mtxSales,
+        mtx_cr: item.mtxCR,
+        mtx_defense: item.mtxDefense
+      }));
+
+      await insertInBatches('cr_data', rows);
+
+      // Update localStorage with merged data
+      const stored = localStorage.getItem('dashboard_crData');
+      const existing: CRItem[] = stored ? JSON.parse(stored) : [];
+      const filtered = existing.filter(item => item.year !== year);
+      const merged = [...filtered, ...data];
+      safeSetItem('dashboard_crData', JSON.stringify(merged));
+    } catch (err) {
+      console.error('CR saveByYear error:', err);
+      throw err;
+    }
   }
 };
 

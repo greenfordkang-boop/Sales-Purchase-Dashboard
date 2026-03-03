@@ -1,5 +1,6 @@
 
 export interface CRItem {
+  year: number;
   month: string; // "1월"
   totalSales: number;
   lgSales: number;
@@ -17,18 +18,19 @@ const parseNumber = (value: string | undefined): number => {
   return isNaN(num) ? 0 : num;
 };
 
-export const parseCRCSV = (csvContent: string): CRItem[] => {
+export const parseCRCSV = (csvContent: string, year: number = 2025): CRItem[] => {
   const lines = csvContent.split('\n').filter(line => line.trim() !== '');
   if (lines.length < 2) return [];
 
   const dataRows = lines.slice(1);
-  
+
   return dataRows
     .map(line => {
       const cols = line.split(','); // Simple split for this specific numeric CSV
       const month = (cols[0] || '').trim();
       if (!month) return null; // 빈 month는 제외
       return {
+        year,
         month,
         totalSales: parseNumber(cols[1]),
         lgSales: parseNumber(cols[2]),

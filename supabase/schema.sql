@@ -154,6 +154,7 @@ CREATE INDEX IF NOT EXISTS idx_inventory_v2_code ON inventory_v2(code);
 -- ============================================
 CREATE TABLE IF NOT EXISTS cr_data (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  year INTEGER NOT NULL DEFAULT 2025,
   month TEXT NOT NULL,
   total_sales NUMERIC(15, 2) DEFAULT 0,
   lg_sales NUMERIC(15, 2) DEFAULT 0,
@@ -167,6 +168,7 @@ CREATE TABLE IF NOT EXISTS cr_data (
 );
 
 -- Index for faster queries
+CREATE INDEX IF NOT EXISTS idx_cr_year ON cr_data(year);
 CREATE INDEX IF NOT EXISTS idx_cr_month ON cr_data(month);
 
 -- ============================================
