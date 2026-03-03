@@ -402,6 +402,9 @@ const BomTreePopup: React.FC<{
     [...row.bomLeaves] // DFS 트리 순서 유지 (cost 정렬 X)
   );
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
 
   // --- 드래그 ---
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -434,7 +437,6 @@ const BomTreePopup: React.FC<{
   };
 
   const handleCalcApply = async (leafPn: string, calcPrice: number) => {
-    // ★ 1단계: UI 즉시 업데이트 — leafPn으로 직접 매칭 (인덱스 의존 제거)
     setLocalLeaves(prev => {
       const idx = prev.findIndex(l => normalizePn(l.childPn) === normalizePn(leafPn));
       if (idx < 0) return prev;
@@ -449,11 +451,10 @@ const BomTreePopup: React.FC<{
     });
     setCalcOpenIdx(null);
 
-    // ★ 2단계: DB 업데이트 (백그라운드)
     const ok = await itemStandardCostService.updateResinCost(leafPn, calcPrice);
     setApplyMsg(ok ? `₩${Math.round(calcPrice).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
     setTimeout(() => setApplyMsg(null), 3000);
-    onRefInfoUpdate(); // 전체 재계산 (silent 모드 → 팝업 unmount 안됨)
+    onRefInfoUpdate();
   };
 
   const handlePaintApply = async (leafPn: string, price: number) => {
@@ -471,7 +472,6 @@ const BomTreePopup: React.FC<{
     });
     setPaintOpenIdx(null);
 
-    // DB 업데이트
     const ok = await itemStandardCostService.updateResinCost(leafPn, price);
     setApplyMsg(ok ? `₩${Math.round(price).toLocaleString()} 저장 완료` : 'DB 저장 실패 — 콘솔 확인');
     setTimeout(() => setApplyMsg(null), 3000);
@@ -505,7 +505,6 @@ const BomTreePopup: React.FC<{
       return;
     }
     const leaf = localLeaves[idx];
-    // Update local display immediately
     const updated = [...localLeaves];
     updated[idx] = {
       ...leaf,
@@ -515,7 +514,6 @@ const BomTreePopup: React.FC<{
     };
     setLocalLeaves(updated);
     setEditingIdx(null);
-    // Supabase material_code_master 업데이트 → 전체 재계산
     materialCodeService.updatePrice(leaf.childPn, newPrice);
     onPriceUpdate(leaf.childPn, newPrice);
   };
@@ -525,22 +523,83 @@ const BomTreePopup: React.FC<{
     else if (e.key === 'Escape') setEditingIdx(null);
   };
 
+  // ── 3단계: 오류 자동감지 ──
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const errors = useMemo(() => {
+    const list: Array<{ type: 'critical' | 'warning'; leafIdx?: number; msg: string }> = [];
+    localLeaves.forEach((l, i) => {
+      if (!l.isIntermediate && l.unitPrice <= 0)
+        list.push({ type: 'critical', leafIdx: i, msg: `${l.childPn} — 단가누락 (₩0)` });
+    });
+    if (totalBomCost > 0 && row.unitPrice > 0 && totalBomCost > row.unitPrice)
+      list.push({ type: 'warning', msg: `재료비(₩${fmt(totalBomCost)}) > 판매가(₩${fmt(row.unitPrice)}) — 재료비율 ${Math.round(totalBomCost / row.unitPrice * 100)}%` });
+    if (row.stdMaterialCost > 0 && totalBomCost > 0) {
+      const diff = Math.abs(totalBomCost - row.stdMaterialCost);
+      if (diff > row.stdMaterialCost * 0.1)
+        list.push({ type: 'warning', msg: `BOM(₩${fmt(totalBomCost)}) ≠ 표준(₩${fmt(row.stdMaterialCost)}) — △₩${fmt(diff)}` });
+    }
+    return list;
+  }, [localLeaves, totalBomCost, row.unitPrice, row.stdMaterialCost]);
+
+  const errorLeafIndices = useMemo(() => new Set(errors.filter(e => e.leafIdx !== undefined).map(e => e.leafIdx!)), [errors]);
+
+  // ── 우측 패널: 카테고리별 소계 ──
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const categoryStats = useMemo(() => {
+    const cats: Record<string, { cost: number; count: number }> = {};
+    localLeaves.forEach(l => {
+      if (l.isIntermediate) return;
+      const cat = /사출|원재료/.test(l.partType) ? '사출재료' :
+                  /도장/.test(l.partType) ? '도장재료' :
+                  /구매|외주/.test(l.partType) ? '구매품' : '기타';
+      if (!cats[cat]) cats[cat] = { cost: 0, count: 0 };
+      cats[cat].cost += l.cost;
+      cats[cat].count += 1;
+    });
+    const order = ['사출재료', '도장재료', '구매품', '기타'];
+    return order.filter(k => cats[k]).map(k => ({ name: k, ...cats[k] }));
+  }, [localLeaves]);
+
+  const scrollToRow = (idx: number) => {
+    setSelectedIdx(idx);
+    const row = rowRefs.current[idx];
+    if (row && leftPanelRef.current) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const catColors: Record<string, string> = {
+    '사출재료': 'bg-blue-500',
+    '도장재료': 'bg-purple-500',
+    '구매품': 'bg-amber-500',
+    '기타': 'bg-slate-400',
+  };
+
+  const hasBomData = localLeaves.length > 0;
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
         data-popup
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-6xl w-full max-h-[80vh] overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-[1400px] max-w-[95vw] max-h-[85vh] overflow-hidden flex flex-col"
         style={pos ? { position: 'fixed', left: pos.x, top: pos.y, margin: 0 } : undefined}
         onClick={e => e.stopPropagation()}
       >
         {/* 헤더 (드래그 핸들) */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 cursor-move select-none" onMouseDown={onMouseDown}>
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-4 cursor-move select-none flex-shrink-0" onMouseDown={onMouseDown}>
           <div className="flex justify-between items-start">
             <div>
               <div className="font-bold text-lg">{row.partName || row.newPartNo}</div>
               <div className="text-blue-100 text-xs mt-1">{row.newPartNo} | {row.customer} {row.model}</div>
             </div>
-            <button onClick={onClose} className="text-white/80 hover:text-white text-xl font-bold leading-none">&times;</button>
+            <div className="flex items-center gap-2">
+              {errors.length > 0 && (
+                <span className="bg-red-500/80 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {errors.filter(e => e.type === 'critical').length > 0 ? '!' : '⚠'} {errors.length}건
+                </span>
+              )}
+              <button onClick={onClose} className="text-white/80 hover:text-white text-xl font-bold leading-none">&times;</button>
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-3 mt-3 text-sm">
             <div className="bg-white/15 rounded-lg px-3 py-2">
@@ -563,277 +622,455 @@ const BomTreePopup: React.FC<{
           </div>
         </div>
 
-        {/* BOM 트리 테이블 */}
-        <div className="overflow-auto max-h-[50vh]">
-          {localLeaves.length > 0 ? (
-            <table className="w-full text-xs whitespace-nowrap">
-              <thead className="bg-slate-50 sticky top-0">
-                <tr className="text-slate-500">
-                  <th className="px-3 py-2 text-left">자재코드</th>
-                  <th className="px-3 py-2 text-left">자재명</th>
-                  <th className="px-3 py-2 text-left">유형</th>
-                  <th className="px-3 py-2 text-left">구입처</th>
-                  <th className="px-3 py-2 text-right">소요량</th>
-                  <th className="px-3 py-2 text-right whitespace-nowrap">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭수정)</span></th>
-                  <th className="px-3 py-2 text-right">금액</th>
-                  <th className="px-3 py-2 text-left">출처</th>
-                </tr>
-              </thead>
-              <tbody>
-                {localLeaves.map((leaf, i) =>
-                  leaf.isIntermediate ? (
-                    /* 중간 노드 (서브어셈블리) — 트리 구조 표시용 */
-                    <tr key={i} className="bg-slate-50/60">
-                      <td colSpan={8} className="py-1 text-[10px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
-                        <span className="text-slate-400 mr-0.5">├─</span>
-                        <span className="font-mono font-medium text-slate-500">{leaf.childPn}</span>
-                        <span className="ml-1.5 text-slate-400">{leaf.childName}</span>
-                        {leaf.partType && (
-                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] ${
-                            /조립/.test(leaf.partType) ? 'bg-green-50 text-green-600' :
-                            /사출/.test(leaf.partType) ? 'bg-blue-50 text-blue-600' :
-                            'bg-slate-100 text-slate-500'
-                          }`}>{leaf.partType}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ) : (
-                    /* Leaf 노드 — 자재, 단가 표시 */
-                    <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
-                      <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
-                        <span className="text-slate-300 mr-0.5 text-[10px]">└─</span>
-                        {leaf.childPn}
-                      </td>
-                      <td className="px-3 py-1.5">{leaf.childName}</td>
-                      <td className="px-3 py-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
-                          /구매|외주/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
-                          /도장/.test(leaf.partType) ? 'bg-purple-100 text-purple-700' :
-                          leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
-                        }`}>{leaf.partType || '-'}</span>
-                      </td>
-                      <td className="px-3 py-1.5 text-[10px] text-slate-500" title={leaf.supplier}>
-                        {leaf.supplier || '-'}
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono relative">
-                        {editingIdx === i ? (
-                          <input
-                            type="number"
-                            className="w-24 px-1.5 py-0.5 border border-blue-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={editValue}
-                            onChange={e => setEditValue(e.target.value)}
-                            onKeyDown={e => handleKeyDown(e, i)}
-                            onBlur={() => handlePriceSave(i)}
-                            autoFocus
-                          />
-                        ) : (
-                          <span className="flex items-center justify-end gap-0.5">
-                            <span
-                              className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
-                                leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
-                                leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
-                                leaf.priceSource === '도장(적용)' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
-                                'text-slate-700 border-b border-dashed border-slate-300'
-                              }`}
-                              onClick={() => handlePriceClick(i)}
-                              title="클릭하여 단가 수정"
-                            >
-                              ₩{fmt(leaf.unitPrice)}
+        {/* ── 분할뷰 본문 ── */}
+        <div className="flex flex-1 min-h-0">
+          {/* ── 좌측: BOM 트리 (55%) ── */}
+          <div ref={leftPanelRef} className="w-[55%] overflow-auto border-r border-slate-200">
+            {hasBomData ? (
+              <table className="w-full text-xs whitespace-nowrap">
+                <thead className="bg-slate-50 sticky top-0 z-10">
+                  <tr className="text-slate-500">
+                    <th className="px-3 py-2 text-left">자재코드</th>
+                    <th className="px-3 py-2 text-left">자재명</th>
+                    <th className="px-3 py-2 text-left">유형</th>
+                    <th className="px-3 py-2 text-left">구입처</th>
+                    <th className="px-3 py-2 text-right">소요량</th>
+                    <th className="px-3 py-2 text-right whitespace-nowrap">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭수정)</span></th>
+                    <th className="px-3 py-2 text-right">금액</th>
+                    <th className="px-3 py-2 text-left">출처</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {localLeaves.map((leaf, i) =>
+                    leaf.isIntermediate ? (
+                      <tr key={i} ref={el => { rowRefs.current[i] = el; }} className="bg-slate-50/60">
+                        <td colSpan={8} className="py-1 text-[10px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
+                          <span className="text-slate-400 mr-0.5">├─</span>
+                          <span className="font-mono font-medium text-slate-500">{leaf.childPn}</span>
+                          <span className="ml-1.5 text-slate-400">{leaf.childName}</span>
+                          {leaf.partType && (
+                            <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] ${
+                              /조립/.test(leaf.partType) ? 'bg-green-50 text-green-600' :
+                              /사출/.test(leaf.partType) ? 'bg-blue-50 text-blue-600' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>{leaf.partType}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr
+                        key={i}
+                        ref={el => { rowRefs.current[i] = el; }}
+                        className={`border-t border-slate-100 cursor-pointer transition-colors ${
+                          selectedIdx === i ? 'bg-blue-100/70 ring-1 ring-inset ring-blue-300' :
+                          errorLeafIndices.has(i) ? 'bg-red-50 border-l-2 border-l-red-400' :
+                          'hover:bg-blue-50/50'
+                        }`}
+                        onClick={() => setSelectedIdx(selectedIdx === i ? null : i)}
+                      >
+                        <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
+                          <span className="text-slate-300 mr-0.5 text-[10px]">└─</span>
+                          {leaf.childPn}
+                        </td>
+                        <td className="px-3 py-1.5">{leaf.childName}</td>
+                        <td className="px-3 py-1.5">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
+                            /구매|외주/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
+                            /도장/.test(leaf.partType) ? 'bg-purple-100 text-purple-700' :
+                            leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
+                          }`}>{leaf.partType || '-'}</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-[10px] text-slate-500" title={leaf.supplier}>
+                          {leaf.supplier || '-'}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono relative">
+                          {editingIdx === i ? (
+                            <input
+                              type="number"
+                              className="w-24 px-1.5 py-0.5 border border-blue-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              onKeyDown={e => handleKeyDown(e, i)}
+                              onBlur={() => handlePriceSave(i)}
+                              autoFocus
+                              onClick={e => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span className="flex items-center justify-end gap-0.5">
+                              <span
+                                className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
+                                  leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                  leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
+                                  leaf.priceSource === '도장(적용)' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                  'text-slate-700 border-b border-dashed border-slate-300'
+                                }`}
+                                onClick={(e) => { e.stopPropagation(); handlePriceClick(i); }}
+                                title="클릭하여 단가 수정"
+                              >
+                                ₩{fmt(leaf.unitPrice)}
+                              </span>
+                              {leaf.calcDetail && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCalcOpenIdx(calcOpenIdx === i ? null : i);
+                                    setPaintOpenIdx(null);
+                                    setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                                  }}
+                                  className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
+                                    calcOpenIdx === i ? 'bg-amber-500 text-white' : 'text-amber-500 hover:bg-amber-100'
+                                  }`}
+                                  title="사출재료비 산출근거 (클릭)"
+                                >
+                                  &#9432;
+                                </button>
+                              )}
+                              {/도장/.test(leaf.partType) && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPaintOpenIdx(paintOpenIdx === i ? null : i);
+                                    setCalcOpenIdx(null);
+                                    setPaintAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
+                                  }}
+                                  className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
+                                    paintOpenIdx === i ? 'bg-purple-500 text-white' : 'text-purple-500 hover:bg-purple-100'
+                                  }`}
+                                  title="도장단가 편집 (클릭)"
+                                >
+                                  &#9998;
+                                </button>
+                              )}
                             </span>
-                            {leaf.calcDetail && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setCalcOpenIdx(calcOpenIdx === i ? null : i);
-                                  setPaintOpenIdx(null);
-                                  setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                                }}
-                                className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
-                                  calcOpenIdx === i ? 'bg-amber-500 text-white' : 'text-amber-500 hover:bg-amber-100'
-                                }`}
-                                title="사출재료비 산출근거 (클릭)"
-                              >
-                                &#9432;
-                              </button>
-                            )}
-                            {/도장/.test(leaf.partType) && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPaintOpenIdx(paintOpenIdx === i ? null : i);
-                                  setCalcOpenIdx(null);
-                                  setPaintAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                                }}
-                                className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
-                                  paintOpenIdx === i ? 'bg-purple-500 text-white' : 'text-purple-500 hover:bg-purple-100'
-                                }`}
-                                title="도장단가 편집 (클릭)"
-                              >
-                                &#9998;
-                              </button>
-                            )}
+                          )}
+                        </td>
+                        <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
+                          leaf.priceSource === '수동입력' ? 'text-purple-700' :
+                          leaf.priceSource === '사출(적용)' ? 'text-blue-700' :
+                          leaf.priceSource === '도장(적용)' ? 'text-purple-700' : ''
+                        }`}>₩{fmt(leaf.cost)}</td>
+                        <td className="px-3 py-1.5 text-[10px]">
+                          <span className={
+                            leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' :
+                            leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
+                            leaf.priceSource === '도장(적용)' ? 'text-purple-600 font-semibold' :
+                            'text-slate-400'
+                          }>
+                            {leaf.priceSource}
                           </span>
+                        </td>
+                      </tr>
+                    )
+                  )}
+                  {/* BOM 소계 */}
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
+                    <td colSpan={6} className="px-3 py-2 text-right">
+                      <span className="flex items-center justify-end gap-2">
+                        BOM 전개 소계
+                        {totalBomCost > 0 && (
+                          <button
+                            onClick={handleSaveBomAsStandard}
+                            className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-normal"
+                            title="BOM 소계를 표준재료비로 저장"
+                          >
+                            표준재료비로 저장
+                          </button>
                         )}
-                      </td>
-                      <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
-                        leaf.priceSource === '수동입력' ? 'text-purple-700' :
-                        leaf.priceSource === '사출(적용)' ? 'text-blue-700' :
-                        leaf.priceSource === '도장(적용)' ? 'text-purple-700' : ''
-                      }`}>₩{fmt(leaf.cost)}</td>
-                      <td className="px-3 py-1.5 text-[10px]">
-                        <span className={
-                          leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' :
-                          leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
-                          leaf.priceSource === '도장(적용)' ? 'text-purple-600 font-semibold' :
-                          'text-slate-400'
-                        }>
-                          {leaf.priceSource}
-                        </span>
-                      </td>
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">₩{fmt(totalBomCost)}</td>
+                    <td></td>
+                  </tr>
+                  {gapFromStd > 0 && (
+                    <tr className="bg-amber-50 text-amber-700">
+                      <td colSpan={6} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
+                      <td className="px-3 py-2 text-right font-mono font-semibold">₩{fmt(gapFromStd)}</td>
+                      <td className="px-3 py-2 text-[10px]">추정치</td>
                     </tr>
-                  )
-                )}
-                {/* BOM 소계 */}
-                <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <td colSpan={6} className="px-3 py-2 text-right">
-                    <span className="flex items-center justify-end gap-2">
-                      BOM 전개 소계
-                      {totalBomCost > 0 && (
-                        <button
-                          onClick={handleSaveBomAsStandard}
-                          className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-normal"
-                          title="BOM 소계를 표준재료비로 저장"
-                        >
-                          표준재료비로 저장
-                        </button>
-                      )}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono">₩{fmt(totalBomCost)}</td>
-                  <td></td>
-                </tr>
-                {/* 가공비 (표준-BOM 차이) */}
-                {gapFromStd > 0 && (
-                  <tr className="bg-amber-50 text-amber-700">
-                    <td colSpan={6} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold">₩{fmt(gapFromStd)}</td>
-                    <td className="px-3 py-2 text-[10px]">추정치</td>
+                  )}
+                  {row.stdMaterialCost > 0 && totalBomCost > row.stdMaterialCost && (
+                    <tr className="bg-red-50 text-red-700">
+                      <td colSpan={6} className="px-3 py-2 text-right text-xs">
+                        표준재료비(₩{fmt(row.stdMaterialCost)}) &lt; BOM 소계(₩{fmt(totalBomCost)}) — 표준재료비 재검토 필요
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono font-semibold text-red-600">
+                        △₩{fmt(totalBomCost - row.stdMaterialCost)}
+                      </td>
+                      <td className="px-3 py-2 text-[10px]">차이</td>
+                    </tr>
+                  )}
+                  <tr className="bg-blue-50 font-bold text-blue-800">
+                    <td colSpan={6} className="px-3 py-2 text-right">표준재료비 합계</td>
+                    <td className="px-3 py-2 text-right font-mono">₩{fmt(row.materialCost)}</td>
+                    <td></td>
                   </tr>
-                )}
-                {/* 표준재료비 < BOM 소계 경고 */}
-                {row.stdMaterialCost > 0 && totalBomCost > row.stdMaterialCost && (
-                  <tr className="bg-red-50 text-red-700">
-                    <td colSpan={6} className="px-3 py-2 text-right text-xs">
-                      표준재료비(₩{fmt(row.stdMaterialCost)}) &lt; BOM 소계(₩{fmt(totalBomCost)}) — 표준재료비 재검토 필요
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono font-semibold text-red-600">
-                      △₩{fmt(totalBomCost - row.stdMaterialCost)}
-                    </td>
-                    <td className="px-3 py-2 text-[10px]">차이</td>
-                  </tr>
-                )}
-                {/* 최종 합계 */}
-                <tr className="bg-blue-50 font-bold text-blue-800">
-                  <td colSpan={6} className="px-3 py-2 text-right">표준재료비 합계</td>
-                  <td className="px-3 py-2 text-right font-mono">₩{fmt(row.materialCost)}</td>
-                  <td></td>
-                </tr>
-              </tbody>
-            </table>
-          ) : row.hasStdCost ? (
-            <div className="p-6 text-slate-500 text-sm">
-              <div className="text-center mb-4 text-slate-400 text-xs">BOM 전개 데이터 없음</div>
-              <div className="max-w-md mx-auto space-y-3">
-                <div className="flex justify-between items-center bg-slate-50 rounded-lg px-4 py-2">
-                  <span className="text-slate-600 text-xs">표준재료비</span>
-                  <span className="font-mono font-bold text-slate-800">₩{fmt(row.stdMaterialCost)}</span>
+                </tbody>
+              </table>
+            ) : row.hasStdCost ? (
+              <div className="p-6 text-slate-500 text-sm">
+                <div className="text-center mb-4 text-slate-400 text-xs">BOM 전개 데이터 없음</div>
+                <div className="max-w-md mx-auto space-y-3">
+                  <div className="flex justify-between items-center bg-slate-50 rounded-lg px-4 py-2">
+                    <span className="text-slate-600 text-xs">표준재료비</span>
+                    <span className="font-mono font-bold text-slate-800">₩{fmt(row.stdMaterialCost)}</span>
+                  </div>
+                  {row.productCalcDetail && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                      <div className="text-[10px] font-bold text-amber-600 mb-2">사출재료비 산출근거</div>
+                      <div className="space-y-1 text-[11px]">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">원재료</span>
+                          <span className="font-mono text-xs">{row.productCalcDetail.materialCode} {row.productCalcDetail.materialName && `(${row.productCalcDetail.materialName})`}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">재질단가</span>
+                          <span className="font-mono">₩{Math.round(row.productCalcDetail.materialPrice).toLocaleString()}/kg</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">NET중량</span>
+                          <span className="font-mono">{row.productCalcDetail.netWeight.toFixed(2)}g</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Runner / Cavity</span>
+                          <span className="font-mono">{row.productCalcDetail.runnerWeight.toFixed(2)}g / {row.productCalcDetail.cavity}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">EA당중량</span>
+                          <span className="font-mono">{row.productCalcDetail.weightPerEa.toFixed(2)}g</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Loss율</span>
+                          <span className="font-mono">{row.productCalcDetail.lossRate}%</span>
+                        </div>
+                        <div className="border-t border-amber-200 my-1" />
+                        <div className="flex justify-between items-center font-bold">
+                          <span className="text-amber-700">공식 산출</span>
+                          <span className="font-mono text-amber-700 text-sm">₩{Math.round(row.productCalcDetail.result).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {row.productPaintDetail && row.productPaintDetail.coats.length > 0 && (
+                    <div className={`border rounded-lg px-4 py-3 ${row.paintSource === 'measured' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}>
+                      <div className={`text-[10px] font-bold mb-2 ${row.paintSource === 'measured' ? 'text-green-600' : 'text-purple-600'}`}>
+                        {row.paintSource === 'measured' ? '도장재료비 (실적 기반)' : '도장재료비 산출근거 (기준정보)'}
+                      </div>
+                      <div className="space-y-1 text-[11px]">
+                        {row.paintSource === 'measured' ? (
+                          row.productPaintDetail.coats.map((c, i) => (
+                            <div key={i}>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">도장량</span>
+                                <span className="font-mono">{Number(c.qtyGrams).toFixed(2)}g/EA</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">도장재료비</span>
+                                <span className="font-mono">₩{Math.round(c.cost).toLocaleString()}/EA</span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          row.productPaintDetail.coats.map((c, i) => (
+                            <div key={i} className="flex justify-between">
+                              <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
+                              <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g = ₩{Math.round(c.cost).toLocaleString()}</span>
+                            </div>
+                          ))
+                        )}
+                        <div className={`border-t my-1 ${row.paintSource === 'measured' ? 'border-green-200' : 'border-purple-200'}`} />
+                        <div className="flex justify-between items-center font-bold">
+                          <span className={row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}>도장 합계</span>
+                          <span className={`font-mono text-sm ${row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}`}>₩{Math.round(row.productPaintDetail.totalCalcCost).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!row.productCalcDetail && !row.productPaintDetail && (
+                    <div className="text-center text-xs text-slate-400">기준정보에 중량/도장량 데이터 없음</div>
+                  )}
                 </div>
-                {row.productCalcDetail && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                    <div className="text-[10px] font-bold text-amber-600 mb-2">사출재료비 산출근거</div>
-                    <div className="space-y-1 text-[11px]">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">원재료</span>
-                        <span className="font-mono text-xs">{row.productCalcDetail.materialCode} {row.productCalcDetail.materialName && `(${row.productCalcDetail.materialName})`}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">재질단가</span>
-                        <span className="font-mono">₩{Math.round(row.productCalcDetail.materialPrice).toLocaleString()}/kg</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">NET중량</span>
-                        <span className="font-mono">{row.productCalcDetail.netWeight.toFixed(2)}g</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Runner / Cavity</span>
-                        <span className="font-mono">{row.productCalcDetail.runnerWeight.toFixed(2)}g / {row.productCalcDetail.cavity}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">EA당중량</span>
-                        <span className="font-mono">{row.productCalcDetail.weightPerEa.toFixed(2)}g</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Loss율</span>
-                        <span className="font-mono">{row.productCalcDetail.lossRate}%</span>
-                      </div>
-                      <div className="border-t border-amber-200 my-1" />
-                      <div className="flex justify-between items-center font-bold">
-                        <span className="text-amber-700">공식 산출</span>
-                        <span className="font-mono text-amber-700 text-sm">₩{Math.round(row.productCalcDetail.result).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {row.productPaintDetail && row.productPaintDetail.coats.length > 0 && (
-                  <div className={`border rounded-lg px-4 py-3 ${row.paintSource === 'measured' ? 'bg-green-50 border-green-200' : 'bg-purple-50 border-purple-200'}`}>
-                    <div className={`text-[10px] font-bold mb-2 ${row.paintSource === 'measured' ? 'text-green-600' : 'text-purple-600'}`}>
-                      {row.paintSource === 'measured' ? '도장재료비 (실적 기반)' : '도장재료비 산출근거 (기준정보)'}
-                    </div>
-                    <div className="space-y-1 text-[11px]">
-                      {row.paintSource === 'measured' ? (
-                        row.productPaintDetail.coats.map((c, i) => (
-                          <div key={i}>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">도장량</span>
-                              <span className="font-mono">{Number(c.qtyGrams).toFixed(2)}g/EA</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">도장재료비</span>
-                              <span className="font-mono">₩{Math.round(c.cost).toLocaleString()}/EA</span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        row.productPaintDetail.coats.map((c, i) => (
-                          <div key={i} className="flex justify-between">
-                            <span className="text-slate-500">{i + 1}도: {c.rawCode}</span>
-                            <span className="font-mono">₩{Math.round(c.pricePerKg).toLocaleString()}/kg × {Number(c.qtyGrams).toFixed(2)}g = ₩{Math.round(c.cost).toLocaleString()}</span>
-                          </div>
-                        ))
-                      )}
-                      <div className={`border-t my-1 ${row.paintSource === 'measured' ? 'border-green-200' : 'border-purple-200'}`} />
-                      <div className="flex justify-between items-center font-bold">
-                        <span className={row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}>도장 합계</span>
-                        <span className={`font-mono text-sm ${row.paintSource === 'measured' ? 'text-green-700' : 'text-purple-700'}`}>₩{Math.round(row.productPaintDetail.totalCalcCost).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {!row.productCalcDetail && !row.productPaintDetail && (
-                  <div className="text-center text-xs text-slate-400">기준정보에 중량/도장량 데이터 없음</div>
-                )}
               </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 text-sm">재료비 데이터 없음</div>
+            )}
+          </div>
+
+          {/* ── 우측: 재료비 분석 (45%) ── */}
+          <div className="w-[45%] overflow-auto bg-slate-50/50 p-4 space-y-4">
+            {/* 카테고리별 재료비 소계 */}
+            <div>
+              <div className="text-[11px] font-bold text-slate-600 mb-2">카테고리별 재료비</div>
+              {categoryStats.length > 0 ? (
+                <div className="space-y-1.5">
+                  {categoryStats.map(cat => {
+                    const pct = totalBomCost > 0 ? (cat.cost / totalBomCost) * 100 : 0;
+                    return (
+                      <div key={cat.name} className="flex items-center gap-2 text-[11px]">
+                        <span className="w-16 text-slate-500 shrink-0">{cat.name}</span>
+                        <span className="w-20 text-right font-mono text-slate-700 shrink-0">₩{fmt(cat.cost)}</span>
+                        <span className="w-10 text-right text-slate-400 text-[10px] shrink-0">({cat.count}건)</span>
+                        <div className="flex-1 bg-slate-200 rounded-full h-2.5 overflow-hidden">
+                          <div className={`h-full rounded-full ${catColors[cat.name] || 'bg-slate-400'}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <span className="w-10 text-right text-[10px] text-slate-500 shrink-0">{Math.round(pct)}%</span>
+                      </div>
+                    );
+                  })}
+                  <div className="border-t border-slate-300 mt-2 pt-2 flex items-center gap-2 text-[11px] font-bold">
+                    <span className="w-16 text-slate-700">합계</span>
+                    <span className="w-20 text-right font-mono text-slate-800">₩{fmt(totalBomCost)}</span>
+                    <span className="w-10 text-right text-slate-500 text-[10px]">({localLeaves.filter(l => !l.isIntermediate).length}건)</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-400">BOM 데이터 없음</div>
+              )}
             </div>
-          ) : (
-            <div className="p-6 text-center text-slate-400 text-sm">재료비 데이터 없음</div>
-          )}
+
+            {/* 오류 목록 */}
+            {errors.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold text-red-600 mb-2">오류 감지 ({errors.length}건)</div>
+                <div className="space-y-1">
+                  {errors.map((err, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-1.5 text-[11px] px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                        err.type === 'critical' ? 'bg-red-50 hover:bg-red-100 text-red-700' : 'bg-amber-50 hover:bg-amber-100 text-amber-700'
+                      }`}
+                      onClick={() => err.leafIdx !== undefined && scrollToRow(err.leafIdx)}
+                    >
+                      <span className="shrink-0 mt-0.5">{err.type === 'critical' ? '\u{1F534}' : '\u{1F7E1}'}</span>
+                      <span>{err.msg}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {errors.length === 0 && hasBomData && (
+              <div className="flex items-center gap-2 text-[11px] text-green-600 bg-green-50 rounded-lg px-3 py-2">
+                <span>{'\u2705'}</span>
+                <span>오류 없음 — 모든 단가 정상</span>
+              </div>
+            )}
+
+            {/* 선택 노드 상세 */}
+            {selectedIdx !== null && !localLeaves[selectedIdx]?.isIntermediate && (() => {
+              const sel = localLeaves[selectedIdx];
+              if (!sel) return null;
+              return (
+                <div>
+                  <div className="text-[11px] font-bold text-blue-600 mb-2">선택 자재 상세</div>
+                  <div className="bg-white rounded-lg border border-slate-200 p-3 space-y-1.5 text-[11px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">품번</span>
+                      <span className="font-mono font-medium text-slate-800">{sel.childPn}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">품명</span>
+                      <span className="text-slate-800 text-right max-w-[200px] truncate" title={sel.childName}>{sel.childName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">유형</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        /원재료/.test(sel.partType) ? 'bg-blue-100 text-blue-700' :
+                        /구매|외주/.test(sel.partType) ? 'bg-amber-100 text-amber-700' :
+                        /도장/.test(sel.partType) ? 'bg-purple-100 text-purple-700' :
+                        'bg-slate-100 text-slate-600'
+                      }`}>{sel.partType || '-'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">구입처</span>
+                      <span className="text-slate-700">{sel.supplier || '-'}</span>
+                    </div>
+                    <div className="border-t border-slate-100 my-1" />
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">소요량</span>
+                      <span className="font-mono">{sel.totalQty < 1 ? sel.totalQty.toFixed(4) : fmt(sel.totalQty)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">단가</span>
+                      <span className="font-mono font-semibold">₩{fmt(sel.unitPrice)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">금액</span>
+                      <span className="font-mono font-bold text-slate-800">₩{fmt(sel.cost)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">출처</span>
+                      <span className={`font-medium ${
+                        sel.priceSource === '수동입력' || sel.priceSource === '도장(적용)' ? 'text-purple-600' :
+                        sel.priceSource === '사출(적용)' ? 'text-blue-600' : 'text-slate-400'
+                      }`}>{sel.priceSource}</span>
+                    </div>
+
+                    {/* 사출 산출근거 */}
+                    {sel.calcDetail && (
+                      <>
+                        <div className="border-t border-slate-100 my-1" />
+                        <div className="text-[10px] font-bold text-amber-600 mb-1">사출 산출근거</div>
+                        <div className="bg-amber-50 rounded-lg px-2.5 py-2 space-y-1 text-[10px]">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">원재료</span>
+                            <span className="font-mono truncate max-w-[160px]">{sel.calcDetail.materialCode} ({sel.calcDetail.materialName})</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">재질단가</span>
+                            <span className="font-mono">₩{Math.round(sel.calcDetail.materialPrice).toLocaleString()}/kg</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">NET / Runner / Cavity</span>
+                            <span className="font-mono">{sel.calcDetail.netWeight.toFixed(2)}g / {sel.calcDetail.runnerWeight.toFixed(2)}g / {sel.calcDetail.cavity}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">EA당중량</span>
+                            <span className="font-mono">{sel.calcDetail.weightPerEa.toFixed(2)}g</span>
+                          </div>
+                          <div className="flex justify-between font-bold">
+                            <span className="text-amber-700">공식 산출</span>
+                            <span className="font-mono text-amber-700">₩{Math.round(sel.calcDetail.result).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {/* 도장 산출근거 */}
+                    {sel.paintCalcDetail && sel.paintCalcDetail.coats.length > 0 && (
+                      <>
+                        <div className="border-t border-slate-100 my-1" />
+                        <div className="text-[10px] font-bold text-purple-600 mb-1">도장 산출근거</div>
+                        <div className="bg-purple-50 rounded-lg px-2.5 py-2 space-y-1 text-[10px]">
+                          {sel.paintCalcDetail.coats.map((c, ci) => (
+                            <div key={ci} className="flex justify-between">
+                              <span className="text-slate-500">{ci + 1}도: {c.rawCode}</span>
+                              <span className="font-mono">₩{Math.round(c.cost).toLocaleString()}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-purple-200 my-0.5" />
+                          <div className="flex justify-between font-bold">
+                            <span className="text-purple-700">도장 합계</span>
+                            <span className="font-mono text-purple-700">₩{Math.round(sel.paintCalcDetail.totalCalcCost).toLocaleString()}</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            {selectedIdx === null && hasBomData && (
+              <div className="text-[11px] text-slate-400 text-center py-4">
+                좌측 BOM 트리에서 자재를 클릭하면<br />상세 정보가 여기에 표시됩니다
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 푸터 */}
-        <div className="bg-slate-50 border-t px-4 py-2 text-[10px] text-slate-400 flex justify-between items-center">
-          <span>BOM leaf {localLeaves.length}건 | 단가 클릭 시 수정 가능</span>
+        <div className="bg-slate-50 border-t px-4 py-2 text-[10px] text-slate-400 flex justify-between items-center flex-shrink-0">
+          <span>BOM leaf {localLeaves.filter(l => !l.isIntermediate).length}건 | 단가 클릭 시 수정 가능</span>
           {applyMsg && (
             <span className={`text-xs font-semibold px-2 py-0.5 rounded ${applyMsg.includes('완료') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
               {applyMsg}
