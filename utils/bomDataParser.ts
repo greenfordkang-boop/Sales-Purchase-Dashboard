@@ -337,6 +337,7 @@ interface LeafResult {
   partType: string;
   totalRequired: number;
   parentPn: string;
+  depth: number;
 }
 
 /** 품번 정규화 (공백, 하이픈, 대소문자 통일) */
@@ -384,6 +385,7 @@ export const expandBomToLeaves = (
         partType: child.partType || '',
         totalRequired: requiredQty,
         parentPn,
+        depth: depth + 1,
       });
     } else {
       // alsoEmitPns에 포함된 중간 노드(도장품 등): 자신도 leaf로 추가 + 하위 자식도 전개
@@ -395,6 +397,7 @@ export const expandBomToLeaves = (
           partType: child.partType || '',
           totalRequired: requiredQty,
           parentPn,
+          depth: depth + 1,
         });
       }
       // 중간 노드: 재귀 전개

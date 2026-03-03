@@ -477,6 +477,16 @@ const BomTreePopup: React.FC<{
     onRefInfoUpdate();
   };
 
+  const handleSaveBomAsStandard = async () => {
+    const total = localLeaves.reduce((s, l) => s + l.cost, 0);
+    if (total <= 0) return;
+    const itemCode = row.newPartNo || row.partNo;
+    const ok = await itemStandardCostService.updateMaterialCostPerEa(itemCode, total);
+    setApplyMsg(ok ? `₩${fmt(total)} → 표준재료비 저장 완료` : 'DB 저장 실패');
+    setTimeout(() => setApplyMsg(null), 3000);
+    if (ok) onRefInfoUpdate();
+  };
+
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
 
   const totalBomCost = localLeaves.reduce((s, l) => s + l.cost, 0);
@@ -570,8 +580,13 @@ const BomTreePopup: React.FC<{
               </thead>
               <tbody>
                 {localLeaves.map((leaf, i) => (
-                    <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
-                      <td className="px-3 py-1.5 font-mono text-[11px]">{leaf.childPn}</td>
+                    <tr key={i} className={`border-t border-slate-100 hover:bg-blue-50/50 ${
+                      leaf.depth > 1 ? 'bg-slate-50/30' : ''
+                    }`}>
+                      <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${12 + (leaf.depth || 0) * 20}px` }}>
+                        {leaf.depth > 0 && <span className="text-slate-300 mr-1 text-[10px]">└─</span>}
+                        {leaf.childPn}
+                      </td>
                       <td className="px-3 py-1.5 max-w-[160px] truncate">{leaf.childName}</td>
                       <td className="px-3 py-1.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -665,7 +680,20 @@ const BomTreePopup: React.FC<{
                   ))}
                 {/* BOM 소계 */}
                 <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                  <td colSpan={6} className="px-3 py-2 text-right">BOM 전개 소계</td>
+                  <td colSpan={6} className="px-3 py-2 text-right">
+                    <span className="flex items-center justify-end gap-2">
+                      BOM 전개 소계
+                      {totalBomCost > 0 && (
+                        <button
+                          onClick={handleSaveBomAsStandard}
+                          className="text-[10px] px-2 py-0.5 bg-green-600 text-white rounded hover:bg-green-700 transition-colors font-normal"
+                          title="BOM 소계를 표준재료비로 저장"
+                        >
+                          표준재료비로 저장
+                        </button>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-right font-mono">₩{fmt(totalBomCost)}</td>
                   <td></td>
                 </tr>
@@ -1239,7 +1267,7 @@ const ProductMaterialCostView: React.FC = () => {
               unitPrice: finalPrice,
               cost: l.totalRequired * finalPrice,
               priceSource: finalSource,
-              depth: 0,
+              depth: l.depth || 0,
               partType,
               supplier,
               calcDetail: finalCalcDetail,
