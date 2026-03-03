@@ -1026,7 +1026,15 @@ const SalesView: React.FC = () => {
 
   const handleCrChange = (month: string, field: keyof CRItem, value: string) => {
     const numValue = parseFloat(value); const finalVal = isNaN(numValue) ? 0 : numValue;
-    setCrData(prev => prev.map(item => item.month === month ? { ...item, [field]: finalVal } : item));
+    setCrData(prev => {
+      const exists = prev.some(item => item.month === month);
+      if (exists) {
+        return prev.map(item => item.month === month ? { ...item, [field]: finalVal } : item);
+      }
+      // crData에 해당 월이 없으면 새로 추가
+      const newItem: CRItem = { month, totalSales: 0, lgSales: 0, lgCR: 0, lgDefense: 0, mtxSales: 0, mtxCR: 0, mtxDefense: 0, [field]: finalVal };
+      return [...prev, newItem];
+    });
   };
 
   // RFQ Edit Handlers

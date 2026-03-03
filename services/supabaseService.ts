@@ -20,7 +20,7 @@ import {
   MaterialCodeRecord,
   DataQualityIssue,
 } from '../utils/bomMasterParser';
-import type { PurchasePrice, OutsourcePrice, PaintMixRatio, ItemStandardCost } from '../utils/standardMaterialParser';
+import type { PurchasePrice, OutsourcePrice, PaintMixRatio, ItemStandardCost, PaintMixLog, MaterialPrice } from '../utils/standardMaterialParser';
 
 // ============================================
 // Helper Functions
@@ -845,16 +845,18 @@ export const crService = {
 
     const data = await fetchAllRows('cr_data', 'month');
 
-    return data?.map((row: any) => ({
-      month: row.month,
-      totalSales: row.total_sales || 0,
-      lgSales: row.lg_sales || 0,
-      lgCR: row.lg_cr || 0,
-      lgDefense: row.lg_defense || 0,
-      mtxSales: row.mtx_sales || 0,
-      mtxCR: row.mtx_cr || 0,
-      mtxDefense: row.mtx_defense || 0
-    })) || [];
+    return data
+      ?.map((row: any) => ({
+        month: row.month,
+        totalSales: row.total_sales || 0,
+        lgSales: row.lg_sales || 0,
+        lgCR: row.lg_cr || 0,
+        lgDefense: row.lg_defense || 0,
+        mtxSales: row.mtx_sales || 0,
+        mtxCR: row.mtx_cr || 0,
+        mtxDefense: row.mtx_defense || 0
+      }))
+      .filter((item: any) => item.month && item.month.trim() !== '') || [];
   },
 
   async saveAll(data: CRItem[]): Promise<void> {
@@ -2612,6 +2614,80 @@ export const materialCodeService = {
       return false;
     }
   },
+
+  /** 가재질단 데이터로 material_code_master 단가 일괄 갱신 (기존 레코드 upsert) */
+  async updatePrices(prices: MaterialPrice[]): Promise<{ updated: number; inserted: number }> {
+    let updated = 0;
+    let inserted = 0;
+
+    if (!isSupabaseConfigured() || isTableMissing('material_code_master')) {
+      // localStorage fallback
+      const stored = localStorage.getItem('dashboard_materialCodeMaster');
+      const records: MaterialCodeRecord[] = stored ? JSON.parse(stored) : [];
+      const codeMap = new Map(records.map((r, i) => [r.materialCode.trim().toUpperCase(), i]));
+      for (const p of prices) {
+        if (!p.materialCode || p.currentPrice <= 0) continue;
+        const key = p.materialCode.trim().toUpperCase();
+        const idx = codeMap.get(key);
+        if (idx !== undefined) {
+          records[idx].currentPrice = p.currentPrice;
+          updated++;
+        } else {
+          records.push({
+            industryCode: '', materialType: p.materialType || '', materialCode: p.materialCode,
+            materialName: p.materialName || '', materialCategory: '', paintCategory: '',
+            color: '', unit: '', safetyStock: 0, dailyAvgUsage: 0, lossRate: 0,
+            validDays: 0, orderSize: '', useYn: 'Y', protectedItem: '',
+            currentPrice: p.currentPrice,
+          });
+          inserted++;
+        }
+      }
+      try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { /* */ }
+      return { updated, inserted };
+    }
+
+    // Supabase: batch upsert using upsert on material_code
+    const rows = prices
+      .filter(p => p.materialCode && p.currentPrice > 0)
+      .map(p => ({
+        material_code: p.materialCode,
+        material_name: p.materialName || '',
+        material_type: p.materialType || '',
+        current_price: p.currentPrice,
+        price_source: 'material_price_file',
+        price_updated_at: new Date().toISOString(),
+      }));
+
+    // Update existing records' prices
+    for (const row of rows) {
+      const { data, error } = await supabase!
+        .from('material_code_master')
+        .update({ current_price: row.current_price, price_source: row.price_source, price_updated_at: row.price_updated_at })
+        .eq('material_code', row.material_code)
+        .select('material_code');
+      if (!error && data && data.length > 0) {
+        updated++;
+      } else if (!error && (!data || data.length === 0)) {
+        // Record doesn't exist - insert new
+        const { error: insErr } = await supabase!
+          .from('material_code_master')
+          .insert({
+            material_code: row.material_code,
+            material_name: row.material_name,
+            material_type: row.material_type,
+            current_price: row.current_price,
+            price_source: row.price_source,
+            price_updated_at: row.price_updated_at,
+            use_yn: 'Y',
+          });
+        if (!insErr) inserted++;
+      }
+    }
+
+    console.log(`✅ material_code_master 단가 갱신: ${updated}건 업데이트, ${inserted}건 신규`);
+    return { updated, inserted };
+  },
 };
 
 // ============================================
@@ -2858,6 +2934,66 @@ export const outsourceInjPriceService = {
 
     await insertInBatches('outsource_injection_price', rows);
     console.log(`✅ outsource_injection_price saved: ${rows.length} rows`);
+  },
+};
+
+// ── paint_mix_log (배합일지) ──
+export const paintMixLogService = {
+  async getAll(): Promise<PaintMixLog[]> {
+    if (!isSupabaseConfigured() || isTableMissing('paint_mix_log')) {
+      const stored = localStorage.getItem('dashboard_paintMixLog');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('paint_mix_log', 'mix_date');
+      return data.map((row: any) => ({
+        mixNo: row.mix_no || '',
+        mixDate: row.mix_date || '',
+        paintCode: row.paint_code || '',
+        paintName: row.paint_name || '',
+        mainQty: Number(row.main_qty) || 0,
+        mainRatio: Number(row.main_ratio) || 0,
+        hardenerQty: Number(row.hardener_qty) || 0,
+        hardenerRatio: Number(row.hardener_ratio) || 0,
+        thinnerQty: Number(row.thinner_qty) || 0,
+        thinnerRatio: Number(row.thinner_ratio) || 0,
+        totalQty: Number(row.total_qty) || 0,
+        wasteQty: Number(row.waste_qty) || 0,
+      }));
+    } catch {
+      const stored = localStorage.getItem('dashboard_paintMixLog');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(records: PaintMixLog[]): Promise<void> {
+    try { safeSetItem('dashboard_paintMixLog', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for paintMixLog, skipping local cache'); }
+    if (!isSupabaseConfigured() || isTableMissing('paint_mix_log')) return;
+
+    const { error: deleteError } = await supabase!
+      .from('paint_mix_log')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+    if (deleteError && checkTableError(deleteError, 'paint_mix_log')) return;
+
+    const rows = records.map(r => ({
+      mix_no: r.mixNo,
+      mix_date: r.mixDate,
+      paint_code: r.paintCode,
+      paint_name: r.paintName,
+      main_qty: r.mainQty,
+      main_ratio: r.mainRatio,
+      hardener_qty: r.hardenerQty,
+      hardener_ratio: r.hardenerRatio,
+      thinner_qty: r.thinnerQty,
+      thinner_ratio: r.thinnerRatio,
+      total_qty: r.totalQty,
+      waste_qty: r.wasteQty,
+    }));
+
+    await insertInBatches('paint_mix_log', rows);
+    console.log(`✅ paint_mix_log saved: ${rows.length} rows`);
   },
 };
 
