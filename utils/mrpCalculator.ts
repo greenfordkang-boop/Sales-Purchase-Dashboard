@@ -187,6 +187,15 @@ export function calculateMRP(
     if (ri.customerPn) refInfoMap.set(normalizePn(ri.customerPn), ri);
   }
 
+  // 5-1. 외주/구매 품목을 forceLeaf로 등록 (BOM 하위 전개 방지)
+  const forceLeafPns = new Set<string>();
+  for (const ri of refInfo) {
+    const key = normalizePn(ri.itemCode);
+    if (ri.supplyType?.includes('외주') || ri.supplyType === '구매') {
+      forceLeafPns.add(key);
+    }
+  }
+
   // 6. 자재별 월별 소요량 집계
   const materialAgg = new Map<string, {
     name: string;
@@ -292,7 +301,7 @@ export function calculateMRP(
       const qty = monthlyQty[m] || 0;
       if (qty <= 0) continue;
 
-      const leaves = expandBomToLeaves(bomParent, qty, bomRelations);
+      const leaves = expandBomToLeaves(bomParent, qty, bomRelations, undefined, 0, 10, forceLeafPns);
       for (const leaf of leaves) {
         const childKey = normalizePn(leaf.childPn);
         const existing = materialAgg.get(childKey);
@@ -365,10 +374,12 @@ export function calculateMRP(
     let unitPrice = 0;
 
     // 1-1) 표준재료비 EA단가 (item_standard_cost) — 가장 정확
+    let priceFromStdEntry = false;
     const stdEntry = stdCostMap.get(code);
     if (stdEntry && stdEntry.eaCost > 0) {
       unitPrice = stdEntry.eaCost;
       unit = 'EA';
+      priceFromStdEntry = true;
     }
     // 1-2) 표준재료비: 자재명으로 검색
     if (unitPrice <= 0 && agg.name && agg.name !== code) {
@@ -377,6 +388,7 @@ export function calculateMRP(
       if (stdByName && stdByName.eaCost > 0) {
         unitPrice = stdByName.eaCost;
         unit = 'EA';
+        priceFromStdEntry = true;
       }
     }
 
@@ -388,15 +400,36 @@ export function calculateMRP(
       }
     }
 
-    // 3) rawMaterialCode 경유 재질단가 → netWeight로 EA당 변환
+    // 2-1) PAINT 유형: per-kg 단가 → per-EA 변환 (paintQty 기반)
+    // 재질코드 직접 매칭에서 per-kg 가격을 받은 경우, reference_info의 paintQty로 보정
+    // stdEntry에서 이미 EA 단가를 받은 경우는 변환 불필요
+    if (unitPrice > 0 && !priceFromStdEntry && agg.type === 'PAINT' && ri) {
+      const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
+      const paintRawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''];
+      for (let d = 0; d < 4; d++) {
+        if (normalizePn(paintRawCodes[d]) === code && paintQtys[d] > 0) {
+          // paintQty(g/EA) × price(₩/kg) / 1000 = ₩/EA
+          const lossMultiplier = 1 + (ri.lossRate > 0 ? ri.lossRate / 100 : 0);
+          unitPrice = (paintQtys[d] * unitPrice / 1000) * lossMultiplier;
+          unit = 'EA';
+          break;
+        }
+      }
+    }
+
+    // 3) rawMaterialCode 경유 재질단가 → netWeight로 EA당 변환 (사출비 정밀 공식)
     if (unitPrice <= 0 && rawCodes.length > 0) {
       for (const rawCode of rawCodes) {
         const rawPrice = priceMap.get(normalizePn(rawCode));
         if (rawPrice && rawPrice > 0) {
-          // netWeight가 있으면 kg단가 → EA단가 변환
           const nw = ri?.netWeight;
           if (nw && nw > 0) {
-            unitPrice = rawPrice * (nw / 1000); // ₩/kg × (g/1000) = ₩/EA
+            // 정밀 공식: (NET중량 + Runner/Cavity) × 재질단가/1000 × (1+Loss%)
+            const rw = ri?.runnerWeight || 0;
+            const cavity = (ri?.cavity && ri.cavity > 0) ? ri.cavity : 1;
+            const loss = ri?.lossRate || 0;
+            const weightPerEa = nw + (rw / cavity);
+            unitPrice = (weightPerEa * rawPrice / 1000) * (1 + loss / 100);
             unit = 'EA';
           } else {
             unitPrice = rawPrice; // netWeight 없으면 원래 단위 유지
@@ -406,15 +439,26 @@ export function calculateMRP(
       }
     }
 
-    // 4) BOM 품명 → 재질코드 매칭 (netWeight 변환 적용)
+    // 4) BOM 품명 → 재질코드 매칭 (netWeight + runner/cavity/loss 변환 적용)
     if (unitPrice <= 0 && priceMap.size > 0) {
       const nameKey = normalizePn(agg.name);
+      const applyInjFormula = (price: number): number => {
+        const nw = ri?.netWeight;
+        if (nw && nw > 0) {
+          const rw = ri?.runnerWeight || 0;
+          const cavity = (ri?.cavity && ri.cavity > 0) ? ri.cavity : 1;
+          const loss = ri?.lossRate || 0;
+          const weightPerEa = nw + (rw / cavity);
+          return (weightPerEa * price / 1000) * (1 + loss / 100);
+        }
+        return price;
+      };
       if (nameKey && nameKey !== code) {
         const p = priceMap.get(nameKey);
         if (p && p > 0) {
           const nw = ri?.netWeight;
           if (nw && nw > 0) {
-            unitPrice = p * (nw / 1000);
+            unitPrice = applyInjFormula(p);
             unit = 'EA';
           } else {
             unitPrice = p;
@@ -433,7 +477,7 @@ export function calculateMRP(
                 (pkNorm.length >= 8 && strippedKey.startsWith(pkNorm.slice(0, 12)))) {
               const nw = ri?.netWeight;
               if (nw && nw > 0) {
-                unitPrice = pv * (nw / 1000);
+                unitPrice = applyInjFormula(pv);
                 unit = 'EA';
               } else {
                 unitPrice = pv;
