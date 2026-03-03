@@ -461,15 +461,25 @@ export const expandBomToTree = (
         depth: depth + 1, isLeaf: true,
       });
     } else {
-      // alsoEmitPns: 자신도 leaf 가격 보유 + 하위 전개 (도장품 등)
+      // alsoEmitPns (도장품 등): 자체 단가 보유 → 트리에서 terminal leaf로 처리
+      // 하위 도료 원재료를 전개하면 단가 없이 표시되어 혼란 → 전개하지 않음
       const alsoLeaf = alsoEmitPns?.has(normalizedChild) || false;
-      results.push({
-        childPn: child.childPn, childName: child.childName, supplier: child.supplier,
-        partType: child.partType || '', totalRequired: requiredQty, parentPn,
-        depth: depth + 1, isLeaf: alsoLeaf,
-      });
-      const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
-      results.push(...subNodes);
+      if (alsoLeaf) {
+        results.push({
+          childPn: child.childPn, childName: child.childName, supplier: child.supplier,
+          partType: child.partType || '', totalRequired: requiredQty, parentPn,
+          depth: depth + 1, isLeaf: true,
+        });
+      } else {
+        // 순수 중간 노드: 그룹 헤더 표시 + 하위 전개
+        results.push({
+          childPn: child.childPn, childName: child.childName, supplier: child.supplier,
+          partType: child.partType || '', totalRequired: requiredQty, parentPn,
+          depth: depth + 1, isLeaf: false,
+        });
+        const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
+        results.push(...subNodes);
+      }
     }
   }
   return results;

@@ -1215,7 +1215,7 @@ const ProductMaterialCostView: React.FC = () => {
                 qty: 0, totalQty: node.totalRequired,
                 unitPrice: 0, cost: 0, priceSource: '',
                 depth: node.depth, partType: node.partType || nodeRef?.processType || '',
-                supplier: node.supplier || nodeRef?.supplier || '',
+                supplier: nodeRef?.supplier || node.supplier || '',
                 isIntermediate: true,
               };
             }
@@ -1224,7 +1224,7 @@ const ProductMaterialCostView: React.FC = () => {
             const { price, source, calcDetail } = getLeafPrice(l.childPn);
             const leafRef = refInfoMap.get(normalizePn(l.childPn));
             const partType = l.partType || leafRef?.processType || leafRef?.supplyType || '';
-            const supplier = l.supplier || leafRef?.supplier || '';
+            const supplier = leafRef?.supplier || l.supplier || '';
             let finalCalcDetail = calcDetail;
             if (!finalCalcDetail && leafRef) {
               const nw = leafRef.netWeight || 0;
