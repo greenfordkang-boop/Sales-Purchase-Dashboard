@@ -580,11 +580,13 @@ const BomTreePopup: React.FC<{
               </thead>
               <tbody>
                 {localLeaves.map((leaf, i) => (
-                    <tr key={i} className={`border-t border-slate-100 hover:bg-blue-50/50 ${
-                      leaf.depth > 1 ? 'bg-slate-50/30' : ''
-                    }`}>
-                      <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${12 + (leaf.depth || 0) * 20}px` }}>
-                        {leaf.depth > 0 && <span className="text-slate-300 mr-1 text-[10px]">└─</span>}
+                    <tr key={i} className="border-t border-slate-100 hover:bg-blue-50/50">
+                      <td className="px-3 py-1.5 font-mono text-[11px]">
+                        {leaf.depth > 0 && (
+                          <span className="text-[9px] text-slate-400 bg-slate-100 rounded px-1 py-0.5 mr-1 font-sans">
+                            Lv.{leaf.depth}
+                          </span>
+                        )}
                         {leaf.childPn}
                       </td>
                       <td className="px-3 py-1.5 max-w-[160px] truncate">{leaf.childName}</td>
