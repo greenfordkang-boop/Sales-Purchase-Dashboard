@@ -529,7 +529,7 @@ const BomTreePopup: React.FC<{
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/30" onClick={onClose}>
       <div
         data-popup
-        className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full max-h-[80vh] overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-6xl w-full max-h-[80vh] overflow-hidden"
         style={pos ? { position: 'fixed', left: pos.x, top: pos.y, margin: 0 } : undefined}
         onClick={e => e.stopPropagation()}
       >
@@ -566,7 +566,7 @@ const BomTreePopup: React.FC<{
         {/* BOM 트리 테이블 */}
         <div className="overflow-auto max-h-[50vh]">
           {localLeaves.length > 0 ? (
-            <table className="w-full text-xs">
+            <table className="w-full text-xs whitespace-nowrap">
               <thead className="bg-slate-50 sticky top-0">
                 <tr className="text-slate-500">
                   <th className="px-3 py-2 text-left">자재코드</th>
@@ -574,9 +574,9 @@ const BomTreePopup: React.FC<{
                   <th className="px-3 py-2 text-left">유형</th>
                   <th className="px-3 py-2 text-left">구입처</th>
                   <th className="px-3 py-2 text-right">소요량</th>
-                  <th className="px-3 py-2 text-right">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭 수정)</span></th>
+                  <th className="px-3 py-2 text-right whitespace-nowrap">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭수정)</span></th>
                   <th className="px-3 py-2 text-right">금액</th>
-                  <th className="px-3 py-2 text-left">단가출처</th>
+                  <th className="px-3 py-2 text-left">출처</th>
                 </tr>
               </thead>
               <tbody>
@@ -604,7 +604,7 @@ const BomTreePopup: React.FC<{
                         <span className="text-slate-300 mr-0.5 text-[10px]">└─</span>
                         {leaf.childPn}
                       </td>
-                      <td className="px-3 py-1.5 max-w-[160px] truncate">{leaf.childName}</td>
+                      <td className="px-3 py-1.5">{leaf.childName}</td>
                       <td className="px-3 py-1.5">
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
@@ -613,7 +613,7 @@ const BomTreePopup: React.FC<{
                           leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
                         }`}>{leaf.partType || '-'}</span>
                       </td>
-                      <td className="px-3 py-1.5 text-[10px] text-slate-500 max-w-[100px] truncate" title={leaf.supplier}>
+                      <td className="px-3 py-1.5 text-[10px] text-slate-500" title={leaf.supplier}>
                         {leaf.supplier || '-'}
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
