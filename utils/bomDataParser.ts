@@ -461,23 +461,19 @@ export const expandBomToTree = (
         depth: depth + 1, isLeaf: true,
       });
     } else {
-      // alsoEmitPns (도장품 등): 자체 단가 보유 → 트리에서 terminal leaf로 처리
-      // 하위 도료 원재료를 전개하면 단가 없이 표시되어 혼란 → 전개하지 않음
-      const alsoLeaf = alsoEmitPns?.has(normalizedChild) || false;
-      if (alsoLeaf) {
-        results.push({
-          childPn: child.childPn, childName: child.childName, supplier: child.supplier,
-          partType: child.partType || '', totalRequired: requiredQty, parentPn,
-          depth: depth + 1, isLeaf: true,
-        });
-      } else {
-        // 순수 중간 노드: 그룹 헤더 표시 + 하위 전개
-        results.push({
-          childPn: child.childPn, childName: child.childName, supplier: child.supplier,
-          partType: child.partType || '', totalRequired: requiredQty, parentPn,
-          depth: depth + 1, isLeaf: false,
-        });
-        const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
+      // alsoEmitPns (도장품 등): 중간 노드로 표시 + 하위 자식도 전개
+      const alsoEmit = alsoEmitPns?.has(normalizedChild) || false;
+      // 중간 노드: 그룹 헤더 표시 + 하위 전개
+      results.push({
+        childPn: child.childPn, childName: child.childName, supplier: child.supplier,
+        partType: child.partType || '', totalRequired: requiredQty, parentPn,
+        depth: depth + 1, isLeaf: alsoEmit, // alsoEmit 노드는 자체 단가도 있으므로 leaf로도 표시
+      });
+      const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
+      // alsoEmit 노드의 하위 전개 결과가 있으면 추가 (없으면 자체 leaf만 유지)
+      if (subNodes.length > 0) {
+        // 하위 전개 성공 → 자체를 중간 노드로 바꾸고 하위 leaf 사용
+        results[results.length - 1] = { ...results[results.length - 1], isLeaf: false };
         results.push(...subNodes);
       }
     }
