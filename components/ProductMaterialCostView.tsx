@@ -967,16 +967,22 @@ const ProductMaterialCostView: React.FC = () => {
         if (pc.custPN) paintConsumptionMap.set(normalizePn(pc.custPN), entry);
       }
 
-      // 도료단가 헬퍼: paintMixMap → 배합가, fallback → priceMap 직접 조회
+      // 도료단가 헬퍼: paintMixMap → 가중평균 배합가, fallback → priceMap 직접 조회
+      // calcPaintCost (materialCostCalculator.ts)와 동일한 가중평균 공식 사용
       const getPaintBlendedPrice = (paintCode: string): { price: number; name: string } => {
         const norm = normalizePn(paintCode);
         const mix = paintMixMap.get(norm);
         if (mix) {
-          const mainR = mix.mainRatio > 0 ? mix.mainRatio / 100 : 1;
-          const hardR = mix.hardenerRatio > 0 ? mix.hardenerRatio / 100 : 0;
-          const thinR = mix.thinnerRatio > 0 ? mix.thinnerRatio / 100 : 0;
-          const blended = mix.mainPrice * mainR + mix.hardenerPrice * hardR + mix.thinnerPrice * thinR;
-          return { price: blended, name: mix.paintName || materialNameMap.get(norm) || '' };
+          const mR = mix.mainRatio > 0 ? mix.mainRatio : 0;
+          const hR = mix.hardenerRatio > 0 ? mix.hardenerRatio : 0;
+          const tR = mix.thinnerRatio > 0 ? mix.thinnerRatio : 0;
+          const totalRatio = mR + hR + tR;
+          if (totalRatio > 0) {
+            const blended = (mix.mainPrice * mR + mix.hardenerPrice * hR + mix.thinnerPrice * tR) / totalRatio;
+            return { price: blended, name: mix.paintName || materialNameMap.get(norm) || '' };
+          } else if (mix.mainPrice > 0) {
+            return { price: mix.mainPrice, name: mix.paintName || materialNameMap.get(norm) || '' };
+          }
         }
         return { price: priceMap.get(norm) || 0, name: materialNameMap.get(norm) || '' };
       };
@@ -1188,8 +1194,9 @@ const ProductMaterialCostView: React.FC = () => {
             // 도장 제품은 rawMaterialCode1=1도, rawMaterialCode2=2도에 도료코드 저장
             let paintCalcDetail: PaintCalcDetail | undefined;
             if (/도장/.test(partType) && leafRef) {
-              const paintRawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2].filter(Boolean) as string[];
-              const paintQtys = [leafRef.paintQty1, leafRef.paintQty2];
+              const paintRawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2, leafRef.rawMaterialCode3, leafRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
+              const paintQtys = [leafRef.paintQty1, leafRef.paintQty2, leafRef.paintQty3, leafRef.paintQty4 || 0];
+              const lossMultiplier = 1 + ((leafRef.lossRate || 0) / 100);
               const coats: PaintCalcDetail['coats'] = [];
               for (let pIdx = 0; pIdx < paintRawCodes.length; pIdx++) {
                 const raw = paintRawCodes[pIdx];
@@ -1201,7 +1208,7 @@ const ProductMaterialCostView: React.FC = () => {
                     rawName: pName,
                     pricePerKg: pp,
                     qtyGrams: pq,
-                    cost: pp * pq / 1000,
+                    cost: (pp * pq / 1000) * lossMultiplier,
                   });
                 }
               }
@@ -1271,15 +1278,16 @@ const ProductMaterialCostView: React.FC = () => {
           });
           bomMaterialCost += paintCost;
         } else if (productRef && /도장/i.test(productRef.processType || '')) {
-          // 2순위: 기존 로직 (기준정보 paintQty × 배합가)
-          const paintRawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
-          const paintQtys = [productRef.paintQty1, productRef.paintQty2];
+          // 2순위: 기존 로직 (기준정보 paintQty × 가중평균 배합가 × loss)
+          const paintRawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
+          const paintQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4 || 0];
+          const paintLoss = 1 + ((productRef.lossRate || 0) / 100);
           for (let paintIdx = 0; paintIdx < paintRawCodes.length; paintIdx++) {
             const rawCode = paintRawCodes[paintIdx];
             const { price: paintPrice, name: paintName } = getPaintBlendedPrice(rawCode);
             const pqty = paintQtys[paintIdx] || 0;
             if (paintPrice > 0 && pqty > 0) {
-              const cost = paintPrice * pqty / 1000; // g→kg 변환
+              const cost = (paintPrice * pqty / 1000) * paintLoss; // g→kg 변환 + loss
               paintCost += cost;
               bomLeaves.push({
                 childPn: rawCode,
@@ -1435,15 +1443,16 @@ const ProductMaterialCostView: React.FC = () => {
               totalCalcCost: measured.paintCostPerEa,
             };
           } else {
-            const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2].filter(Boolean) as string[];
-            const pQtys = [productRef.paintQty1, productRef.paintQty2];
+            const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
+            const pQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4 || 0];
+            const pLoss = 1 + ((productRef.lossRate || 0) / 100);
             const pCoats: PaintCalcDetail['coats'] = [];
             for (let pI = 0; pI < paintRawCodesP.length; pI++) {
               const raw = paintRawCodesP[pI];
               const { price: pp, name: pName } = getPaintBlendedPrice(raw);
               const pq = pQtys[pI] || 0;
               if (pp > 0 || pq > 0) {
-                pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: pp * pq / 1000 });
+                pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * pLoss });
               }
             }
             if (pCoats.length > 0) {

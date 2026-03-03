@@ -2,6 +2,7 @@ import { BomRecord, buildBomRelations, expandBomToLeaves } from './bomDataParser
 import { ForecastItem } from './salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from './bomMasterParser';
 import { PurchaseMonthlySummary } from './purchaseSummaryTypes';
+import { PaintMixRatio, ItemStandardCost } from './standardMaterialParser';
 
 // ============================================
 // Types
@@ -124,6 +125,8 @@ export function calculateMRP(
   materialCodes: MaterialCodeRecord[],
   purchaseData?: PurchaseMonthlySummary[],
   standardCosts?: StandardMaterialCostEntry[],
+  paintMixRatios?: PaintMixRatio[],
+  itemStandardCosts?: ItemStandardCost[],
 ): MRPResult {
   // 1. Forecast 수량 맵 구축
   const forecastQtyMap = buildForecastQtyMap(forecastData);
@@ -344,14 +347,84 @@ export function calculateMRP(
         }
       }
     }
+
   }
 
+  // 6-3. BOM 리프 PAINT 제거 + item_standard_cost 기반 PAINT 직접 합산
+  // 표준재료비와 동일: 품목별 paint_cost_per_ea × 자체 생산수량 (BOM 순회 없음)
+  {
+    // (a) BOM 리프에서 생성된 PAINT 엔트리 전부 제거
+    const paintLeafKeys: string[] = [];
+    for (const [code, agg] of materialAgg.entries()) {
+      if (agg.type === 'PAINT') paintLeafKeys.push(code);
+    }
+    for (const key of paintLeafKeys) materialAgg.delete(key);
+
+    // (b) item_standard_cost에서 paint_cost_per_ea > 0인 품목 직접 합산
+    let paintCount = 0;
+    let paintTotal = 0;
+    if (itemStandardCosts) {
+      for (const isc of itemStandardCosts) {
+        if (isc.paint_cost_per_ea <= 0 || !isc.item_code) continue;
+        if (isc.supply_type?.includes('외주') || isc.supply_type === '구매') continue;
+
+        const normCode = normalizePn(isc.item_code);
+        const normCust = isc.customer_pn ? normalizePn(isc.customer_pn) : '';
+
+        // 월별 생산수량: forecast 매칭 우선, 없으면 item_standard_cost 자체 수량
+        const iscMonthly = [
+          isc.jan_qty, isc.feb_qty, isc.mar_qty, isc.apr_qty,
+          isc.may_qty, isc.jun_qty, isc.jul_qty, isc.aug_qty,
+          isc.sep_qty, isc.oct_qty, isc.nov_qty, isc.dec_qty,
+        ];
+        const fcastQty = forecastQtyMap.get(normCode) || (normCust ? forecastQtyMap.get(normCust) : undefined);
+        const monthlyQty = fcastQty || iscMonthly;
+
+        const totalQty = monthlyQty.reduce((s, q) => s + (q || 0), 0);
+        if (totalQty <= 0) continue;
+
+        const paintMatKey = `PAINT_STD:${normCode}`;
+        const mq = new Array(12).fill(0);
+        for (let m = 0; m < 12; m++) mq[m] = monthlyQty[m] || 0;
+
+        materialAgg.set(paintMatKey, {
+          name: (isc.item_name || normCode) + ' 도장',
+          type: 'PAINT',
+          monthlyQty: mq,
+          parents: new Set([normCode]),
+          unitPrice: isc.paint_cost_per_ea,
+          supplier: '',
+        });
+        paintCount++;
+        paintTotal += totalQty * isc.paint_cost_per_ea;
+      }
+    }
+    // debug: PAINT 합산 확인
+    if (typeof console !== 'undefined') console.log(`[MRP] PAINT: ${paintCount}건, ${(paintTotal / 1e8).toFixed(2)}億`);
+  }
 
   // 7. 결과 구성
   const DEFAULT_UNITS: Record<string, string> = { RESIN: 'kg', PAINT: 'L', '구매': 'EA', '외주': 'EA' };
   const materials: MRPMaterialRow[] = [];
   for (const [code, agg] of materialAgg.entries()) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
+
+    // PAINT_STD: item_standard_cost 기반 도장비 — 이미 단가/단위 확정
+    if (code.startsWith('PAINT_STD:')) {
+      materials.push({
+        materialCode: code.replace('PAINT_STD:', ''),
+        materialName: agg.name,
+        materialType: 'PAINT',
+        unit: 'EA',
+        requiredQty: Math.round(totalQty),
+        unitPrice: agg.unitPrice,
+        totalCost: totalQty * agg.unitPrice,
+        parentProducts: Array.from(agg.parents),
+        monthlyQty: agg.monthlyQty,
+        supplier: agg.supplier,
+      });
+      continue;
+    }
 
     // 기준정보 조회 (단위/단가/이름 공통)
     const ri = refInfoMap.get(code);
@@ -397,23 +470,6 @@ export function calculateMRP(
       const directPrice = priceMap.get(code);
       if (directPrice && directPrice > 0) {
         unitPrice = directPrice;
-      }
-    }
-
-    // 2-1) PAINT 유형: per-kg 단가 → per-EA 변환 (paintQty 기반)
-    // 재질코드 직접 매칭에서 per-kg 가격을 받은 경우, reference_info의 paintQty로 보정
-    // stdEntry에서 이미 EA 단가를 받은 경우는 변환 불필요
-    if (unitPrice > 0 && !priceFromStdEntry && agg.type === 'PAINT' && ri) {
-      const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
-      const paintRawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''];
-      for (let d = 0; d < 4; d++) {
-        if (normalizePn(paintRawCodes[d]) === code && paintQtys[d] > 0) {
-          // paintQty(g/EA) × price(₩/kg) / 1000 = ₩/EA
-          const lossMultiplier = 1 + (ri.lossRate > 0 ? ri.lossRate / 100 : 0);
-          unitPrice = (paintQtys[d] * unitPrice / 1000) * lossMultiplier;
-          unit = 'EA';
-          break;
-        }
       }
     }
 

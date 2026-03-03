@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import { DashboardTab } from './types';
 import Overview from './components/Overview';
@@ -10,6 +10,15 @@ import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
 import UserGuideModal from './components/UserGuideModal';
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import {
   signIn,
   signUp,
   signOut,
@@ -17,11 +26,13 @@ import {
   logAccess,
   isAdmin,
   getAllUsers,
+  getAccessLogs,
   approveUser,
   rejectUser,
   ADMIN_EMAIL,
   SECURITY_CONFIG,
-  UserProfile
+  UserProfile,
+  AccessLog
 } from './lib/supabase';
 import { checkAndAutoSync } from './services/supabaseService';
 
@@ -46,6 +57,7 @@ const App: React.FC = () => {
   // 관리자 패널 상태
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [accessLogs, setAccessLogs] = useState<AccessLog[]>([]);
 
   // 세션 타이머
   const [sessionTimer, setSessionTimer] = useState<NodeJS.Timeout | null>(null);
@@ -200,11 +212,15 @@ const App: React.FC = () => {
     }
   };
 
-  // 관리자 패널: 사용자 목록 로드
+  // 관리자 패널: 사용자 목록 + 접근 로그 로드
   const loadUsers = async () => {
     setUsersLoading(true);
-    const userList = await getAllUsers();
+    const [userList, logs] = await Promise.all([
+      getAllUsers(),
+      getAccessLogs(90),
+    ]);
     setUsers(userList);
+    setAccessLogs(logs);
     setUsersLoading(false);
   };
 
@@ -238,6 +254,52 @@ const App: React.FC = () => {
       loadUsers();
     }
   }, [activeTab, currentUser]);
+
+  // 로그인 통계 데이터 계산 (early return 전에 호출 — React hooks 규칙)
+  const loginStats = useMemo(() => {
+    const loginLogs = accessLogs.filter(l => l.action === 'login');
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const todayLogins = loginLogs.filter(l => l.created_at.slice(0, 10) === todayStr).length;
+    const weekLogins = loginLogs.filter(l => new Date(l.created_at) >= sevenDaysAgo).length;
+    const totalUsers = users.length;
+    const approvedCount = users.filter(u => u.approved || u.email === ADMIN_EMAIL).length;
+
+    // 일별 로그인 (최근 30일)
+    const dailyMap: Record<string, number> = {};
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    for (let d = new Date(thirtyDaysAgo); d <= now; d.setDate(d.getDate() + 1)) {
+      dailyMap[d.toISOString().slice(0, 10)] = 0;
+    }
+    loginLogs.forEach(l => {
+      const day = l.created_at.slice(0, 10);
+      if (day in dailyMap) dailyMap[day]++;
+    });
+    const dailyChart = Object.entries(dailyMap)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({
+        date: `${date.slice(5, 7)}/${date.slice(8, 10)}`,
+        logins: count,
+      }));
+
+    // 사용자별 로그인 통계
+    const perUser: Record<string, { email: string; count: number; lastLogin: string; userAgent: string }> = {};
+    loginLogs.forEach(l => {
+      if (!perUser[l.user_email]) {
+        perUser[l.user_email] = { email: l.user_email, count: 0, lastLogin: l.created_at, userAgent: l.user_agent || '' };
+      }
+      perUser[l.user_email].count++;
+      if (l.created_at > perUser[l.user_email].lastLogin) {
+        perUser[l.user_email].lastLogin = l.created_at;
+        perUser[l.user_email].userAgent = l.user_agent || '';
+      }
+    });
+    const userTable = Object.values(perUser).sort((a, b) => b.count - a.count);
+
+    return { todayLogins, weekLogins, totalUsers, approvedCount, dailyChart, userTable };
+  }, [accessLogs, users]);
 
   // 로딩 화면
   if (isLoading) {
@@ -331,6 +393,16 @@ const App: React.FC = () => {
     { id: DashboardTab.SUPPLIER, label: '협력사관리' },
   ];
 
+  // User-Agent에서 브라우저 이름 추출
+  const parseBrowser = (ua: string): string => {
+    if (!ua) return '-';
+    if (ua.includes('Edg/')) return 'Edge';
+    if (ua.includes('Chrome/') && !ua.includes('Edg/')) return 'Chrome';
+    if (ua.includes('Firefox/')) return 'Firefox';
+    if (ua.includes('Safari/') && !ua.includes('Chrome/')) return 'Safari';
+    return 'Other';
+  };
+
   // 관리자 패널 렌더링
   const renderAdminPanel = () => {
     const pendingUsers = users.filter(u => !u.approved && u.email !== ADMIN_EMAIL);
@@ -338,7 +410,117 @@ const App: React.FC = () => {
 
     return (
       <div className="space-y-6">
-        <h2 className="text-xl font-bold text-slate-800">👑 관리자 패널 - 사용자 관리</h2>
+        <h2 className="text-xl font-bold text-slate-800">관리자 패널</h2>
+
+        {/* ===== 로그인 통계 섹션 ===== */}
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+          <h3 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
+            <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+            접속 통계
+          </h3>
+
+          {/* 요약 카드 4개 */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">전체 사용자</p>
+              <p className="text-2xl font-black text-slate-800">{loginStats.totalUsers}</p>
+              <p className="text-xs text-slate-400 mt-0.5">명 등록</p>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">승인 사용자</p>
+              <p className="text-2xl font-black text-emerald-700">{loginStats.approvedCount}</p>
+              <p className="text-xs text-emerald-500 mt-0.5">명 활성</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">오늘 로그인</p>
+              <p className="text-2xl font-black text-blue-700">{loginStats.todayLogins}</p>
+              <p className="text-xs text-blue-500 mt-0.5">회 접속</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">7일 로그인</p>
+              <p className="text-2xl font-black text-amber-700">{loginStats.weekLogins}</p>
+              <p className="text-xs text-amber-500 mt-0.5">회 접속</p>
+            </div>
+          </div>
+
+          {/* 일별 로그인 바차트 (30일) */}
+          <div className="mb-6">
+            <p className="text-sm font-semibold text-slate-600 mb-3">일별 로그인 추이 (최근 30일)</p>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={loginStats.dailyChart} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    interval={Math.floor(loginStats.dailyChart.length / 8)}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                    allowDecimals={false}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                    formatter={(v: number | string) => [`${v as number}회`, '로그인']}
+                    labelFormatter={(label: string) => `날짜: ${label}`}
+                  />
+                  <Bar dataKey="logins" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 사용자별 로그인 테이블 */}
+          <div>
+            <p className="text-sm font-semibold text-slate-600 mb-3">사용자별 접속 현황 (최근 90일)</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-3 px-4 font-semibold text-slate-600">이메일</th>
+                    <th className="text-center py-3 px-4 font-semibold text-slate-600">로그인 횟수</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-600">마지막 접속</th>
+                    <th className="text-left py-3 px-4 font-semibold text-slate-600">브라우저</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginStats.userTable.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">접속 기록이 없습니다</td>
+                    </tr>
+                  ) : (
+                    loginStats.userTable.map((row) => (
+                      <tr key={row.email} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-3 px-4 font-medium text-slate-700">
+                          {row.email}
+                          {row.email === ADMIN_EMAIL && (
+                            <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">관리자</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+                            {row.count}회
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-slate-500">
+                          {new Date(row.lastLogin).toLocaleString('ko-KR')}
+                        </td>
+                        <td className="py-3 px-4 text-slate-500">
+                          <span className="px-2 py-1 bg-slate-100 text-slate-600 text-xs rounded-full">
+                            {parseBrowser(row.userAgent)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* ===== 기존 사용자 관리 섹션 ===== */}
+        <h3 className="text-lg font-bold text-slate-800 mt-2">사용자 관리</h3>
 
         {/* 승인 대기 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">

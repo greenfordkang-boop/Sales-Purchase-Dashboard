@@ -15,10 +15,14 @@ import {
   StandardMaterialData,
   StandardMaterialSummary,
   parseStandardMaterialExcel,
+  parseStandardMixFile,
+  parseMaterialPriceFile,
+  parsePaintMixLogFile,
   PurchasePrice,
   OutsourcePrice,
   PaintMixRatio,
   ItemStandardCost,
+  PaintMixLog,
 } from '../utils/standardMaterialParser';
 import {
   calcUnifiedMaterialCost,
@@ -30,7 +34,10 @@ import {
   CalcItemRow,
 } from '../utils/materialCostCalculator';
 import { ReferenceInfoRecord, MaterialCodeRecord } from '../utils/bomMasterParser';
-import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService } from '../services/supabaseService';
+import fallbackMaterialCodes from '../data/materialCodes.json';
+import fallbackPurchasePrices from '../data/purchasePrices.json';
+import fallbackStandardCosts from '../data/standardMaterialCost.json';
+import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService, materialCodeService, paintMixLogService } from '../services/supabaseService';
 import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
 import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
 
@@ -232,6 +239,84 @@ const StandardMaterialCostView: React.FC = () => {
     e.target.value = '';
   }, [pnMapping]);
 
+  // --- 도장 관련 개별 파일 업로드 핸들러 ---
+  const [paintUploadStatus, setPaintUploadStatus] = useState<string>('');
+
+  const handleStandardMixUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPaintUploadStatus('서배합표준 파싱 중...');
+      const buffer = await file.arrayBuffer();
+      const records = parseStandardMixFile(buffer);
+      if (records.length === 0) {
+        alert('서배합표준 파싱 실패: 재질코드/도료코드 컬럼을 확인해주세요.');
+        setPaintUploadStatus('');
+        e.target.value = '';
+        return;
+      }
+      await paintMixRatioService.saveAll(records);
+      setPaintUploadStatus(`서배합표준 ${records.length}건 저장 완료`);
+      alert(`서배합표준에서 ${records.length}건 배합비율 로드 완료 (Supabase 저장됨)`);
+      // Reload data to reflect changes
+      loadAllData();
+    } catch (err) {
+      console.error('서배합표준 파싱 오류:', err);
+      alert('파일 파싱 중 오류가 발생했습니다.');
+      setPaintUploadStatus('');
+    }
+    e.target.value = '';
+  }, []);
+
+  const handleMaterialPriceUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPaintUploadStatus('가재질단 파싱 중...');
+      const buffer = await file.arrayBuffer();
+      const records = parseMaterialPriceFile(buffer);
+      if (records.length === 0) {
+        alert('가재질단 파싱 실패: 재질코드 컬럼을 확인해주세요.');
+        setPaintUploadStatus('');
+        e.target.value = '';
+        return;
+      }
+      const result = await materialCodeService.updatePrices(records);
+      setPaintUploadStatus(`가재질단 ${records.length}건 (갱신 ${result.updated}, 신규 ${result.inserted})`);
+      alert(`가재질단에서 ${records.length}건 로드\n- 단가 갱신: ${result.updated}건\n- 신규 등록: ${result.inserted}건`);
+      loadAllData();
+    } catch (err) {
+      console.error('가재질단 파싱 오류:', err);
+      alert('파일 파싱 중 오류가 발생했습니다.');
+      setPaintUploadStatus('');
+    }
+    e.target.value = '';
+  }, []);
+
+  const handlePaintMixLogUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPaintUploadStatus('배합일지 파싱 중...');
+      const buffer = await file.arrayBuffer();
+      const records = parsePaintMixLogFile(buffer);
+      if (records.length === 0) {
+        alert('배합일지 파싱 실패: 배합번호/도료코드 컬럼을 확인해주세요.');
+        setPaintUploadStatus('');
+        e.target.value = '';
+        return;
+      }
+      await paintMixLogService.saveAll(records);
+      setPaintUploadStatus(`배합일지 ${records.length}건 저장 완료`);
+      alert(`배합일지에서 ${records.length}건 로드 완료 (Supabase 저장됨)`);
+    } catch (err) {
+      console.error('배합일지 파싱 오류:', err);
+      alert('파일 파싱 중 오류가 발생했습니다.');
+      setPaintUploadStatus('');
+    }
+    e.target.value = '';
+  }, []);
+
   // --- Filters ---
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('All');
@@ -252,6 +337,63 @@ const StandardMaterialCostView: React.FC = () => {
     purchaseData.filter(d => d.year === selectedYear).forEach(d => months.add(d.month));
     return Array.from(months).sort();
   }, [purchaseData, selectedYear]);
+
+  // ============================================================
+  // FALLBACK JSON ENRICHMENT (MRPView 동일 패턴)
+  // ============================================================
+  const { enrichedMaterialCodes, enrichedPurchasePrices, enrichedStdCostMap } = useMemo(() => {
+    // 1. 재질코드 보강: master에 단가 있으면 그대로, 없으면 fallback 병합
+    const pricedFromMaster = masterMaterialCodes.filter(m => m.currentPrice > 0).length;
+    let mergedMC = masterMaterialCodes;
+    if (pricedFromMaster === 0 && fallbackMaterialCodes.length > 0) {
+      const existingCodes = new Set(masterMaterialCodes.map(m => m.materialCode.trim().toUpperCase()));
+      const merged = [...masterMaterialCodes];
+      for (const fb of fallbackMaterialCodes) {
+        const key = fb.materialCode.trim().toUpperCase();
+        if (!existingCodes.has(key)) {
+          merged.push(fb as MaterialCodeRecord);
+          existingCodes.add(key);
+        } else if (fb.currentPrice > 0) {
+          const idx = merged.findIndex(m => m.materialCode.trim().toUpperCase() === key);
+          if (idx >= 0 && merged[idx].currentPrice <= 0) {
+            merged[idx] = { ...merged[idx], currentPrice: fb.currentPrice };
+          }
+        }
+      }
+      mergedMC = merged;
+    }
+
+    // 2. 구매단가 보강: 기존에 없는 partNo만 추가
+    const existingPartNos = new Set(masterPurchasePrices.map(p => normalizePn(p.itemCode)));
+    const mergedPP = [...masterPurchasePrices];
+    for (const fp of fallbackPurchasePrices) {
+      const key = normalizePn(fp.partNo);
+      if (!existingPartNos.has(key)) {
+        mergedPP.push({
+          itemCode: fp.partNo,
+          customerPn: '',
+          itemName: fp.partName,
+          supplier: '',
+          currentPrice: fp.unitPrice,
+          previousPrice: 0,
+        });
+        existingPartNos.add(key);
+      }
+    }
+
+    // 3. EA단가 폴백 맵: productCode + customerPn 양쪽 등록
+    const stdMap = new Map<string, number>();
+    for (const sc of fallbackStandardCosts) {
+      if (sc.eaCost > 0) {
+        if (sc.productCode) stdMap.set(normalizePn(sc.productCode), sc.eaCost);
+        if (sc.customerPn) stdMap.set(normalizePn(sc.customerPn), sc.eaCost);
+      }
+    }
+
+    console.log(`[표준재료비 Enrichment] 재질코드: ${masterMaterialCodes.length}→${mergedMC.length}, 구매단가: ${masterPurchasePrices.length}→${mergedPP.length}, EA폴백: ${stdMap.size}건`);
+
+    return { enrichedMaterialCodes: mergedMC, enrichedPurchasePrices: mergedPP, enrichedStdCostMap: stdMap };
+  }, [masterMaterialCodes, masterPurchasePrices]);
 
   // ============================================================
   // AUTO CALCULATION CORE
@@ -296,7 +438,20 @@ const StandardMaterialCostView: React.FC = () => {
         });
       }
 
-      const result = calcFromItemStandardCosts(masterItemStandardCosts, monthIdx, totalRevenue, forecastQtyMap);
+      // EA단가=0인 품목에 fallback EA단가 적용
+      const enrichedItems = masterItemStandardCosts.map(item => {
+        const resin = Number(item.resin_cost_per_ea) || 0;
+        const paint = Number(item.paint_cost_per_ea) || 0;
+        const mat = Number(item.material_cost_per_ea) || 0;
+        if (resin > 0 || paint > 0 || mat > 0) return item;
+        const fb = enrichedStdCostMap.get(normalizePn(item.item_code))
+                || enrichedStdCostMap.get(normalizePn(item.customer_pn || ''));
+        if (fb && fb > 0) {
+          return { ...item, material_cost_per_ea: fb };
+        }
+        return item;
+      });
+      const result = calcFromItemStandardCosts(enrichedItems, monthIdx, totalRevenue, forecastQtyMap);
 
       const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
         id: `isc-${ir.itemCode}-${idx}`,
@@ -399,8 +554,8 @@ const StandardMaterialCostView: React.FC = () => {
       }
 
       const result = calcMasterMaterialCost(
-        bomData, masterRefInfo, masterMaterialCodes, productQtyMap, totalRevenue,
-        masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
+        bomData, masterRefInfo, enrichedMaterialCodes, productQtyMap, totalRevenue,
+        enrichedPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
       );
 
       // UnifiedCalcResult → AutoCalcResult 변환
@@ -3495,6 +3650,51 @@ const StandardMaterialCostView: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* 도장 데이터 업로드 섹션 */}
+        <details className="mb-4">
+          <summary className="cursor-pointer text-xs font-bold text-violet-600 hover:text-violet-800 flex items-center gap-1">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            도장 참조데이터 업로드 (서배합표준 / 가재질단 / 배합일지)
+          </summary>
+          <div className="mt-2 p-4 bg-violet-50 rounded-xl border border-violet-200 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* 서배합표준 */}
+              <label className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-violet-200 hover:border-violet-400 cursor-pointer transition-colors">
+                <div className="text-xs font-bold text-violet-700">서배합표준 (표준배합비)</div>
+                <div className="text-[10px] text-slate-500">S코드 → P/H/T 코드 + 비율</div>
+                <div className="flex items-center gap-1 px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                  .xlsx 업로드
+                </div>
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleStandardMixUpload} />
+              </label>
+              {/* 가재질단 */}
+              <label className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-violet-200 hover:border-violet-400 cursor-pointer transition-colors">
+                <div className="text-xs font-bold text-violet-700">가재질단 (재질단가)</div>
+                <div className="text-[10px] text-slate-500">H/P/T 코드 → 현재단가 (원/kg)</div>
+                <div className="flex items-center gap-1 px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                  .xlsx 업로드
+                </div>
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleMaterialPriceUpload} />
+              </label>
+              {/* 배합일지 */}
+              <label className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-violet-200 hover:border-violet-400 cursor-pointer transition-colors">
+                <div className="text-xs font-bold text-violet-700">배합일지 (실적배합)</div>
+                <div className="text-[10px] text-slate-500">실제 배합 수량/비율 기록</div>
+                <div className="flex items-center gap-1 px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                  .xlsx 업로드
+                </div>
+                <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handlePaintMixLogUpload} />
+              </label>
+            </div>
+            {paintUploadStatus && (
+              <div className="text-xs text-violet-600 font-medium px-2">{paintUploadStatus}</div>
+            )}
+          </div>
+        </details>
 
         {/* View Mode Tabs */}
         {((dataMode !== 'excel' && calc) || (dataMode === 'excel' && excelData)) && (

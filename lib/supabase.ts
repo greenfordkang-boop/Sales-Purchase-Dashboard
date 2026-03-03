@@ -3,6 +3,7 @@ import { createClient, User } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Supabase credentials not found. Using localStorage fallback.');
@@ -10,6 +11,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+// Admin client (service_role) - bypasses RLS for admin queries
+export const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    })
   : null;
 
 export const isSupabaseConfigured = () => {
@@ -247,5 +255,37 @@ export async function rejectUser(userId: string): Promise<{ success: boolean; er
   } catch (e: any) {
     console.error('사용자 거부 실패:', e);
     return { success: false, error: e.message };
+  }
+}
+
+// 접근 로그 타입
+export interface AccessLog {
+  id: string;
+  user_id: string;
+  user_email: string;
+  action: string;
+  details: any;
+  user_agent: string;
+  created_at: string;
+}
+
+// 접근 로그 조회 (관리자용 - service_role로 RLS 우회)
+export async function getAccessLogs(days: number = 90): Promise<AccessLog[]> {
+  if (!supabaseAdmin) return [];
+
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const { data, error } = await supabaseAdmin
+      .from('access_logs')
+      .select('*')
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) {
+    console.error('접근 로그 조회 실패:', e);
+    return [];
   }
 }

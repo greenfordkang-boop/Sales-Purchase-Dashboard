@@ -127,6 +127,7 @@ export interface ProductInfoItem {
   paintQty1: number;       // 1도 Paint량 (g)
   paintQty2: number;       // 2도 Paint량 (g)
   paintQty3: number;       // 3도 Paint량 (g)
+  paintQty4: number;       // 4도 Paint량 (g)
   rawMaterialCode1: string; // 원재료코드1 (사출)
   rawMaterialCode2: string; // 원재료코드2 (사출)
   rawMaterialCode3: string; // 원재료코드3 (도장1도)
@@ -175,6 +176,22 @@ export interface PaintMixRatio {
   mainPrice: number;       // 주제 단가 (원/kg)
   hardenerPrice: number;   // 경화제 단가 (원/kg)
   thinnerPrice: number;    // 신너 단가 (원/kg)
+}
+
+/** 배합일지 레코드 */
+export interface PaintMixLog {
+  mixNo: string;           // 배합번호
+  mixDate: string;         // 배합일자
+  paintCode: string;       // 도료코드 (S코드)
+  paintName: string;       // 도료명
+  mainQty: number;         // 주제량 (kg)
+  mainRatio: number;       // 주제비율 (%)
+  hardenerQty: number;     // 경화제량 (kg)
+  hardenerRatio: number;   // 경화제비율 (%)
+  thinnerQty: number;      // 희석제량 (kg)
+  thinnerRatio: number;    // 희석제비율 (%)
+  totalQty: number;        // 합계량 (kg)
+  wasteQty: number;        // 폐기량 (kg)
 }
 
 /** 품목별 표준원가 (품목별재료비 시트에서 임포트) */
@@ -461,6 +478,7 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
   const cPaint1 = findCol(colMap, '1도 표준 Paint량', '1도');
   const cPaint2 = findCol(colMap, '2도 표준 Paint량', '2도');
   const cPaint3 = findCol(colMap, '3도 표준 Paint량', '3도');
+  const cPaint4 = findCol(colMap, '4도 표준 Paint량', '4도');
   const cRaw1 = findCol(colMap, '원재료코드1');
   const cRaw2 = findCol(colMap, '원재료코드2');
   const cRaw3 = findCol(colMap, '원재료코드3');
@@ -485,6 +503,7 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
       paintQty1: cPaint1 >= 0 ? num(row[cPaint1]) : 0,
       paintQty2: cPaint2 >= 0 ? num(row[cPaint2]) : 0,
       paintQty3: cPaint3 >= 0 ? num(row[cPaint3]) : 0,
+      paintQty4: cPaint4 >= 0 ? num(row[cPaint4]) : 0,
       rawMaterialCode1: cRaw1 >= 0 ? str(row[cRaw1]) : '',
       rawMaterialCode2: cRaw2 >= 0 ? str(row[cRaw2]) : '',
       rawMaterialCode3: cRaw3 >= 0 ? str(row[cRaw3]) : '',
@@ -783,6 +802,239 @@ export function parseStandardMaterialExcel(
     paintMixRatios,
     itemStandardCosts,
   };
+}
+
+// ============================================================
+// 개별 파일 파서 (서배합표준, 가재질단, 배합일지)
+// ============================================================
+
+/**
+ * 서배합표준.xlsx 파싱 → PaintMixRatio[]
+ * 컬럼 매핑:
+ *   col1=재질코드(S)→paintCode, col4=주제도료(P)→mainCode,
+ *   col6=주제비율→mainRatio, col7=경화제(H)→hardenerCode,
+ *   col9=경화제비율, col10=희석제(T)→thinnerCode, col12=희석제비율
+ *
+ * 실제 서배합표준은 헤더 행이 다를 수 있으므로 유연하게 탐색
+ */
+export function parseStandardMixFile(buffer: ArrayBuffer): PaintMixRatio[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const items: PaintMixRatio[] = [];
+
+  // 유연한 헤더 탐색: '재질코드' 또는 '배합' 포함 행 찾기
+  const { headerRow, colMap } = findHeaderAndColMap(data, '재질코드', '도료코드', '품목코드');
+  if (headerRow < 0) {
+    // 고정 인덱스 폴백 (서배합표준 표준 레이아웃)
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const paintCode = str(row[0]) || str(row[1]);
+      if (!paintCode) continue;
+      const mainCode = str(row[3]) || str(row[4]);
+      if (!mainCode) continue;
+
+      items.push({
+        paintCode,
+        paintName: str(row[2]) || '',
+        mainCode,
+        mainRatio: num(row[5]) || num(row[6]) || 100,
+        hardenerCode: str(row[6]) || str(row[7]) || '',
+        hardenerRatio: num(row[8]) || num(row[9]) || 0,
+        thinnerCode: str(row[9]) || str(row[10]) || '',
+        thinnerRatio: num(row[11]) || num(row[12]) || 0,
+        mainPrice: 0, hardenerPrice: 0, thinnerPrice: 0,
+      });
+    }
+    if (items.length > 0) {
+      console.log(`[서배합표준] 고정 인덱스 파싱: ${items.length}건`);
+      return items;
+    }
+    return items;
+  }
+
+  // 헤더 기반 파싱
+  const cPaintCode = findCol(colMap, '재질코드', '도료코드', '품목코드');
+  const cPaintName = findCol(colMap, '재질명', '도료명', '품목명');
+  const cMainCode = findCol(colMap, '주제도료', '주제코드', '주제');
+  const cMainName = findCol(colMap, '주제도료명', '주제명');
+  const cMainR = findCol(colMap, '주제비율', '주제(%)');
+  const cHardCode = findCol(colMap, '경화제코드', '경화제');
+  const cHardR = findCol(colMap, '경화제비율', '경화제(%)');
+  const cThinCode = findCol(colMap, '희석제코드', '희석제', '신너');
+  const cThinR = findCol(colMap, '희석제비율', '희석제(%)', '신너비율');
+
+  let lastPaintCode = '';
+
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = data[i];
+    const paintCode = (cPaintCode >= 0 ? str(row[cPaintCode]) : str(row[0])) || lastPaintCode;
+    if (!paintCode) continue;
+    lastPaintCode = paintCode;
+
+    const mainCode = cMainCode >= 0 ? str(row[cMainCode]) : '';
+    if (!mainCode) continue;
+
+    items.push({
+      paintCode,
+      paintName: cPaintName >= 0 ? str(row[cPaintName]) : (cMainName >= 0 ? str(row[cMainName]) : ''),
+      mainRatio: cMainR >= 0 ? num(row[cMainR]) : 100,
+      hardenerRatio: cHardR >= 0 ? num(row[cHardR]) : 0,
+      thinnerRatio: cThinR >= 0 ? num(row[cThinR]) : 0,
+      mainCode,
+      hardenerCode: cHardCode >= 0 ? str(row[cHardCode]) : '',
+      thinnerCode: cThinCode >= 0 ? str(row[cThinCode]) : '',
+      mainPrice: 0, hardenerPrice: 0, thinnerPrice: 0,
+    });
+  }
+
+  console.log(`[서배합표준] 헤더 기반 파싱: ${items.length}건`);
+  return items;
+}
+
+/**
+ * 가재질단.xlsx 파싱 → MaterialPrice[] (단가 포함)
+ * 컬럼: col1=재질코드, col2=재질명, col3=단위, col4=품목유형, col5=재질분류,
+ *        col6=업체코드, col7=업체명, col8=단가구분, col9=최초단가, col10=현재단가
+ */
+export function parseMaterialPriceFile(buffer: ArrayBuffer): MaterialPrice[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const items: MaterialPrice[] = [];
+
+  const { headerRow, colMap } = findHeaderAndColMap(data, '재질코드');
+  if (headerRow < 0) {
+    // 고정 인덱스 폴백
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const code = str(row[0]) || str(row[1]);
+      if (!code) continue;
+      const currentPrice = num(row[9]) || num(row[10]) || 0;
+      const prevPrice = num(row[8]) || num(row[9]) || 0;
+      // P/H/T 접두사로 유형 판별
+      let mType = '';
+      if (/^[PHT]/i.test(code)) mType = 'PAINT';
+      else mType = 'RESIN';
+
+      items.push({
+        materialCode: code,
+        materialName: str(row[1]) || str(row[2]) || '',
+        materialType: mType,
+        currentPrice,
+        previousPrice: prevPrice,
+      });
+    }
+    if (items.length > 0) {
+      console.log(`[가재질단] 고정 인덱스 파싱: ${items.length}건`);
+    }
+    return items;
+  }
+
+  const cCode = findCol(colMap, '재질코드');
+  const cName = findCol(colMap, '재질명');
+  const cProcessType = findCol(colMap, '품목유형');
+  const cCategory = findCol(colMap, '재질분류');
+  const cCurrent = findCol(colMap, '현재단가');
+  const cPrev = findCol(colMap, '최초단가', '전월단가');
+
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = data[i];
+    const code = cCode >= 0 ? str(row[cCode]) : '';
+    if (!code) continue;
+
+    let mType = '';
+    const processType = cProcessType >= 0 ? str(row[cProcessType]) : '';
+    const category = cCategory >= 0 ? str(row[cCategory]) : '';
+    if (processType.includes('사출') || category.includes('사출')) mType = 'RESIN';
+    else if (processType.includes('도장') || category.includes('도장')) mType = 'PAINT';
+    // P/H/T 접두사 폴백
+    if (!mType && /^[PHT]/i.test(code)) mType = 'PAINT';
+
+    items.push({
+      materialCode: code,
+      materialName: cName >= 0 ? str(row[cName]) : '',
+      materialType: mType,
+      currentPrice: cCurrent >= 0 ? num(row[cCurrent]) : 0,
+      previousPrice: cPrev >= 0 ? num(row[cPrev]) : 0,
+    });
+  }
+
+  console.log(`[가재질단] 헤더 기반 파싱: ${items.length}건 (단가 보유: ${items.filter(i => i.currentPrice > 0).length}건)`);
+  return items;
+}
+
+/**
+ * 배합일지.xlsx 파싱 → PaintMixLog[]
+ * 배합번호, 배합일자, 도료코드, 주제량/비율, 경화제량/비율, 희석제량/비율, 합계, 폐기량
+ */
+export function parsePaintMixLogFile(buffer: ArrayBuffer): PaintMixLog[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const data: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  const items: PaintMixLog[] = [];
+
+  const { headerRow, colMap } = findHeaderAndColMap(data, '배합번호', '배합일자', '도료코드');
+  if (headerRow < 0) {
+    console.warn('[배합일지] 헤더를 찾을 수 없습니다');
+    return items;
+  }
+
+  const cMixNo = findCol(colMap, '배합번호', 'No');
+  const cMixDate = findCol(colMap, '배합일자', '일자', '날짜');
+  const cPaintCode = findCol(colMap, '도료코드', '재질코드', '품목코드');
+  const cPaintName = findCol(colMap, '도료명', '재질명', '품목명');
+  const cMainQty = findCol(colMap, '주제량', '주제(kg)');
+  const cMainR = findCol(colMap, '주제비율', '주제(%)');
+  const cHardQty = findCol(colMap, '경화제량', '경화제(kg)');
+  const cHardR = findCol(colMap, '경화제비율', '경화제(%)');
+  const cThinQty = findCol(colMap, '희석제량', '희석제(kg)', '신너량');
+  const cThinR = findCol(colMap, '희석제비율', '희석제(%)', '신너비율');
+  const cTotal = findCol(colMap, '합계', '합계량', 'Total');
+  const cWaste = findCol(colMap, '폐기량', '폐기', '잔량');
+
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = data[i];
+    const paintCode = cPaintCode >= 0 ? str(row[cPaintCode]) : '';
+    if (!paintCode) continue;
+
+    // 날짜 처리: 엑셀 날짜 직렬 번호도 지원
+    let mixDate = '';
+    const rawDate = row[cMixDate >= 0 ? cMixDate : 1];
+    if (typeof rawDate === 'number' && rawDate > 40000) {
+      // Excel serial date
+      const d = XLSX.SSF.parse_date_code(rawDate);
+      mixDate = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+    } else {
+      mixDate = str(rawDate);
+    }
+
+    const mainQty = cMainQty >= 0 ? num(row[cMainQty]) : 0;
+    const hardQty = cHardQty >= 0 ? num(row[cHardQty]) : 0;
+    const thinQty = cThinQty >= 0 ? num(row[cThinQty]) : 0;
+    const totalQty = cTotal >= 0 ? num(row[cTotal]) : (mainQty + hardQty + thinQty);
+
+    items.push({
+      mixNo: cMixNo >= 0 ? str(row[cMixNo]) : `M${i}`,
+      mixDate,
+      paintCode,
+      paintName: cPaintName >= 0 ? str(row[cPaintName]) : '',
+      mainQty,
+      mainRatio: cMainR >= 0 ? num(row[cMainR]) : (totalQty > 0 ? (mainQty / totalQty) * 100 : 0),
+      hardenerQty: hardQty,
+      hardenerRatio: cHardR >= 0 ? num(row[cHardR]) : (totalQty > 0 ? (hardQty / totalQty) * 100 : 0),
+      thinnerQty: thinQty,
+      thinnerRatio: cThinR >= 0 ? num(row[cThinR]) : (totalQty > 0 ? (thinQty / totalQty) * 100 : 0),
+      totalQty,
+      wasteQty: cWaste >= 0 ? num(row[cWaste]) : 0,
+    });
+  }
+
+  console.log(`[배합일지] 파싱: ${items.length}건`);
+  return items;
 }
 
 function getEmptySummary(): Omit<StandardMaterialSummary, 'year' | 'month'> {

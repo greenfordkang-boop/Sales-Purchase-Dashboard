@@ -8,7 +8,7 @@ import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRe
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
 import { downloadCSV } from '../utils/csvExport';
 import { safeSetItem } from '../utils/safeStorage';
-import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService } from '../services/supabaseService';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService, paintMixRatioService, itemStandardCostService } from '../services/supabaseService';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import fallbackPurchasePrices from '../data/purchasePrices.json';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
@@ -212,13 +212,15 @@ const MRPView: React.FC = () => {
     setIsCalculating(true);
     try {
       // 서비스를 통해 데이터 로드 (Supabase → localStorage 폴백)
-      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, purchaseData] = await Promise.all([
+      const [forecastData, masterRecords, productCodes, refInfo, materialCodes, purchaseData, paintMixRatios, itemStandardCosts] = await Promise.all([
         forecastService.getItems('current'),
         bomMasterService.getAll(),
         productCodeService.getAll(),
         referenceInfoService.getAll(),
         materialCodeService.getAll(),
         purchaseSummaryService.getAll(),
+        paintMixRatioService.getAll(),
+        itemStandardCostService.getAll(),
       ]);
 
       // BomMasterRecord → BomRecord 변환
@@ -338,7 +340,7 @@ const MRPView: React.FC = () => {
         console.warn('수동 단가 로드 실패:', e);
       }
 
-      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData, fallbackStandardCosts);
+      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData, fallbackStandardCosts, paintMixRatios, itemStandardCosts);
       setMrpResult(result);
     } catch (err) {
       console.error('MRP 계산 실패:', err);
