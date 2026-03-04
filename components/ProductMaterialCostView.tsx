@@ -1467,6 +1467,28 @@ const ProductMaterialCostView: React.FC = () => {
         if (bomParent) {
           // 트리뷰용: 중간 노드 포함 DFS 전개
           const treeNodes = expandBomToTree(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
+
+          // 실측 도료 소요량 (paintConsumptionByProduct.json 데이터)
+          const measuredPaint = paintConsumptionMap.get(forecastPn)
+            || paintConsumptionMap.get(custToInternal.get(forecastPn) || '')
+            || paintConsumptionMap.get(internalToCust.get(forecastPn) || '')
+            || (f.partNo ? paintConsumptionMap.get(normalizePn(f.partNo)) : undefined)
+            || (f.partNo ? paintConsumptionMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined);
+          // 도료 leaf 수 카운트 (균등 배분용)
+          let paintLeafCount = 0;
+          if (measuredPaint) {
+            for (const nd of treeNodes) {
+              if (!nd.isLeaf) continue;
+              const pt = nd.partType || refInfoMap.get(normalizePn(nd.childPn))?.processType || '';
+              const pNorm = normalizePn(nd.parentPn);
+              if (/원재료/.test(pt) && (
+                paintIntermediatePns.has(pNorm)
+                || paintIntermediatePns.has(custToInternal.get(pNorm) || '')
+                || paintIntermediatePns.has(internalToCust.get(pNorm) || '')
+              )) paintLeafCount++;
+            }
+          }
+
           bomLeaves = treeNodes.map(node => {
             // 중간 노드 (서브어셈블리): 표시용, 가격 없음
             if (!node.isLeaf) {
@@ -1548,26 +1570,35 @@ const ProductMaterialCostView: React.FC = () => {
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
 
             if (isPaintRawMat) {
-              // 단가: 배합가(₩/kg) → ₩/g, 없으면 재질단가 ₩/kg → ₩/g
-              const { price: bp } = getPaintBlendedPrice(l.childPn);
-              if (bp > 0) {
-                finalPrice = bp / 1000;
-                finalSource = '배합가';
-              } else if (price > 0) {
-                finalPrice = price / 1000;
-                finalSource = source + '(g→kg)';
-              }
-              // 소요량: 부모 기준정보 paintQty/lotQty 사용 가능시 override
-              const parentRef = refInfoMap.get(parentNorm)
-                || refInfoMap.get(custToInternal.get(parentNorm) || '')
-                || refInfoMap.get(internalToCust.get(parentNorm) || '');
-              if (parentRef) {
-                const pq = [parentRef.paintQty1, parentRef.paintQty2, parentRef.paintQty3, parentRef.paintQty4 || 0];
-                const lotDiv = (parentRef.lotQty && parentRef.lotQty > 0) ? parentRef.lotQty : 1;
-                for (let i = 0; i < pq.length; i++) {
-                  if ((pq[i] || 0) > 0) {
-                    overrideQty = (pq[i] || 0) / lotDiv;
-                    break;
+              // 1순위: 실측 도장소요량 (paintConsumptionByProduct 데이터)
+              if (measuredPaint && paintLeafCount > 0) {
+                overrideQty = measuredPaint.paintGPerEa / paintLeafCount; // g/EA (균등 배분)
+                finalPrice = measuredPaint.paintGPerEa > 0
+                  ? measuredPaint.paintCostPerEa / measuredPaint.paintGPerEa // ₩/g (평균)
+                  : 0;
+                finalSource = '실측(도장)';
+              } else {
+                // 2순위: 배합가 또는 재질단가 (₩/kg → ₩/g)
+                const { price: bp } = getPaintBlendedPrice(l.childPn);
+                if (bp > 0) {
+                  finalPrice = bp / 1000;
+                  finalSource = '배합가';
+                } else if (price > 0) {
+                  finalPrice = price / 1000;
+                  finalSource = source + '(g→kg)';
+                }
+                // 3순위: 기준정보 paintQty/lotQty
+                const parentRef = refInfoMap.get(parentNorm)
+                  || refInfoMap.get(custToInternal.get(parentNorm) || '')
+                  || refInfoMap.get(internalToCust.get(parentNorm) || '');
+                if (parentRef) {
+                  const pq = [parentRef.paintQty1, parentRef.paintQty2, parentRef.paintQty3, parentRef.paintQty4 || 0];
+                  const lotDiv = (parentRef.lotQty && parentRef.lotQty > 0) ? parentRef.lotQty : 1;
+                  for (let i = 0; i < pq.length; i++) {
+                    if ((pq[i] || 0) > 0) {
+                      overrideQty = (pq[i] || 0) / lotDiv;
+                      break;
+                    }
                   }
                 }
               }
