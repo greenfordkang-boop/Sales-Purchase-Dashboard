@@ -390,11 +390,19 @@ export function calcProductBasedMaterialCost(params: CalcProductBasedParams): Un
     const bomParent = findBomParent(forecastPn);
     let bomMaterialCost = 0;
     if (bomParent) {
+      // 도료 원재료 P/N set (paintQty > 0인 rawMaterialCode) → BOM leaf에서 제외
+      const paintSkipPns = new Set<string>();
+      if (productRef) {
+        const rc = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4 || ''];
+        const pq = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4 || 0];
+        for (let i = 0; i < rc.length; i++) {
+          if (rc[i] && (pq[i] || 0) > 0) paintSkipPns.add(normalizePn(rc[i]));
+        }
+      }
       const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
       for (const leaf of leaves) {
         // 도료 원재료는 BOM leaf에서 제외 → calcProductPaintCost에서 별도 처리
-        const leafMatType = materialTypeMap.get(normalizePn(leaf.childPn)) || '';
-        if (/PAINT|도료/i.test(leafMatType)) continue;
+        if (paintSkipPns.has(normalizePn(leaf.childPn))) continue;
         const { price } = getLeafPrice(leaf.childPn);
         bomMaterialCost += leaf.totalRequired * price;
       }

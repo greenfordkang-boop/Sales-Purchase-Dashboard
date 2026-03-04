@@ -1467,6 +1467,19 @@ const ProductMaterialCostView: React.FC = () => {
         if (bomParent) {
           // 트리뷰용: 중간 노드 포함 DFS 전개
           const treeNodes = expandBomToTree(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
+          // 도료 원재료 P/N set: 제품 기준정보의 rawMaterialCode + paintQty > 0인 품번
+          const paintRawPnMap = new Map<string, { pqLot: number; lotDiv: number }>();
+          if (productRefEarly) {
+            const rc = [productRefEarly.rawMaterialCode1, productRefEarly.rawMaterialCode2, productRefEarly.rawMaterialCode3, productRefEarly.rawMaterialCode4 || ''];
+            const pq = [productRefEarly.paintQty1, productRefEarly.paintQty2, productRefEarly.paintQty3, productRefEarly.paintQty4 || 0];
+            const lotDiv = (productRefEarly.lotQty && productRefEarly.lotQty > 0) ? productRefEarly.lotQty : 1;
+            for (let i = 0; i < rc.length; i++) {
+              if (rc[i] && (pq[i] || 0) > 0) {
+                paintRawPnMap.set(normalizePn(rc[i]), { pqLot: pq[i] || 0, lotDiv });
+              }
+            }
+          }
+
           bomLeaves = treeNodes.map(node => {
             // 중간 노드 (서브어셈블리): 표시용, 가격 없음
             if (!node.isLeaf) {
@@ -1537,30 +1550,15 @@ const ProductMaterialCostView: React.FC = () => {
             let finalPrice = price;
             let finalSource = source;
 
-            // 도료 원재료 판정: materialTypeMap에서 PAINT/도료 확인
-            const leafMatType = materialTypeMap.get(normalizePn(l.childPn)) || '';
-            const isPaintRawMat = /PAINT|도료/i.test(leafMatType);
+            // 도료 원재료 판정: 제품 기준정보의 rawMaterialCode + paintQty > 0
+            const paintEntry = paintRawPnMap.get(normalizePn(l.childPn));
+            const isPaintRawMat = !!paintEntry;
 
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
 
-            if (isPaintRawMat) {
-              // 소요량: 기준정보의 paintQty ÷ lotQty = g/EA
-              // 1순위: 도장 부모노드, 2순위: 제품 기준정보
-              const paintRef = refInfoMap.get(normalizePn(l.parentPn)) || productRefEarly;
-              if (paintRef) {
-                const rawCodes = [
-                  paintRef.rawMaterialCode1,
-                  paintRef.rawMaterialCode2,
-                  paintRef.rawMaterialCode3,
-                  paintRef.rawMaterialCode4 || '',
-                ].map(c => normalizePn(c || ''));
-                const idx = rawCodes.indexOf(normalizePn(l.childPn));
-                if (idx >= 0) {
-                  const pqLot = [paintRef.paintQty1, paintRef.paintQty2, paintRef.paintQty3, paintRef.paintQty4 || 0][idx] || 0;
-                  const lotDiv = (paintRef.lotQty && paintRef.lotQty > 0) ? paintRef.lotQty : 1;
-                  overrideQty = pqLot / lotDiv; // g/EA
-                }
-              }
+            if (isPaintRawMat && paintEntry) {
+              // 소요량: paintQty(g/LOT) ÷ lotQty = g/EA
+              overrideQty = paintEntry.pqLot / paintEntry.lotDiv;
               // 단가: 배합가(₩/kg) → ₩/g (/1000)
               const { price: bp } = getPaintBlendedPrice(l.childPn);
               if (bp > 0) {
