@@ -1482,11 +1482,29 @@ const ProductMaterialCostView: React.FC = () => {
             }
           };
           addPaintRef(productRefEarly);
-          // 도장 중간노드의 기준정보도 탐색
+          // 도장 중간노드의 기준정보도 탐색 (paintIntermediatePns: ref info processType 기반, BOM partType보다 정확)
           for (const nd of treeNodes) {
-            if (!nd.isLeaf && /도장/.test(nd.partType)) {
-              addPaintRef(refInfoMap.get(normalizePn(nd.childPn)));
+            if (!nd.isLeaf) {
+              const ndNorm = normalizePn(nd.childPn);
+              if (paintIntermediatePns.has(ndNorm)
+                || paintIntermediatePns.has(custToInternal.get(ndNorm) || '')
+                || paintIntermediatePns.has(internalToCust.get(ndNorm) || '')) {
+                addPaintRef(
+                  refInfoMap.get(ndNorm)
+                  || refInfoMap.get(custToInternal.get(ndNorm) || '')
+                  || refInfoMap.get(internalToCust.get(ndNorm) || '')
+                );
+              }
             }
+          }
+          // DEBUG: 도료 소요량 추적
+          const paintInterNodes = treeNodes.filter(nd => !nd.isLeaf);
+          if (forecastPn.toUpperCase().includes('SCRC')) {
+            console.log('[도료디버그]', forecastPn, {
+              productRefEarly: productRefEarly ? { processType: productRefEarly.processType, rawMat1: productRefEarly.rawMaterialCode1, pq1: productRefEarly.paintQty1, lotQty: productRefEarly.lotQty } : null,
+              intermediates: paintInterNodes.map(nd => ({ pn: nd.childPn, partType: nd.partType, inPaintSet: paintIntermediatePns.has(normalizePn(nd.childPn)) })),
+              paintRawPnMap: Object.fromEntries(paintRawPnMap),
+            });
           }
 
           bomLeaves = treeNodes.map(node => {
@@ -1562,6 +1580,10 @@ const ProductMaterialCostView: React.FC = () => {
             // 도료 원재료 판정: 제품 기준정보의 rawMaterialCode + paintQty > 0
             const paintEntry = paintRawPnMap.get(normalizePn(l.childPn));
             const isPaintRawMat = !!paintEntry;
+            // DEBUG
+            if (l.childPn.toUpperCase().includes('XDR')) {
+              console.log('[도료leaf]', l.childPn, { norm: normalizePn(l.childPn), isPaintRawMat, paintEntry, parentPn: l.parentPn, mapKeys: [...paintRawPnMap.keys()] });
+            }
 
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
 
