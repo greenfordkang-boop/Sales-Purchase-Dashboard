@@ -1497,14 +1497,17 @@ const ProductMaterialCostView: React.FC = () => {
               }
             }
           }
-          // DEBUG: 도료 소요량 추적
-          const paintInterNodes = treeNodes.filter(nd => !nd.isLeaf);
+          // DEBUG: 도료 소요량 추적 (문자열 출력)
           if (forecastPn.toUpperCase().includes('SCRC')) {
-            console.log('[도료디버그]', forecastPn, {
-              productRefEarly: productRefEarly ? { processType: productRefEarly.processType, rawMat1: productRefEarly.rawMaterialCode1, pq1: productRefEarly.paintQty1, lotQty: productRefEarly.lotQty } : null,
-              intermediates: paintInterNodes.map(nd => ({ pn: nd.childPn, partType: nd.partType, inPaintSet: paintIntermediatePns.has(normalizePn(nd.childPn)) })),
-              paintRawPnMap: Object.fromEntries(paintRawPnMap),
-            });
+            const refE = productRefEarly;
+            console.log(`[도료디버그] ${forecastPn} | refEarly=${!!refE} processType="${refE?.processType}" rawMat1="${refE?.rawMaterialCode1}" rawMat2="${refE?.rawMaterialCode2}" pq1=${refE?.paintQty1} pq2=${refE?.paintQty2} lotQty=${refE?.lotQty}`);
+            for (const nd of treeNodes.filter(n => !n.isLeaf)) {
+              const ndN = normalizePn(nd.childPn);
+              const inSet = paintIntermediatePns.has(ndN) || paintIntermediatePns.has(custToInternal.get(ndN) || '') || paintIntermediatePns.has(internalToCust.get(ndN) || '');
+              const ndRef = refInfoMap.get(ndN) || refInfoMap.get(custToInternal.get(ndN) || '') || refInfoMap.get(internalToCust.get(ndN) || '');
+              console.log(`  중간노드 ${nd.childPn} | partType="${nd.partType}" inPaintSet=${inSet} hasRef=${!!ndRef} rawMat1="${ndRef?.rawMaterialCode1}" rawMat2="${ndRef?.rawMaterialCode2}" pq1=${ndRef?.paintQty1} pq2=${ndRef?.paintQty2} lotQty=${ndRef?.lotQty}`);
+            }
+            console.log(`  paintRawPnMap keys=[${[...paintRawPnMap.keys()].join(',')}] size=${paintRawPnMap.size}`);
           }
 
           bomLeaves = treeNodes.map(node => {
@@ -1581,8 +1584,8 @@ const ProductMaterialCostView: React.FC = () => {
             const paintEntry = paintRawPnMap.get(normalizePn(l.childPn));
             const isPaintRawMat = !!paintEntry;
             // DEBUG
-            if (l.childPn.toUpperCase().includes('XDR')) {
-              console.log('[도료leaf]', l.childPn, { norm: normalizePn(l.childPn), isPaintRawMat, paintEntry, parentPn: l.parentPn, mapKeys: [...paintRawPnMap.keys()] });
+            if (l.childPn.toUpperCase().includes('XDR') && forecastPn.toUpperCase().includes('SCRC')) {
+              console.log(`  [도료leaf] ${l.childPn} | norm="${normalizePn(l.childPn)}" isPaint=${isPaintRawMat} entry=${JSON.stringify(paintEntry)} parent=${l.parentPn} totalReq=${l.totalRequired}`);
             }
 
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
