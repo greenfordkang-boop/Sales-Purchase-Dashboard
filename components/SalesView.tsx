@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
 import { ResponsiveContainer, ComposedChart, BarChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList, PieChart, Pie, Cell } from 'recharts';
@@ -28,6 +29,36 @@ const MONTH_OPTIONS = [
   { value: '07', label: '7월' }, { value: '08', label: '8월' }, { value: '09', label: '9월' },
   { value: '10', label: '10월' }, { value: '11', label: '11월' }, { value: '12', label: '12월' },
 ];
+
+// Excel/CSV 파일을 CSV 텍스트로 변환
+const readFileAsCSVText = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+          resolve(csvText);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('파일 읽기 실패'));
+      reader.readAsArrayBuffer(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        resolve((event.target?.result as string) || '');
+      };
+      reader.onerror = () => reject(new Error('파일 읽기 실패'));
+      reader.readAsText(file);
+    }
+  });
+};
 
 const SalesView: React.FC = () => {
   // --- Initialization Helpers (Run once on mount) ---
@@ -737,185 +768,178 @@ const SalesView: React.FC = () => {
   }, [yearFilteredRevenueData, priceSortConfig, priceFilter]);
 
   // --- Handlers (Supabase sync handled by Persistence Effects) ---
-  const handleQtyFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQtyFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const parsed = parseSalesCSV(event.target?.result as string);
+      try {
+        const csvText = await readFileAsCSVText(file);
+        const parsed = parseSalesCSV(csvText);
         setSalesData(parsed);
-        // localStorage는 useEffect에서 자동 저장됨
-        // Supabase 백그라운드 저장
         if (isSupabaseConfigured()) {
           salesService.saveAll(parsed)
             .then(() => console.log('✅ 영업 데이터 Supabase 동기화 완료'))
             .catch(err => console.error('Supabase 동기화 실패:', err));
         }
-      };
-      reader.readAsText(file);
+      } catch (err) {
+        console.error('파일 읽기 실패:', err);
+        alert('파일을 읽는데 실패했습니다. CSV 또는 Excel 형식을 확인해주세요.');
+      }
     }
     e.target.value = '';
   };
-  const handleCRFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCRFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const parsed = parseCRCSV(event.target?.result as string, selectedCRYear);
-        // Merge: replace only the selected year's data
+      try {
+        const csvText = await readFileAsCSVText(file);
+        const parsed = parseCRCSV(csvText, selectedCRYear);
         setCrData(prev => {
           const otherYears = prev.filter(d => d.year !== selectedCRYear);
           return [...otherYears, ...parsed];
         });
-        // Supabase 백그라운드 저장 (해당 년도만)
         if (isSupabaseConfigured()) {
           crService.saveByYear(parsed, selectedCRYear)
             .then(() => console.log(`✅ ${selectedCRYear}년 CR 데이터 Supabase 동기화 완료`))
             .catch(err => console.error('Supabase 동기화 실패:', err));
         }
-      };
-      reader.readAsText(file);
+      } catch (err) {
+        console.error('파일 읽기 실패:', err);
+        alert('파일을 읽는데 실패했습니다. CSV 또는 Excel 형식을 확인해주세요.');
+      }
     }
     e.target.value = '';
   };
-  const handleRfqFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleRfqFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const parsed = parseRFQCSV(event.target?.result as string);
+      try {
+        const csvText = await readFileAsCSVText(file);
+        const parsed = parseRFQCSV(csvText);
         setRfqData(parsed);
-        // localStorage는 useEffect에서 자동 저장됨
-        // Supabase 백그라운드 저장
         if (isSupabaseConfigured()) {
           rfqService.saveAll(parsed)
             .then(() => console.log('✅ RFQ 데이터 Supabase 동기화 완료'))
             .catch(err => console.error('Supabase 동기화 실패:', err));
         }
-      };
-      reader.readAsText(file);
+      } catch (err) {
+        console.error('파일 읽기 실패:', err);
+        alert('파일을 읽는데 실패했습니다. CSV 또는 Excel 형식을 확인해주세요.');
+      }
     }
     e.target.value = '';
   };
 
-  // Revenue CSV Upload Handler (고객사별 매출현황)
-  const handleRevenueFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Revenue Upload Handler (고객사별 매출현황)
+  const handleRevenueFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setIsUploadingRevenue(true);
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const parsed = parseRevenueCSV(event.target?.result as string, selectedRevenueYear);
+      try {
+        const csvText = await readFileAsCSVText(file);
+        const parsed = parseRevenueCSV(csvText, selectedRevenueYear);
 
-          // Merge with existing data (replace same year data)
-          setRevenueData(prev => {
-            const otherYears = prev.filter(d => d.year !== selectedRevenueYear);
-            return [...otherYears, ...parsed];
-          });
+        setRevenueData(prev => {
+          const otherYears = prev.filter(d => d.year !== selectedRevenueYear);
+          return [...otherYears, ...parsed];
+        });
 
-          // Supabase 백그라운드 저장
-          if (isSupabaseConfigured()) {
-            await revenueService.saveByYear(parsed, selectedRevenueYear);
-            console.log(`✅ ${selectedRevenueYear}년 매출 데이터 Supabase 동기화 완료 (${parsed.length}건)`);
-          }
-
-          alert(`${selectedRevenueYear}년 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
-        } catch (err) {
-          console.error('매출 데이터 업로드 실패:', err);
-          alert('매출 데이터 업로드에 실패했습니다. CSV 형식을 확인해주세요.');
-        } finally {
-          setIsUploadingRevenue(false);
+        if (isSupabaseConfigured()) {
+          await revenueService.saveByYear(parsed, selectedRevenueYear);
+          console.log(`✅ ${selectedRevenueYear}년 매출 데이터 Supabase 동기화 완료 (${parsed.length}건)`);
         }
-      };
-      reader.readAsText(file);
+
+        alert(`${selectedRevenueYear}년 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
+      } catch (err) {
+        console.error('매출 데이터 업로드 실패:', err);
+        alert('매출 데이터 업로드에 실패했습니다. CSV 또는 Excel 형식을 확인해주세요.');
+      } finally {
+        setIsUploadingRevenue(false);
+      }
     }
     e.target.value = '';
   };
 
-  // 품목별 매출 CSV 업로드 핸들러 (별도 파일)
-  const handleItemRevenueFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 품목별 매출 업로드 핸들러 (CSV 인코딩 감지 + Excel 지원)
+  const handleItemRevenueFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
       e.target.value = '';
       return;
     }
 
-    // CSV 인코딩 자동 감지 (UTF-8 우선, 깨지면 EUC-KR 재시도)
-    const readCsvWithEncoding = (
-      file: File,
-      onLoaded: (text: string) => void
-    ) => {
-      const readAsEncoding = (encoding: string, cb: (text: string) => void) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          cb((event.target?.result as string) || '');
-        };
-        reader.onerror = () => {
-          console.error(`파일 읽기 실패 (${encoding})`);
-          cb('');
-        };
-        reader.readAsText(file, encoding);
-      };
+    const processItemRevenue = async (csvText: string) => {
+      if (!csvText || csvText.trim().length === 0) {
+        alert('파일이 비어있거나 읽을 수 없습니다.');
+        return;
+      }
 
-      // 1차: UTF-8
-      readAsEncoding('utf-8', (utf8Text) => {
-        if (!utf8Text) {
-          // UTF-8 읽기 실패 시 EUC-KR 시도
-          readAsEncoding('euc-kr', (eucKrText) => onLoaded(eucKrText || utf8Text));
-          return;
+      console.log('📂 품목별 매출 파싱 시작...');
+      const parsed = parseItemRevenueCSV(csvText);
+
+      if (parsed.length === 0) {
+        alert('파일에서 데이터를 찾을 수 없습니다.\n파일 형식을 확인해주세요.\n\n필요한 컬럼: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
+        return;
+      }
+
+      console.log(`✅ 품목별 매출 데이터 파싱 완료: ${parsed.length}건`);
+      setItemRevenueData(parsed);
+      safeSetItem('dashboard_itemRevenueData', JSON.stringify(parsed));
+
+      if (isSupabaseConfigured()) {
+        try {
+          await itemRevenueService.saveAll(parsed);
+          console.log(`✅ 품목별 매출 데이터 Supabase 동기화 완료: ${parsed.length}건`);
+        } catch (err) {
+          console.error('Supabase 동기화 실패:', err);
+          alert('데이터는 로컬에 저장되었지만 Supabase 동기화에 실패했습니다.');
         }
+      }
 
-        const brokenPattern = /�|Ã.|Â./g;
-        const brokenMatches = utf8Text.match(brokenPattern);
-        const brokenRatio = brokenMatches ? brokenMatches.length / utf8Text.length : 0;
-
-        if (brokenRatio > 0.01) {
-          // 깨짐 비율이 높으면 EUC-KR로 다시 읽기
-          readAsEncoding('euc-kr', (eucKrText) => onLoaded(eucKrText || utf8Text));
-        } else {
-          onLoaded(utf8Text);
-        }
-      });
+      alert(`품목별 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
     };
 
-    readCsvWithEncoding(file, async (csvText) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      // Excel: XLSX 라이브러리가 인코딩 자동 처리
       try {
-        if (!csvText || csvText.trim().length === 0) {
-          alert('파일이 비어있거나 읽을 수 없습니다.');
-          return;
-        }
-
-        console.log('📂 품목별 매출 CSV 파싱 시작...');
-        const parsed = parseItemRevenueCSV(csvText);
-        
-        if (parsed.length === 0) {
-          alert('CSV 파일에서 데이터를 찾을 수 없습니다.\n파일 형식을 확인해주세요.\n\n필요한 컬럼: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
-          return;
-        }
-
-        console.log(`✅ 품목별 매출 데이터 파싱 완료: ${parsed.length}건`);
-        
-        setItemRevenueData(parsed);
-        safeSetItem('dashboard_itemRevenueData', JSON.stringify(parsed));
-
-        // Supabase 동기화
-        if (isSupabaseConfigured()) {
-          try {
-            await itemRevenueService.saveAll(parsed);
-            console.log(`✅ 품목별 매출 데이터 Supabase 동기화 완료: ${parsed.length}건`);
-          } catch (err) {
-            console.error('Supabase 동기화 실패:', err);
-            alert('데이터는 로컬에 저장되었지만 Supabase 동기화에 실패했습니다.');
-          }
-        }
-
-        alert(`품목별 매출 데이터 ${parsed.length}건이 업로드되었습니다.`);
+        const csvText = await readFileAsCSVText(file);
+        await processItemRevenue(csvText);
       } catch (err) {
-        console.error('품목별 매출 데이터 업로드 실패:', err);
-        alert('품목별 매출 데이터 업로드에 실패했습니다.\nCSV 형식을 확인해주세요.\n\n필요한 컬럼: (첫 열 비움), 매출기간, 고객사, model, 품번, 고객사p/n, 품명, 매출수량, 매출금액');
+        console.error('Excel 파일 읽기 실패:', err);
+        alert('Excel 파일을 읽는데 실패했습니다.');
       }
-    });
+    } else {
+      // CSV: 인코딩 자동 감지 (UTF-8 우선, 깨지면 EUC-KR 재시도)
+      const readCsvWithEncoding = (f: File, onLoaded: (text: string) => void) => {
+        const readAsEncoding = (encoding: string, cb: (text: string) => void) => {
+          const reader = new FileReader();
+          reader.onload = (event) => cb((event.target?.result as string) || '');
+          reader.onerror = () => { console.error(`파일 읽기 실패 (${encoding})`); cb(''); };
+          reader.readAsText(f, encoding);
+        };
+        readAsEncoding('utf-8', (utf8Text) => {
+          if (!utf8Text) { readAsEncoding('euc-kr', (t) => onLoaded(t || utf8Text)); return; }
+          const brokenPattern = /�|Ã.|Â./g;
+          const brokenMatches = utf8Text.match(brokenPattern);
+          const brokenRatio = brokenMatches ? brokenMatches.length / utf8Text.length : 0;
+          if (brokenRatio > 0.01) {
+            readAsEncoding('euc-kr', (t) => onLoaded(t || utf8Text));
+          } else {
+            onLoaded(utf8Text);
+          }
+        });
+      };
+
+      readCsvWithEncoding(file, async (csvText) => {
+        try {
+          await processItemRevenue(csvText);
+        } catch (err) {
+          console.error('품목별 매출 데이터 업로드 실패:', err);
+          alert('품목별 매출 데이터 업로드에 실패했습니다.\nCSV/Excel 형식을 확인해주세요.');
+        }
+      });
+    }
 
     e.target.value = '';
   };
@@ -1156,7 +1180,7 @@ const SalesView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
           <div><h2 className="text-xl font-black text-slate-800">1.판매계획 대비 실적</h2></div>
           <div className="flex gap-4 items-center">
-            <label className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2"><span>📂</span> 수량 CSV 업로드<input type="file" accept=".csv" onChange={handleQtyFileUpload} className="hidden" /></label>
+            <label className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2"><span>📂</span> 수량 업로드 (CSV/Excel)<input type="file" accept=".csv,.xlsx,.xls" onChange={handleQtyFileUpload} className="hidden" /></label>
             <select value={selectedQtyMonth} onChange={(e) => setSelectedQtyMonth(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[120px]">
               {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
@@ -1249,8 +1273,8 @@ const SalesView: React.FC = () => {
             </div>
             <div className="flex gap-3 items-center flex-wrap">
               <label className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2 ${isUploadingRevenue ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-amber-100 hover:bg-amber-200 text-amber-700'}`}>
-                <span>📂</span> {isUploadingRevenue ? '업로드 중...' : '수량 CSV 업로드'}
-                <input type="file" accept=".csv" onChange={handleRevenueFileUpload} className="hidden" disabled={isUploadingRevenue} />
+                <span>📂</span> {isUploadingRevenue ? '업로드 중...' : '매출 업로드 (CSV/Excel)'}
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleRevenueFileUpload} className="hidden" disabled={isUploadingRevenue} />
               </label>
               <select
                 value={selectedRevenueMonth}
@@ -1487,12 +1511,12 @@ const SalesView: React.FC = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
             <div>
               <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-emerald-600 rounded-full"></span>3. 품목별 매출현황</h3>
-              <p className="text-xs text-slate-500 mt-1">품목별 매출금액 및 수량 현황 (별도 CSV 업로드)</p>
+              <p className="text-xs text-slate-500 mt-1">품목별 매출금액 및 수량 현황 (CSV/Excel 업로드)</p>
             </div>
             <div className="flex items-center gap-2">
               <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
-                <span>📂</span> 품목별 매출 CSV 업로드
-                <input type="file" accept=".csv" onChange={handleItemRevenueFileUpload} className="hidden" />
+                <span>📂</span> 품목별 매출 업로드 (CSV/Excel)
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleItemRevenueFileUpload} className="hidden" />
               </label>
               <select
                 value={selectedRevenueCustomer}
@@ -1602,7 +1626,7 @@ const SalesView: React.FC = () => {
                           <div className="flex flex-col items-center gap-2">
                             <span className="text-4xl">📊</span>
                             <p className="font-medium">데이터가 없습니다.</p>
-                            <p className="text-xs">품목별 매출 CSV 파일을 업로드하여 데이터를 추가하세요.</p>
+                            <p className="text-xs">품목별 매출 CSV/Excel 파일을 업로드하여 데이터를 추가하세요.</p>
                           </div>
                         </td>
                       </tr>
@@ -1656,8 +1680,8 @@ const SalesView: React.FC = () => {
                         </button>
                     )}
                     <label className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
-                        <span>⚙️ RFQ CSV 업로드</span>
-                        <input type="file" accept=".csv" onChange={handleRfqFileUpload} className="hidden" />
+                        <span>⚙️ RFQ 업로드 (CSV/Excel)</span>
+                        <input type="file" accept=".csv,.xlsx,.xls" onChange={handleRfqFileUpload} className="hidden" />
                     </label>
                 </div>
             </div>
@@ -1913,8 +1937,8 @@ const SalesView: React.FC = () => {
                         {isEditingCR ? '💾 편집 종료 (저장)' : '✏️ 실적 직접 입력'}
                      </button>
                      <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
-                        <span>📁 CR 데이터 업로드 (CSV)</span>
-                        <input type="file" accept=".csv" onChange={handleCRFileUpload} className="hidden" />
+                        <span>📁 CR 데이터 업로드 (CSV/Excel)</span>
+                        <input type="file" accept=".csv,.xlsx,.xls" onChange={handleCRFileUpload} className="hidden" />
                      </label>
                   </div>
                </div>
