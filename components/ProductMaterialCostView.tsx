@@ -1533,19 +1533,46 @@ const ProductMaterialCostView: React.FC = () => {
             const leafMatType = materialTypeMap.get(normalizePn(l.childPn)) || '';
             const isPaintRawMat = /PAINT|도료/i.test(leafMatType);
 
-            if (isPaintRawMat && price > 0 && (source === '재질코드' || source === '원재료')) {
-              // 도료 원재료: 단가=₩/kg, BOM qty=g → g→kg 변환 (/1000)
-              finalPrice = price / 1000;
-              finalSource = source + '(g→kg)';
+            let overrideQty: number | null = null; // null → BOM totalRequired 사용
+
+            if (isPaintRawMat) {
+              // 소요량: 도장 부모노드 기준정보의 paintQty ÷ lotQty = g/EA
+              const paintParentRef = refInfoMap.get(normalizePn(l.parentPn));
+              if (paintParentRef) {
+                const rawCodes = [
+                  paintParentRef.rawMaterialCode1,
+                  paintParentRef.rawMaterialCode2,
+                  paintParentRef.rawMaterialCode3,
+                  paintParentRef.rawMaterialCode4 || '',
+                ].map(c => normalizePn(c || ''));
+                const idx = rawCodes.indexOf(normalizePn(l.childPn));
+                if (idx >= 0) {
+                  const pqLot = [paintParentRef.paintQty1, paintParentRef.paintQty2, paintParentRef.paintQty3, paintParentRef.paintQty4 || 0][idx] || 0;
+                  const lotDiv = (paintParentRef.lotQty && paintParentRef.lotQty > 0) ? paintParentRef.lotQty : 1;
+                  overrideQty = pqLot / lotDiv; // g/EA
+                }
+              }
+              // 단가: 배합가(₩/kg) → ₩/g (/1000)
+              const { price: bp } = getPaintBlendedPrice(l.childPn);
+              if (bp > 0) {
+                finalPrice = bp / 1000; // ₩/g
+                finalSource = '배합가';
+              } else if (price > 0) {
+                finalPrice = price / 1000; // ₩/g fallback
+                finalSource = source + '(g→kg)';
+              }
             } else if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
               finalPrice = paintCalcDetail.totalCalcCost;
               finalSource = '도장(산출)';
             }
+
+            const displayQty = overrideQty !== null ? overrideQty : l.totalRequired;
+
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
-              qty: 0, totalQty: l.totalRequired,
-              unitPrice: finalPrice, cost: l.totalRequired * finalPrice,
+              qty: 0, totalQty: displayQty,
+              unitPrice: finalPrice, cost: displayQty * finalPrice,
               priceSource: finalSource, depth: l.depth,
               partType, supplier,
               calcDetail: finalCalcDetail, paintCalcDetail,
