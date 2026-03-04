@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useColumnResize } from '../hooks/useColumnResize';
 import * as XLSX from 'xlsx';
-import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves, expandBomToTree } from '../utils/bomDataParser';
+import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves, expandBomToTree, flatToHierarchical, HierarchicalBomNode } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
@@ -389,6 +389,26 @@ const PaintCostEditor: React.FC<{
   );
 };
 
+// 팀 확인란 타입
+interface BomTeamConfirm {
+  dev: string | null;
+  prod: string | null;
+  purchase: string | null;
+}
+
+const TEAM_CONFIRM_KEY = 'dashboard_bomTeamConfirmed';
+
+const loadTeamConfirms = (): Record<string, BomTeamConfirm> => {
+  try {
+    const stored = localStorage.getItem(TEAM_CONFIRM_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch { return {}; }
+};
+
+const saveTeamConfirms = (data: Record<string, BomTeamConfirm>) => {
+  try { localStorage.setItem(TEAM_CONFIRM_KEY, JSON.stringify(data)); } catch { /* ignore */ }
+};
+
 const BomTreePopup: React.FC<{
   row: ProductRow;
   onClose: () => void;
@@ -408,6 +428,34 @@ const BomTreePopup: React.FC<{
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
   const leftPanelRef = useRef<HTMLDivElement>(null);
+
+  // --- 계층형 트리 + collapsible ---
+  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
+
+  // --- 소요량 인라인 수정 ---
+  const [editingQtyIdx, setEditingQtyIdx] = useState<number | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState('');
+
+  // --- 팀 확인란 ---
+  const productKey = row.newPartNo || row.partNo;
+  const [teamConfirms, setTeamConfirms] = useState<Record<string, BomTeamConfirm>>(() => loadTeamConfirms());
+  const currentConfirm = teamConfirms[productKey] || { dev: null, prod: null, purchase: null };
+  const isAllConfirmed = currentConfirm.dev !== null && currentConfirm.prod !== null && currentConfirm.purchase !== null;
+
+  const toggleTeam = (team: 'dev' | 'prod' | 'purchase') => {
+    setTeamConfirms(prev => {
+      const cur = prev[productKey] || { dev: null, prod: null, purchase: null };
+      const updated = {
+        ...prev,
+        [productKey]: {
+          ...cur,
+          [team]: cur[team] ? null : new Date().toISOString(),
+        },
+      };
+      saveTeamConfirms(updated);
+      return updated;
+    });
+  };
 
   // --- 드래그 ---
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -489,6 +537,89 @@ const BomTreePopup: React.FC<{
     setApplyMsg(ok ? `₩${fmt(total)} → 표준재료비 저장 완료` : 'DB 저장 실패');
     setTimeout(() => setApplyMsg(null), 3000);
     if (ok) onRefInfoUpdate();
+  };
+
+  // --- 소요량(qty) 인라인 수정 핸들러 ---
+  const handleQtyClick = (idx: number) => {
+    const leaf = localLeaves[idx];
+    setEditingQtyIdx(idx);
+    setEditQtyValue(String(leaf.totalQty < 1 ? leaf.totalQty : Math.round(leaf.totalQty)));
+  };
+
+  const handleQtySave = async (idx: number) => {
+    const newQty = parseFloat(editQtyValue);
+    if (isNaN(newQty) || newQty < 0) {
+      setEditingQtyIdx(null);
+      return;
+    }
+    const leaf = localLeaves[idx];
+    const updated = [...localLeaves];
+    updated[idx] = {
+      ...leaf,
+      totalQty: newQty,
+      cost: newQty * leaf.unitPrice,
+    };
+    setLocalLeaves(updated);
+    setEditingQtyIdx(null);
+
+    // DB 저장
+    const ok = await bomMasterService.updateQty(leaf.childPn === leaf.childPn ? row.newPartNo || row.partNo : '', leaf.childPn, newQty);
+    setApplyMsg(ok ? `소요량 ${newQty} 저장 완료` : '소요량 DB 저장 실패');
+    setTimeout(() => setApplyMsg(null), 3000);
+  };
+
+  const handleQtyKeyDown = (e: React.KeyboardEvent, idx: number) => {
+    if (e.key === 'Enter') handleQtySave(idx);
+    else if (e.key === 'Escape') setEditingQtyIdx(null);
+  };
+
+  // --- 계층형 트리 구성 ---
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const treeData = useMemo(() => {
+    // localLeaves (flat BomLeaf[]) → BomTreeNode 호환 형태로 변환 → flatToHierarchical
+    const flatNodes = localLeaves.map(l => ({
+      childPn: l.childPn,
+      childName: l.childName,
+      supplier: l.supplier,
+      partType: l.partType,
+      unitQty: l.qty,
+      totalRequired: l.totalQty,
+      parentPn: '',
+      depth: l.depth,
+      isLeaf: !l.isIntermediate,
+    }));
+    const tree = flatToHierarchical(flatNodes);
+    // enrichment: unitPrice, cost, priceSource, calcDetail, paintCalcDetail 매핑
+    const enrichNode = (node: HierarchicalBomNode, flatIdx: { current: number }) => {
+      const idx = flatIdx.current;
+      if (idx < localLeaves.length) {
+        const leaf = localLeaves[idx];
+        node.unitPrice = leaf.unitPrice;
+        node.cost = leaf.cost;
+        node.priceSource = leaf.priceSource;
+        node.calcDetail = leaf.calcDetail;
+        node.paintCalcDetail = leaf.paintCalcDetail;
+        node.isPaintRawMat = leaf.isPaintRawMat;
+      }
+      flatIdx.current++;
+      for (const child of node.children) {
+        enrichNode(child, flatIdx);
+      }
+    };
+    const flatIdx = { current: 0 };
+    for (const root of tree) {
+      enrichNode(root, flatIdx);
+    }
+    return tree;
+  }, [localLeaves]);
+
+  const toggleCollapse = (nodeKey: string) => {
+    setCollapsedNodes(prev => {
+      const next = new Set(prev);
+      if (next.has(nodeKey)) next.delete(nodeKey);
+      else next.add(nodeKey);
+      return next;
+    });
   };
 
   if (row.bomLeaves.length === 0 && !row.hasStdCost) return null;
@@ -625,6 +756,36 @@ const BomTreePopup: React.FC<{
           </div>
         </div>
 
+        {/* ── 팀 확인란 ── */}
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 flex items-center gap-4 flex-shrink-0">
+          <span className="text-[11px] font-bold text-slate-500">BOM 정확도 확인:</span>
+          {([
+            { key: 'dev' as const, label: '개발팀' },
+            { key: 'prod' as const, label: '생산팀' },
+            { key: 'purchase' as const, label: '구매팀' },
+          ]).map(({ key, label }) => (
+            <label key={key} className="flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={currentConfirm[key] !== null}
+                onChange={() => toggleTeam(key)}
+                className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className={`text-[11px] ${currentConfirm[key] ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
+                {label}
+                {currentConfirm[key] && (
+                  <span className="text-[9px] text-slate-400 ml-1">
+                    ({new Date(currentConfirm[key]!).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })})
+                  </span>
+                )}
+              </span>
+            </label>
+          ))}
+          {isAllConfirmed && (
+            <span className="text-[10px] text-green-600 font-bold ml-2">전원 확인 완료</span>
+          )}
+        </div>
+
         {/* ── 분할뷰 본문 ── */}
         <div className="flex flex-1 min-h-0">
           {/* ── 좌측: BOM 트리 (55%) ── */}
@@ -633,143 +794,211 @@ const BomTreePopup: React.FC<{
               <table className="w-full text-xs whitespace-nowrap">
                 <thead className="bg-slate-50 sticky top-0 z-10">
                   <tr className="text-slate-500">
-                    <th className="px-3 py-2 text-left">자재코드</th>
-                    <th className="px-3 py-2 text-left">자재명</th>
-                    <th className="px-3 py-2 text-left">유형</th>
-                    <th className="px-3 py-2 text-left">구입처</th>
-                    <th className="px-3 py-2 text-right">소요량</th>
-                    <th className="px-3 py-2 text-right whitespace-nowrap">단가 <span className="text-[9px] text-blue-400 font-normal">(클릭수정)</span></th>
-                    <th className="px-3 py-2 text-right">금액</th>
-                    <th className="px-3 py-2 text-left">출처</th>
+                    <th className="px-2 py-2 text-center w-10">Lv</th>
+                    <th className="px-3 py-2 text-left">품번 (Part No)</th>
+                    <th className="px-3 py-2 text-left">품명</th>
+                    <th className="px-3 py-2 text-left w-14">유형</th>
+                    <th className="px-3 py-2 text-left w-16">구입처</th>
+                    <th className="px-3 py-2 text-right w-14">단위수량</th>
+                    <th className="px-3 py-2 text-right w-16 whitespace-nowrap">소요량 <span className="text-[9px] text-blue-400 font-normal">(수정)</span></th>
+                    <th className="px-3 py-2 text-right w-20 whitespace-nowrap">단가 <span className="text-[9px] text-blue-400 font-normal">(수정)</span></th>
+                    <th className="px-3 py-2 text-right w-20">금액</th>
+                    <th className="px-3 py-2 text-left w-12">출처</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {localLeaves.map((leaf, i) =>
-                    leaf.isIntermediate ? (
-                      <tr key={i} ref={el => { rowRefs.current[i] = el; }} className="bg-slate-50/60">
-                        <td colSpan={8} className="py-1 text-[10px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
-                          <span className="text-slate-400 mr-0.5">├─</span>
-                          <span className="font-mono font-medium text-slate-500">{leaf.childPn}</span>
-                          <span className="ml-1.5 text-slate-400">{leaf.childName}</span>
-                          {leaf.partType && (
-                            <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] ${
-                              /조립/.test(leaf.partType) ? 'bg-green-50 text-green-600' :
-                              /사출/.test(leaf.partType) ? 'bg-blue-50 text-blue-600' :
-                              'bg-slate-100 text-slate-500'
-                            }`}>{leaf.partType}</span>
-                          )}
-                        </td>
-                      </tr>
-                    ) : (
-                      <tr
-                        key={i}
-                        ref={el => { rowRefs.current[i] = el; }}
-                        className={`border-t border-slate-100 cursor-pointer transition-colors ${
-                          selectedIdx === i ? 'bg-blue-100/70 ring-1 ring-inset ring-blue-300' :
-                          errorLeafIndices.has(i) ? 'bg-red-50 border-l-2 border-l-red-400' :
-                          'hover:bg-blue-50/50'
-                        }`}
-                        onClick={() => setSelectedIdx(selectedIdx === i ? null : i)}
-                      >
-                        <td className="px-3 py-1.5 font-mono text-[11px]" style={{ paddingLeft: `${4 + (leaf.depth - 1) * 20}px` }}>
-                          <span className="text-slate-300 mr-0.5 text-[10px]">└─</span>
-                          {leaf.childPn}
-                        </td>
-                        <td className="px-3 py-1.5">{leaf.childName}</td>
-                        <td className="px-3 py-1.5">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
-                            /구매|외주/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
-                            /도장/.test(leaf.partType) ? 'bg-purple-100 text-purple-700' :
-                            leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
-                          }`}>{leaf.partType || '-'}</span>
-                        </td>
-                        <td className="px-3 py-1.5 text-[10px] text-slate-500" title={leaf.supplier}>
-                          {leaf.supplier || '-'}
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono relative">
-                          {editingIdx === i ? (
-                            <input
-                              type="number"
-                              className="w-24 px-1.5 py-0.5 border border-blue-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              value={editValue}
-                              onChange={e => setEditValue(e.target.value)}
-                              onKeyDown={e => handleKeyDown(e, i)}
-                              onBlur={() => handlePriceSave(i)}
-                              autoFocus
-                              onClick={e => e.stopPropagation()}
-                            />
-                          ) : (
-                            <span className="flex items-center justify-end gap-0.5">
-                              <span
-                                className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
-                                  leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
-                                  leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
-                                  leaf.priceSource === '도장(적용)' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
-                                  'text-slate-700 border-b border-dashed border-slate-300'
-                                }`}
-                                onClick={(e) => { e.stopPropagation(); handlePriceClick(i); }}
-                                title="클릭하여 단가 수정"
-                              >
-                                ₩{fmt(leaf.unitPrice)}
+                <tbody className={isAllConfirmed ? '' : 'text-red-600'}>
+                  {(() => {
+                    // 재귀적 트리 렌더링
+                    let flatCounter = 0;
+                    const renderNode = (node: HierarchicalBomNode, parentKey: string, sibIdx: number): React.ReactNode[] => {
+                      const rows: React.ReactNode[] = [];
+                      const nodeKey = `${parentKey}/${node.childPn}-${node.depth}:${sibIdx}`;
+                      const hasChildren = node.children.length > 0;
+                      const isCollapsed_ = collapsedNodes.has(nodeKey);
+                      const i = flatCounter;
+                      const leaf = localLeaves[i];
+                      flatCounter++;
+
+                      if (!leaf) return rows;
+
+                      const isIntermediate = leaf.isIntermediate;
+
+                      rows.push(
+                        <tr
+                          key={nodeKey}
+                          ref={el => { rowRefs.current[i] = el; }}
+                          className={`border-t border-slate-100 cursor-pointer transition-colors ${
+                            selectedIdx === i ? 'bg-blue-100/70 ring-1 ring-inset ring-blue-300' :
+                            !isIntermediate && errorLeafIndices.has(i) ? 'bg-red-50 border-l-2 border-l-red-400' :
+                            'hover:bg-blue-50/50'
+                          }`}
+                          onClick={() => !isIntermediate && setSelectedIdx(selectedIdx === i ? null : i)}
+                        >
+                          {/* 레벨 */}
+                          <td className="px-2 py-1.5 text-center text-slate-400 text-[10px] font-mono">
+                            Lv{node.depth}
+                          </td>
+                          {/* 품번 + 접기/펼치기 */}
+                          <td className="py-1.5 pr-3" style={{ paddingLeft: `${8 + node.depth * 20}px` }}>
+                            <div className="flex items-center gap-1">
+                              {hasChildren ? (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleCollapse(nodeKey); }}
+                                  className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors flex-shrink-0"
+                                >
+                                  <svg className={`w-3 h-3 transition-transform ${isCollapsed_ ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                  </svg>
+                                </button>
+                              ) : (
+                                <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+                                </span>
+                              )}
+                              <span className={`font-mono text-[11px] truncate ${isIntermediate ? 'text-slate-500 font-medium' : 'text-indigo-600'}`} title={node.childPn}>
+                                {node.childPn}
                               </span>
-                              {leaf.calcDetail && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCalcOpenIdx(calcOpenIdx === i ? null : i);
-                                    setPaintOpenIdx(null);
-                                    setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                                  }}
-                                  className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
-                                    calcOpenIdx === i ? 'bg-amber-500 text-white' : 'text-amber-500 hover:bg-amber-100'
+                            </div>
+                          </td>
+                          {/* 품명 */}
+                          <td className="px-3 py-1.5 text-xs text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap" title={node.childName}>
+                            {node.childName}
+                          </td>
+                          {/* 유형 */}
+                          <td className="px-3 py-1.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                              /원재료/.test(leaf.partType) ? 'bg-blue-100 text-blue-700' :
+                              /구매|외주/.test(leaf.partType) ? 'bg-amber-100 text-amber-700' :
+                              /도장/.test(leaf.partType) ? 'bg-purple-100 text-purple-700' :
+                              /조립/.test(leaf.partType) ? 'bg-green-100 text-green-700' :
+                              /사출/.test(leaf.partType) ? 'bg-blue-50 text-blue-600' :
+                              leaf.partType ? 'bg-slate-100 text-slate-600' : 'bg-slate-50 text-slate-400'
+                            }`}>{leaf.partType || '-'}</span>
+                          </td>
+                          {/* 구입처 */}
+                          <td className="px-3 py-1.5 text-[10px] text-slate-500" title={leaf.supplier}>
+                            {leaf.supplier || '-'}
+                          </td>
+                          {/* 단위수량 */}
+                          <td className="px-3 py-1.5 text-right text-xs font-mono text-slate-600">
+                            {node.unitQty}
+                          </td>
+                          {/* 누적소요량 (인라인 수정) */}
+                          <td className="px-3 py-1.5 text-right font-mono">
+                            {isIntermediate ? (
+                              <span className="text-slate-400">{leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}</span>
+                            ) : editingQtyIdx === i ? (
+                              <input
+                                type="number"
+                                className="w-16 px-1 py-0.5 border border-green-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-1 focus:ring-green-500"
+                                value={editQtyValue}
+                                onChange={e => setEditQtyValue(e.target.value)}
+                                onKeyDown={e => handleQtyKeyDown(e, i)}
+                                onBlur={() => handleQtySave(i)}
+                                autoFocus
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span
+                                className="cursor-pointer border-b border-dashed border-slate-300 hover:bg-green-50 px-1 py-0.5 rounded transition-colors"
+                                onClick={(e) => { e.stopPropagation(); handleQtyClick(i); }}
+                                title="클릭하여 소요량 수정"
+                              >
+                                {leaf.totalQty < 1 ? leaf.totalQty.toFixed(4) : fmt(leaf.totalQty)}
+                              </span>
+                            )}
+                          </td>
+                          {/* 단가 (인라인 수정) */}
+                          <td className="px-2 py-1.5 text-right font-mono relative">
+                            {isIntermediate ? (
+                              <span className="text-slate-300">-</span>
+                            ) : editingIdx === i ? (
+                              <input
+                                type="number"
+                                className="w-20 px-1.5 py-0.5 border border-blue-400 rounded text-right text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                value={editValue}
+                                onChange={e => setEditValue(e.target.value)}
+                                onKeyDown={e => handleKeyDown(e, i)}
+                                onBlur={() => handlePriceSave(i)}
+                                autoFocus
+                                onClick={e => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span className="flex items-center justify-end gap-0.5">
+                                <span
+                                  className={`cursor-pointer px-1 py-0.5 rounded hover:bg-blue-100 transition-colors ${
+                                    leaf.priceSource === '수동입력' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                    leaf.priceSource === '사출(적용)' ? 'text-blue-700 font-semibold border-b border-dashed border-blue-400' :
+                                    leaf.priceSource === '도장(적용)' ? 'text-purple-700 font-semibold border-b border-dashed border-purple-400' :
+                                    'border-b border-dashed border-slate-300'
                                   }`}
-                                  title="사출재료비 산출근거 (클릭)"
+                                  onClick={(e) => { e.stopPropagation(); handlePriceClick(i); }}
+                                  title="클릭하여 단가 수정"
                                 >
-                                  &#9432;
-                                </button>
-                              )}
-                              {/도장/.test(leaf.partType) && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPaintOpenIdx(paintOpenIdx === i ? null : i);
-                                    setCalcOpenIdx(null);
-                                    setPaintAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect());
-                                  }}
-                                  className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${
-                                    paintOpenIdx === i ? 'bg-purple-500 text-white' : 'text-purple-500 hover:bg-purple-100'
-                                  }`}
-                                  title="도장단가 편집 (클릭)"
-                                >
-                                  &#9998;
-                                </button>
-                              )}
-                            </span>
-                          )}
-                        </td>
-                        <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
-                          leaf.priceSource === '수동입력' ? 'text-purple-700' :
-                          leaf.priceSource === '사출(적용)' ? 'text-blue-700' :
-                          leaf.priceSource === '도장(적용)' ? 'text-purple-700' : ''
-                        }`}>₩{fmt(leaf.cost)}</td>
-                        <td className="px-3 py-1.5 text-[10px]">
-                          <span className={
-                            leaf.priceSource === '수동입력' ? 'text-purple-600 font-semibold' :
-                            leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
-                            leaf.priceSource === '도장(적용)' ? 'text-purple-600 font-semibold' :
-                            'text-slate-400'
-                          }>
-                            {leaf.priceSource}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  )}
+                                  ₩{fmt(leaf.unitPrice)}
+                                </span>
+                                {leaf.calcDetail && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setCalcOpenIdx(calcOpenIdx === i ? null : i); setPaintOpenIdx(null); setCalcAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+                                    className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${calcOpenIdx === i ? 'bg-amber-500 text-white' : 'text-amber-500 hover:bg-amber-100'}`}
+                                    title="사출재료비 산출근거"
+                                  >&#9432;</button>
+                                )}
+                                {/도장/.test(leaf.partType) && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setPaintOpenIdx(paintOpenIdx === i ? null : i); setCalcOpenIdx(null); setPaintAnchorRect((e.currentTarget as HTMLElement).getBoundingClientRect()); }}
+                                    className={`text-[11px] leading-none rounded-full w-4 h-4 flex items-center justify-center transition-colors ${paintOpenIdx === i ? 'bg-purple-500 text-white' : 'text-purple-500 hover:bg-purple-100'}`}
+                                    title="도장단가 편집"
+                                  >&#9998;</button>
+                                )}
+                              </span>
+                            )}
+                          </td>
+                          {/* 금액 */}
+                          <td className={`px-3 py-1.5 text-right font-mono font-semibold ${
+                            isIntermediate ? 'text-slate-300' :
+                            leaf.priceSource === '수동입력' || leaf.priceSource === '도장(적용)' ? 'text-purple-700' :
+                            leaf.priceSource === '사출(적용)' ? 'text-blue-700' : ''
+                          }`}>{isIntermediate ? '-' : `₩${fmt(leaf.cost)}`}</td>
+                          {/* 출처 */}
+                          <td className="px-3 py-1.5 text-[10px]">
+                            {isIntermediate ? '' : (
+                              <span className={
+                                leaf.priceSource === '수동입력' || leaf.priceSource === '도장(적용)' ? 'text-purple-600 font-semibold' :
+                                leaf.priceSource === '사출(적용)' ? 'text-blue-600 font-semibold' :
+                                'text-slate-400'
+                              }>{leaf.priceSource}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+
+                      if (hasChildren && !isCollapsed_) {
+                        for (let ci = 0; ci < node.children.length; ci++) {
+                          rows.push(...renderNode(node.children[ci], nodeKey, ci));
+                        }
+                      } else if (hasChildren && isCollapsed_) {
+                        // 접힌 노드의 하위 카운터를 스킵
+                        const skipCount = (n: HierarchicalBomNode): number => {
+                          let count = 0;
+                          for (const c of n.children) { count += 1 + skipCount(c); }
+                          return count;
+                        };
+                        flatCounter += skipCount(node);
+                      }
+
+                      return rows;
+                    };
+
+                    const allRows: React.ReactNode[] = [];
+                    for (let ri = 0; ri < treeData.length; ri++) {
+                      allRows.push(...renderNode(treeData[ri], '', ri));
+                    }
+                    return allRows;
+                  })()}
                   {/* BOM 소계 */}
-                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
-                    <td colSpan={6} className="px-3 py-2 text-right">
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-700">
+                    <td colSpan={8} className="px-3 py-2 text-right">
                       <span className="flex items-center justify-end gap-2">
                         BOM 전개 소계
                         {totalBomCost > 0 && (
@@ -788,14 +1017,14 @@ const BomTreePopup: React.FC<{
                   </tr>
                   {gapFromStd > 0 && (
                     <tr className="bg-amber-50 text-amber-700">
-                      <td colSpan={6} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
+                      <td colSpan={8} className="px-3 py-2 text-right text-xs">가공/도장 재료비 (표준 - BOM 차이)</td>
                       <td className="px-3 py-2 text-right font-mono font-semibold">₩{fmt(gapFromStd)}</td>
                       <td className="px-3 py-2 text-[10px]">추정치</td>
                     </tr>
                   )}
                   {row.stdMaterialCost > 0 && totalBomCost > row.stdMaterialCost && (
                     <tr className="bg-red-50 text-red-700">
-                      <td colSpan={6} className="px-3 py-2 text-right text-xs">
+                      <td colSpan={8} className="px-3 py-2 text-right text-xs">
                         표준재료비(₩{fmt(row.stdMaterialCost)}) &lt; BOM 소계(₩{fmt(totalBomCost)}) — 표준재료비 재검토 필요
                       </td>
                       <td className="px-3 py-2 text-right font-mono font-semibold text-red-600">
@@ -805,7 +1034,7 @@ const BomTreePopup: React.FC<{
                     </tr>
                   )}
                   <tr className="bg-blue-50 font-bold text-blue-800">
-                    <td colSpan={6} className="px-3 py-2 text-right">표준재료비 합계</td>
+                    <td colSpan={8} className="px-3 py-2 text-right">표준재료비 합계</td>
                     <td className="px-3 py-2 text-right font-mono">₩{fmt(row.materialCost)}</td>
                     <td></td>
                   </tr>
@@ -1496,7 +1725,7 @@ const ProductMaterialCostView: React.FC = () => {
               return {
                 childPn: node.childPn,
                 childName: node.childName || nodeRef?.itemName || '',
-                qty: 0, totalQty: node.totalRequired,
+                qty: node.unitQty || 0, totalQty: node.totalRequired,
                 unitPrice: 0, cost: 0, priceSource: '',
                 depth: node.depth, partType: node.partType || nodeRef?.processType || '',
                 supplier: nodeRef?.supplier || node.supplier || '',
@@ -1612,7 +1841,7 @@ const ProductMaterialCostView: React.FC = () => {
             return {
               childPn: l.childPn,
               childName: l.childName || leafRef?.itemName || '',
-              qty: 0, totalQty: displayQty,
+              qty: l.unitQty || 0, totalQty: displayQty,
               unitPrice: finalPrice, cost: displayQty * finalPrice,
               priceSource: finalSource, depth: l.depth,
               partType, supplier,

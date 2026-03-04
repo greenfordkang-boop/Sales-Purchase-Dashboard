@@ -418,6 +418,7 @@ export interface BomTreeNode {
   childName: string;
   supplier: string;
   partType: string;
+  unitQty: number;       // 단위 소요량 (BOM 상 1개 모품 대비)
   totalRequired: number;
   parentPn: string;
   depth: number;
@@ -457,7 +458,7 @@ export const expandBomToTree = (
     if (isTerminal) {
       results.push({
         childPn: child.childPn, childName: child.childName, supplier: child.supplier,
-        partType: child.partType || '', totalRequired: requiredQty, parentPn,
+        partType: child.partType || '', unitQty: child.qty, totalRequired: requiredQty, parentPn,
         depth: depth + 1, isLeaf: true,
       });
     } else {
@@ -466,7 +467,7 @@ export const expandBomToTree = (
       // 중간 노드: 그룹 헤더 표시 + 하위 전개
       results.push({
         childPn: child.childPn, childName: child.childName, supplier: child.supplier,
-        partType: child.partType || '', totalRequired: requiredQty, parentPn,
+        partType: child.partType || '', unitQty: child.qty, totalRequired: requiredQty, parentPn,
         depth: depth + 1, isLeaf: alsoEmit, // alsoEmit 노드는 자체 단가도 있으므로 leaf로도 표시
       });
       const subNodes = expandBomToTree(child.childPn, requiredQty, bomRelations, new Set(seen), depth + 1, maxDepth, forceLeafPns, alsoEmitPns);
@@ -479,4 +480,70 @@ export const expandBomToTree = (
     }
   }
   return results;
+};
+
+// ============================================
+// Flat → Hierarchical 변환 (팝업 트리뷰용)
+// ============================================
+
+/** 계층형 BOM 트리 노드 */
+export interface HierarchicalBomNode {
+  childPn: string;
+  childName: string;
+  supplier: string;
+  partType: string;
+  unitQty: number;
+  totalRequired: number;
+  parentPn: string;
+  depth: number;
+  isLeaf: boolean;
+  children: HierarchicalBomNode[];
+  // enrichment fields (팝업에서 추가)
+  unitPrice?: number;
+  cost?: number;
+  priceSource?: string;
+  calcDetail?: unknown;
+  paintCalcDetail?: unknown;
+  isPaintRawMat?: boolean;
+}
+
+/** DFS flat BomTreeNode[] → 계층형 HierarchicalBomNode[] 변환
+ *  depth 기반으로 부모-자식 관계를 재구성합니다. */
+export const flatToHierarchical = (flatNodes: BomTreeNode[]): HierarchicalBomNode[] => {
+  if (flatNodes.length === 0) return [];
+
+  const roots: HierarchicalBomNode[] = [];
+  // depth별 마지막 노드를 추적하여 부모 결정
+  const stack: HierarchicalBomNode[] = [];
+
+  for (const node of flatNodes) {
+    const hNode: HierarchicalBomNode = {
+      childPn: node.childPn,
+      childName: node.childName,
+      supplier: node.supplier,
+      partType: node.partType,
+      unitQty: node.unitQty,
+      totalRequired: node.totalRequired,
+      parentPn: node.parentPn,
+      depth: node.depth,
+      isLeaf: node.isLeaf,
+      children: [],
+    };
+
+    // stack에서 현재 depth보다 작은 노드를 부모로 찾기
+    while (stack.length > 0 && stack[stack.length - 1].depth >= node.depth) {
+      stack.pop();
+    }
+
+    if (stack.length === 0) {
+      roots.push(hNode);
+    } else {
+      stack[stack.length - 1].children.push(hNode);
+    }
+
+    // 중간 노드는 stack에 push (leaf도 push해야 같은 depth 형제 관리 가능)
+    stack.push(hNode);
+  }
+
+  return roots;
 };

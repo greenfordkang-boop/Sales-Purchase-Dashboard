@@ -2252,6 +2252,54 @@ export const bomMasterService = {
     await insertInBatches('bom_master', rows);
     console.log(`✅ bom_master saved: ${rows.length} rows`);
   },
+
+  /** BOM 소요량(qty) 업데이트 */
+  async updateQty(parentPn: string, childPn: string, newQty: number): Promise<boolean> {
+    if (!isSupabaseConfigured() || isTableMissing('bom_master')) {
+      // localStorage fallback
+      const stored = localStorage.getItem('dashboard_bomMasterData');
+      if (stored) {
+        const records = JSON.parse(stored) as Array<{ parentPn: string; childPn: string; qty: number; [k: string]: unknown }>;
+        let found = false;
+        for (const r of records) {
+          if (r.parentPn === parentPn && r.childPn === childPn) {
+            r.qty = newQty;
+            found = true;
+          }
+        }
+        if (found) {
+          try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { /* ignore */ }
+          return true;
+        }
+      }
+      return false;
+    }
+
+    try {
+      const { error } = await supabase!
+        .from('bom_master')
+        .update({ qty: newQty })
+        .eq('parent_pn', parentPn)
+        .eq('child_pn', childPn);
+      if (error) {
+        console.error('bomMasterService.updateQty error:', error);
+        return false;
+      }
+      // localStorage도 동기화
+      const stored = localStorage.getItem('dashboard_bomMasterData');
+      if (stored) {
+        const records = JSON.parse(stored);
+        for (const r of records) {
+          if (r.parentPn === parentPn && r.childPn === childPn) r.qty = newQty;
+        }
+        try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { /* ignore */ }
+      }
+      return true;
+    } catch (e) {
+      console.error('bomMasterService.updateQty exception:', e);
+      return false;
+    }
+  },
 };
 
 // ============================================
