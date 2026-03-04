@@ -57,6 +57,7 @@ interface BomLeaf {
   calcDetail?: CalcDetail;
   paintCalcDetail?: PaintCalcDetail;
   isIntermediate?: boolean;
+  isPaintRawMat?: boolean;
 }
 
 interface ProductRow {
@@ -1527,7 +1528,16 @@ const ProductMaterialCostView: React.FC = () => {
             }
             let finalPrice = price;
             let finalSource = source;
-            if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
+
+            // 도료 원재료 판정: materialTypeMap에서 PAINT/도료 확인
+            const leafMatType = materialTypeMap.get(normalizePn(l.childPn)) || '';
+            const isPaintRawMat = /PAINT|도료/i.test(leafMatType);
+
+            if (isPaintRawMat && price > 0 && (source === '재질코드' || source === '원재료')) {
+              // 도료 원재료: 단가=₩/kg, BOM qty=g → g→kg 변환 (/1000)
+              finalPrice = price / 1000;
+              finalSource = source + '(g→kg)';
+            } else if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
               finalPrice = paintCalcDetail.totalCalcCost;
               finalSource = '도장(산출)';
             }
@@ -1539,9 +1549,11 @@ const ProductMaterialCostView: React.FC = () => {
               priceSource: finalSource, depth: l.depth,
               partType, supplier,
               calcDetail: finalCalcDetail, paintCalcDetail,
+              isPaintRawMat,
             };
           });
-          bomMaterialCost = bomLeaves.reduce((s, l) => s + l.cost, 0);
+          // bomMaterialCost: 도료 원재료 제외 (도장비는 아래 자동산입에서 별도 처리)
+          bomMaterialCost = bomLeaves.filter(l => !l.isPaintRawMat).reduce((s, l) => s + l.cost, 0);
 
         }
 

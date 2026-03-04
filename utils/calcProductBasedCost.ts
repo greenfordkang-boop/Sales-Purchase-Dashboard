@@ -392,6 +392,9 @@ export function calcProductBasedMaterialCost(params: CalcProductBasedParams): Un
     if (bomParent) {
       const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
       for (const leaf of leaves) {
+        // 도료 원재료는 BOM leaf에서 제외 → calcProductPaintCost에서 별도 처리
+        const leafMatType = materialTypeMap.get(normalizePn(leaf.childPn)) || '';
+        if (/PAINT|도료/i.test(leafMatType)) continue;
         const { price } = getLeafPrice(leaf.childPn);
         bomMaterialCost += leaf.totalRequired * price;
       }
