@@ -113,6 +113,8 @@ export function calcPaintCost(
   materialPrices: Map<string, number>,
 ): number {
   const lossMultiplier = 1 + (product.lossRate > 0 ? product.lossRate / 100 : 0);
+  // paintQty는 LOT 기준 총량(g), lotQty = LOT당 생산수량 → EA환산
+  const lotDivisor = (product.lotQty && product.lotQty > 0) ? product.lotQty : 1;
   let totalPaintCost = 0;
 
   // 각 도 (1~4도) 처리
@@ -126,15 +128,13 @@ export function calcPaintCost(
 
     const paintCode = paintCodes[d];
     if (!paintCode) {
-      // 도료코드 없으면 재질단가에서 직접 조회
       continue;
     }
 
     const mix = paintMixMap.get(normalizePn(paintCode));
     if (mix) {
       // 배합비율 기반 산출
-      // 올바른 공식: 배합총비용/kg = Σ(구성요소단가×비율) / Σ비율 (가중평균)
-      // 도장비/EA = paintQty(g/EA) × 가중평균단가(₩/kg) / 1000
+      // 공식: 배합가(₩/kg) × paintQty(g) / 1000 × loss / lotQty
       const mainP = mix.mainPrice > 0 ? mix.mainPrice : (materialPrices.get(normalizePn(mix.mainCode)) || 0);
       const hardP = mix.hardenerPrice > 0 ? mix.hardenerPrice : (materialPrices.get(normalizePn(mix.hardenerCode)) || 0);
       const thinP = mix.thinnerPrice > 0 ? mix.thinnerPrice : (materialPrices.get(normalizePn(mix.thinnerCode)) || 0);
@@ -145,18 +145,15 @@ export function calcPaintCost(
       const totalRatio = mR + hR + tR;
 
       if (totalRatio > 0) {
-        // 가중평균 혼합단가 (₩/kg)
         const mixedPricePerKg = (mainP * mR + hardP * hR + thinP * tR) / totalRatio;
-        totalPaintCost += (qty * mixedPricePerKg / 1000) * lossMultiplier;
+        totalPaintCost += (qty * mixedPricePerKg / 1000) * lossMultiplier / lotDivisor;
       } else if (mainP > 0) {
-        // 비율 정보 없으면 주제 단가만 사용
-        totalPaintCost += (qty * mainP / 1000) * lossMultiplier;
+        totalPaintCost += (qty * mainP / 1000) * lossMultiplier / lotDivisor;
       }
     } else {
-      // 배합 정보 없음 → 재질단가에서 직접 가격 조회
       const directPrice = materialPrices.get(normalizePn(paintCode)) || 0;
       if (directPrice > 0) {
-        totalPaintCost += (qty * directPrice / 1000) * lossMultiplier;
+        totalPaintCost += (qty * directPrice / 1000) * lossMultiplier / lotDivisor;
       }
     }
   }
@@ -540,6 +537,7 @@ export function buildReferenceDataFromMasters(
       paintQty2: ri.paintQty2,
       paintQty3: ri.paintQty3,
       paintQty4: ri.paintQty4 || 0,
+      lotQty: ri.lotQty || 0,
     };
     productInfoMap.set(normalizePn(ri.itemCode), pi);
     if (ri.customerPn) productInfoMap.set(normalizePn(ri.customerPn), pi);

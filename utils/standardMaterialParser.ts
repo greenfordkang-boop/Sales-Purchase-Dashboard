@@ -133,6 +133,7 @@ export interface ProductInfoItem {
   rawMaterialCode3: string; // 원재료코드3 (도장1도)
   rawMaterialCode4: string; // 원재료코드4 (도장2도)
   lossRate: number;        // Loss율 (%)
+  lotQty: number;          // LOT수량 (도장비 EA환산용)
 }
 
 /** 재질단가 시트 - 원재료 kg당 표준단가 */
@@ -484,6 +485,7 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
   const cRaw3 = findCol(colMap, '원재료코드3');
   const cRaw4 = findCol(colMap, '원재료코드4');
   const cLoss = findCol(colMap, 'Loss', 'loss율');
+  const cLotQty = findCol(colMap, 'LOT수량', 'LOT', 'Lot수량');
 
   for (let i = headerRow + 1; i < data.length; i++) {
     const row = data[i];
@@ -509,6 +511,7 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
       rawMaterialCode3: cRaw3 >= 0 ? str(row[cRaw3]) : '',
       rawMaterialCode4: cRaw4 >= 0 ? str(row[cRaw4]) : '',
       lossRate: cLoss >= 0 ? num(row[cLoss]) : 0,
+      lotQty: cLotQty >= 0 ? num(row[cLotQty]) : 0,
     });
   }
 

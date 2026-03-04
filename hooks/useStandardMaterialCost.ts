@@ -16,7 +16,7 @@ import {
   PaintMixRatio,
   ItemStandardCost,
 } from '../utils/standardMaterialParser';
-import { ReferenceInfoRecord, MaterialCodeRecord } from '../utils/bomMasterParser';
+import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from '../utils/bomMasterParser';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   referenceInfoService,
@@ -29,6 +29,7 @@ import {
   paintMixRatioService,
   outsourceInjPriceService,
   itemStandardCostService,
+  productCodeService,
 } from '../services/supabaseService';
 
 // Re-export shared types
@@ -83,6 +84,7 @@ export interface UseStandardMaterialCostData {
   masterOutsourcePrices: OutsourcePrice[];
   masterPaintMixRatios: PaintMixRatio[];
   masterItemStandardCosts: ItemStandardCost[];
+  masterProductCodes: ProductCodeRecord[];
 
   // Excel data
   excelData: StandardMaterialData | null;
@@ -145,6 +147,7 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
     () => safeParseJson('dashboard_paintMixRatioMaster', [])
   );
   const [masterItemStandardCosts, setMasterItemStandardCosts] = useState<ItemStandardCost[]>([]);
+  const [masterProductCodes, setMasterProductCodes] = useState<ProductCodeRecord[]>([]);
 
   // --- Loading state ---
   const [supabaseLoading, setSupabaseLoading] = useState(false);
@@ -189,8 +192,9 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
         const needOutsourcePrice = masterOutsourcePrices.length === 0;
         const needPaintMix = masterPaintMixRatios.length === 0;
         const needItemStdCost = masterItemStandardCosts.length === 0;
+        const needProductCodes = masterProductCodes.length === 0;
 
-        const [fcRes, bomRes, revRes, purRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes] = await Promise.allSettled([
+        const [fcRes, bomRes, revRes, purRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes] = await Promise.allSettled([
           needForecast ? forecastService.getItems('current') : Promise.resolve([]),
           needBom ? bomMasterService.getAll() : Promise.resolve([]),
           needRevenue ? itemRevenueService.getAll() : Promise.resolve([]),
@@ -201,6 +205,7 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
           needOutsourcePrice ? outsourceInjPriceService.getAll() : Promise.resolve([]),
           needPaintMix ? paintMixRatioService.getAll() : Promise.resolve([]),
           needItemStdCost ? itemStandardCostService.getAll() : Promise.resolve([]),
+          needProductCodes ? productCodeService.getAll() : Promise.resolve([]),
         ]);
 
         // 한 번에 setState — React 18+ 자동 배치로 useMemo 1회만 재계산
@@ -214,6 +219,7 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
         const op = opRes.status === 'fulfilled' ? opRes.value : [];
         const pm = pmRes.status === 'fulfilled' ? pmRes.value : [];
         const isc = iscRes.status === 'fulfilled' ? iscRes.value : [];
+        const pcs = pcRes.status === 'fulfilled' ? pcRes.value : [];
 
         if (needForecast && fc.length > 0) setForecastData(fc);
         if (needBom && bom.length > 0) setBomData(bom as BomRecord[]);
@@ -225,8 +231,9 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
         if (needOutsourcePrice && op.length > 0) setMasterOutsourcePrices(op as OutsourcePrice[]);
         if (needPaintMix && pm.length > 0) setMasterPaintMixRatios(pm as PaintMixRatio[]);
         if (needItemStdCost && isc.length > 0) setMasterItemStandardCosts(isc);
+        if (needProductCodes && pcs.length > 0) setMasterProductCodes(pcs as ProductCodeRecord[]);
 
-        console.log(`[표준재료비] Supabase 병렬 로드 완료: 매출계획 ${fc.length}건, BOM ${bom.length}건, 매출실적 ${rev.length}건, 입고 ${pur.length}건, 기준정보 ${ri.length}건, 재질코드 ${mc.length}건, 구매단가 ${pp.length}건, 외주사출 ${op.length}건, 도료배합 ${pm.length}건, 품목별원가 ${isc.length}건`);
+        console.log(`[표준재료비] Supabase 병렬 로드 완료: 매출계획 ${fc.length}건, BOM ${bom.length}건, 매출실적 ${rev.length}건, 입고 ${pur.length}건, 기준정보 ${ri.length}건, 재질코드 ${mc.length}건, 구매단가 ${pp.length}건, 외주사출 ${op.length}건, 도료배합 ${pm.length}건, 품목별원가 ${isc.length}건, 품목코드 ${pcs.length}건`);
       } catch (err) {
         console.error('[표준재료비] Supabase 자동 로드 실패:', err);
       } finally {
@@ -278,6 +285,7 @@ export function useStandardMaterialCost(): UseStandardMaterialCostData {
     masterOutsourcePrices, setMasterOutsourcePrices,
     masterPaintMixRatios, setMasterPaintMixRatios,
     masterItemStandardCosts, setMasterItemStandardCosts,
+    masterProductCodes,
     excelData, setExcelData,
     loadAllData,
   };

@@ -6,11 +6,13 @@ import { ForecastItem } from '../utils/salesForecastParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
 import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, itemRevenueService, itemStandardCostService, purchasePriceService, outsourceInjPriceService, paintMixRatioService } from '../services/supabaseService';
-import { PaintMixRatio } from '../utils/standardMaterialParser';
+import { PaintMixRatio, PurchasePrice, OutsourcePrice, ItemStandardCost } from '../utils/standardMaterialParser';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import paintConsumptionData from '../data/paintConsumptionByProduct.json';
 import { downloadCSV } from '../utils/csvExport';
+import { calcProductBasedMaterialCost, PaintConsumptionEntry, FallbackStdCost } from '../utils/calcProductBasedCost';
+import fallbackPurchasePrices from '../data/purchasePrices.json';
 
 // ============================================================
 // Types
@@ -1278,6 +1280,20 @@ const ProductMaterialCostView: React.FC = () => {
         }
       }
 
+      // 구매단가 fallback 병합 (StandardMaterialCostView 동일 패턴 — 통합 계산용)
+      const existingPPKeys = new Set(purchasePrices.map(p => normalizePn(p.itemCode)));
+      const mergedPurchasePrices: PurchasePrice[] = [...purchasePrices];
+      for (const fp of (fallbackPurchasePrices as { partNo: string; partName: string; unitPrice: number }[])) {
+        const key = normalizePn(fp.partNo);
+        if (!existingPPKeys.has(key)) {
+          mergedPurchasePrices.push({
+            itemCode: fp.partNo, customerPn: '', itemName: fp.partName,
+            supplier: '', currentPrice: fp.unitPrice, previousPrice: 0,
+          });
+          existingPPKeys.add(key);
+        }
+      }
+
       // 외주사출판매가 맵
       const outsourcePriceMap = new Map<string, number>();
       for (const op of outsourcePrices) {
@@ -1495,13 +1511,14 @@ const ProductMaterialCostView: React.FC = () => {
               const paintRawCodes = [leafRef.rawMaterialCode1, leafRef.rawMaterialCode2, leafRef.rawMaterialCode3, leafRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
               const paintQtys = [leafRef.paintQty1, leafRef.paintQty2, leafRef.paintQty3, leafRef.paintQty4 || 0];
               const lossMultiplier = 1 + ((leafRef.lossRate || 0) / 100);
+              const leafLotDivisor = (leafRef.lotQty && leafRef.lotQty > 0) ? leafRef.lotQty : 1;
               const coats: PaintCalcDetail['coats'] = [];
               for (let pIdx = 0; pIdx < paintRawCodes.length; pIdx++) {
                 const raw = paintRawCodes[pIdx];
                 const { price: pp, name: pName } = getPaintBlendedPrice(raw);
                 const pq = paintQtys[pIdx] || 0;
                 if (pp > 0 || pq > 0) {
-                  coats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * lossMultiplier });
+                  coats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * lossMultiplier / leafLotDivisor });
                 }
               }
               if (coats.length > 0) {
@@ -1560,21 +1577,22 @@ const ProductMaterialCostView: React.FC = () => {
           });
           bomMaterialCost += paintCost;
         } else if (productRef && /도장/i.test(productRef.processType || '')) {
-          // 2순위: 기존 로직 (기준정보 paintQty × 가중평균 배합가 × loss)
+          // 2순위: 기준정보 paintQty × 배합가 ÷ lotQty (paintQty=LOT총량, lotQty=LOT생산수량)
           const paintRawCodes = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
           const paintQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4 || 0];
           const paintLoss = 1 + ((productRef.lossRate || 0) / 100);
+          const prodLotDivisor = (productRef.lotQty && productRef.lotQty > 0) ? productRef.lotQty : 1;
           for (let paintIdx = 0; paintIdx < paintRawCodes.length; paintIdx++) {
             const rawCode = paintRawCodes[paintIdx];
             const { price: paintPrice, name: paintName } = getPaintBlendedPrice(rawCode);
             const pqty = paintQtys[paintIdx] || 0;
             if (paintPrice > 0 && pqty > 0) {
-              const cost = (paintPrice * pqty / 1000) * paintLoss; // g→kg 변환 + loss
+              const cost = (paintPrice * pqty / 1000) * paintLoss / prodLotDivisor;
               paintCost += cost;
               bomLeaves.push({
                 childPn: rawCode,
                 childName: paintName || `도장재료 ${paintIdx + 1}도`,
-                qty: pqty, totalQty: pqty / 1000,
+                qty: pqty, totalQty: pqty / 1000 / prodLotDivisor,
                 unitPrice: paintPrice, cost,
                 priceSource: `도장 paintQty${paintIdx + 1}`,
                 depth: 0, partType: '도장', supplier: '',
@@ -1728,13 +1746,14 @@ const ProductMaterialCostView: React.FC = () => {
             const paintRawCodesP = [productRef.rawMaterialCode1, productRef.rawMaterialCode2, productRef.rawMaterialCode3, productRef.rawMaterialCode4 || ''].filter(Boolean) as string[];
             const pQtys = [productRef.paintQty1, productRef.paintQty2, productRef.paintQty3, productRef.paintQty4 || 0];
             const pLoss = 1 + ((productRef.lossRate || 0) / 100);
+            const pLotDiv = (productRef.lotQty && productRef.lotQty > 0) ? productRef.lotQty : 1;
             const pCoats: PaintCalcDetail['coats'] = [];
             for (let pI = 0; pI < paintRawCodesP.length; pI++) {
               const raw = paintRawCodesP[pI];
               const { price: pp, name: pName } = getPaintBlendedPrice(raw);
               const pq = pQtys[pI] || 0;
               if (pp > 0 || pq > 0) {
-                pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * pLoss });
+                pCoats.push({ rawCode: raw, rawName: pName, pricePerKg: pp, qtyGrams: pq, cost: (pp * pq / 1000) * pLoss / pLotDiv });
               }
             }
             if (pCoats.length > 0) {
@@ -1775,6 +1794,44 @@ const ProductMaterialCostView: React.FC = () => {
           productPaintDetail,
         });
       }
+
+      // ===== 통합 재료비 오버라이드: calcProductBasedMaterialCost → 표준재료비/MRP 탭과 100% 일치 =====
+      const sharedResult = calcProductBasedMaterialCost({
+        forecastData,
+        itemStandardCosts: dbStdCosts as unknown as ItemStandardCost[],
+        bomRecords: deduped,
+        refInfo,
+        materialCodes: mergedMat,
+        purchasePrices: mergedPurchasePrices as PurchasePrice[],
+        outsourcePrices: outsourcePrices as unknown as OutsourcePrice[],
+        paintMixRatios: paintMixRatios as PaintMixRatio[],
+        productCodes,
+        paintConsumptionData: paintConsumptionData as unknown as PaintConsumptionEntry[],
+        fallbackStandardCosts: fallbackStandardCosts as unknown as FallbackStdCost[],
+        fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
+        actualRevenue: revenueData,
+        monthIndex: -1,
+        currentMonth: new Date().getMonth(),
+      });
+
+      const costOverrideMap = new Map<string, number>();
+      for (const ir of sharedResult.itemRows) {
+        costOverrideMap.set(normalizePn(ir.itemCode), ir.totalCostPerEa);
+        if (ir.customerPn) costOverrideMap.set(normalizePn(ir.customerPn), ir.totalCostPerEa);
+      }
+
+      let overrideCount = 0;
+      for (const row of result) {
+        const pn = normalizePn(row.newPartNo || row.partNo);
+        const override = costOverrideMap.get(pn) ?? costOverrideMap.get(normalizePn(row.partNo));
+        if (override !== undefined && override > 0) {
+          row.materialCost = override;
+          row.yearlyMaterialCost = override * row.yearlyQty;
+          row.materialRatio = row.unitPrice > 0 ? (override / row.unitPrice) * 100 : 0;
+          overrideCount++;
+        }
+      }
+      console.log(`[제품별재료비 통합] ${overrideCount}/${result.length}건 per-EA 오버라이드 → 통합 총액: ₩${Math.round(sharedResult.totalStandard).toLocaleString()}`);
 
       console.log(`[제품별재료비] refInfo 매칭: ${_debugRefMatched}/${_debugRefMatched + _debugRefMissed}건 (${_debugRefMissed}건 미매칭)`);
       console.log(`[제품별재료비] refInfoMap 키 수: ${refInfoMap.size}, custToInternal: ${custToInternal.size}, internalToCust: ${internalToCust.size}`);

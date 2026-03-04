@@ -33,10 +33,12 @@ import {
   UnifiedCalcResult,
   CalcItemRow,
 } from '../utils/materialCostCalculator';
+import { calcProductBasedMaterialCost } from '../utils/calcProductBasedCost';
 import { ReferenceInfoRecord, MaterialCodeRecord } from '../utils/bomMasterParser';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import fallbackPurchasePrices from '../data/purchasePrices.json';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
+import paintConsumptionData from '../data/paintConsumptionByProduct.json';
 import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService, materialCodeService, paintMixLogService } from '../services/supabaseService';
 import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
 import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
@@ -146,6 +148,7 @@ const StandardMaterialCostView: React.FC = () => {
     masterRefInfo, masterMaterialCodes,
     masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios,
     masterItemStandardCosts,
+    masterProductCodes,
     excelData,
     setPnMapping, setBomData, setExcelData,
     setMasterItemStandardCosts,
@@ -404,54 +407,29 @@ const StandardMaterialCostView: React.FC = () => {
     // Supabase 로딩 중이면 스킵 (완료 후 1회만 계산)
     if (supabaseLoading) return null;
 
-    // ===== 품목별원가 모드: item_standard_cost 데이터가 있으면 우선 사용 (Excel 검증된 per-item 비용) =====
-    if (dataMode === 'master' && masterItemStandardCosts.length > 0) {
-      // 월 인덱스 (0=1월, ...)
-      const monthIdx = selectedMonth === 'All' ? 0 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
+    // ===== 제품별재료비 기준 통합 모드: forecastData 기준으로 모든 품목 산출 (ProductMaterialCostView 동일 로직) =====
+    // master + auto 모두 forecastData 있으면 통합 함수 사용 → 3개 탭 100% 일치
+    if ((dataMode === 'master' || dataMode === 'auto') && forecastData.length > 0) {
+      const monthIdx = selectedMonth === 'All' ? -1 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
+      const currentMonth = new Date().getMonth(); // 0-based
 
-      // 매출 계산: 매출계획 or 매출실적에서 해당 월 집계
-      let totalRevenue = 0;
-      const forecastQtyMap = new Map<string, number>();
-      if (forecastData.length > 0) {
-        forecastData.forEach(fc => {
-          const qty = fc.monthlyQty?.[monthIdx] || 0;
-          const rev = fc.monthlyRevenue?.[monthIdx] || 0;
-          totalRevenue += rev;
-          // forecastQtyMap: item_standard_cost의 item_code/customer_pn과 매칭하기 위해
-          // 고객P/N과 내부코드 모두 등록
-          if (qty > 0) {
-            const pn = normalizePn(fc.partNo || fc.newPartNo || '');
-            if (pn) forecastQtyMap.set(pn, (forecastQtyMap.get(pn) || 0) + qty);
-            if (fc.newPartNo) {
-              const npn = normalizePn(fc.newPartNo);
-              if (npn && npn !== pn) forecastQtyMap.set(npn, (forecastQtyMap.get(npn) || 0) + qty);
-            }
-          }
-        });
-      }
-      if (totalRevenue === 0 && itemRevenueData.length > 0) {
-        const mm = String(monthIdx + 1).padStart(2, '0');
-        itemRevenueData.forEach(row => {
-          const dm = row.period?.match(/\d{4}-(\d{1,2})/);
-          const m = dm ? dm[1].padStart(2, '0') : null;
-          if (m === mm) totalRevenue += row.amount || 0;
-        });
-      }
-
-      // EA단가=0인 품목에 fallback EA단가 적용
-      const enrichedItems = masterItemStandardCosts.map(item => {
-        const resin = Number(item.resin_cost_per_ea) || 0;
-        const paint = Number(item.paint_cost_per_ea) || 0;
-        const mat = Number(item.material_cost_per_ea) || 0;
-        if (resin > 0 || paint > 0 || mat > 0) return item;
-        const fb = enrichedStdCostMap.get(normalizePn(item.item_code))
-                || enrichedStdCostMap.get(normalizePn(item.customer_pn || ''));
-        if (fb && fb > 0) {
-          return { ...item, material_cost_per_ea: fb };
-        }
-        return item;
+      const result = calcProductBasedMaterialCost({
+        forecastData,
+        itemStandardCosts: masterItemStandardCosts,
+        bomRecords: bomData,
+        refInfo: masterRefInfo,
+        materialCodes: enrichedMaterialCodes,
+        purchasePrices: enrichedPurchasePrices,
+        outsourcePrices: masterOutsourcePrices,
+        paintMixRatios: masterPaintMixRatios,
+        productCodes: masterProductCodes,
+        paintConsumptionData: paintConsumptionData as { itemCode: string; custPN?: string; paintGPerEa: number; paintCostPerEa: number }[],
+        fallbackStandardCosts: (fallbackStandardCosts as { productCode: string; customerPn?: string; eaCost: number; processType?: string; productName?: string }[]),
+        fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
+        actualRevenue: itemRevenueData,
+        monthIndex: monthIdx,
+        currentMonth,
       });
-      const result = calcFromItemStandardCosts(enrichedItems, monthIdx, totalRevenue, forecastQtyMap);
 
       const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
         id: `isc-${ir.itemCode}-${idx}`,
@@ -477,17 +455,17 @@ const StandardMaterialCostView: React.FC = () => {
         totalStandard: result.totalStandard,
         totalActual: 0,
         byType,
-        forecastRevenue: totalRevenue,
+        forecastRevenue: result.revenue,
         standardRatio: result.standardRatio,
         actualRatio: 0,
-        matchRate: 100,
+        matchRate: result.stats.totalItems > 0 ? 100 : 0,
         debug: {
-          forecastItems: masterItemStandardCosts.length,
-          bomProducts: result.stats.excelItems,
-          bomMissing: 0,
+          forecastItems: forecastData.length,
+          bomProducts: result.stats.bomItems,
+          bomMissing: forecastData.length - result.stats.totalItems,
           materials: result.stats.totalItems,
           purchaseMatched: 0,
-          calcSource: 'ItemStandardCost',
+          calcSource: dataMode === 'auto' ? 'AutoProductBased' : 'ProductBased',
         },
       };
     }
@@ -1495,7 +1473,7 @@ const StandardMaterialCostView: React.FC = () => {
         calcSource,
       },
     };
-  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData, selectedYear, selectedMonth, excelData, masterRefInfo, masterMaterialCodes, masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios, masterItemStandardCosts, supabaseLoading]);
+  }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData, selectedYear, selectedMonth, excelData, masterRefInfo, masterMaterialCodes, masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios, masterItemStandardCosts, masterProductCodes, supabaseLoading, enrichedMaterialCodes, enrichedPurchasePrices, enrichedStdCostMap]);
 
   // ============================================================
   // MONTHLY SUMMARY (12개월 추이)

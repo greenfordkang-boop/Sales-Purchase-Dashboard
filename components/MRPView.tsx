@@ -6,12 +6,16 @@ import { BomRecord, normalizePn, buildBomRelations } from '../utils/bomDataParse
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
+import { calcProductBasedMaterialCost } from '../utils/calcProductBasedCost';
 import { downloadCSV } from '../utils/csvExport';
 import { safeSetItem } from '../utils/safeStorage';
-import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService, paintMixRatioService, itemStandardCostService } from '../services/supabaseService';
+import { bomMasterService, productCodeService, referenceInfoService, materialCodeService, forecastService, purchaseSummaryService, paintMixRatioService, itemStandardCostService, purchasePriceService, outsourceInjPriceService, itemRevenueService } from '../services/supabaseService';
 import fallbackMaterialCodes from '../data/materialCodes.json';
 import fallbackPurchasePrices from '../data/purchasePrices.json';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
+import paintConsumptionData from '../data/paintConsumptionByProduct.json';
+import type { PurchasePrice, OutsourcePrice } from '../utils/standardMaterialParser';
+import type { ItemRevenueRow } from '../utils/revenueDataParser';
 
 // ============================================================
 // Constants
@@ -340,7 +344,146 @@ const MRPView: React.FC = () => {
         console.warn('수동 단가 로드 실패:', e);
       }
 
-      const result = calculateMRP(forecastData, bomRecords, productCodes, refInfo, mergedMaterialCodes, mergedPurchaseData, fallbackStandardCosts, paintMixRatios, itemStandardCosts);
+      // ===== 제품별재료비 기준 통합 엔진 (3탭 일치) =====
+      // 추가 데이터 로드
+      const [dbPurchasePrices, dbOutsourcePrices, revenueData] = await Promise.all([
+        purchasePriceService.getAll(),
+        outsourceInjPriceService.getAll(),
+        itemRevenueService.getAll(),
+      ]);
+      // 구매단가 보강: mergedPurchaseData → PurchasePrice 형태로 변환 + DB 데이터 병합
+      const enrichedPurchasePrices: PurchasePrice[] = [...(dbPurchasePrices as PurchasePrice[])];
+      const ppExists = new Set(enrichedPurchasePrices.map(p => normalizePn(p.itemCode)));
+      for (const mp of mergedPurchaseData) {
+        const key = normalizePn(mp.partNo);
+        if (!ppExists.has(key) && mp.unitPrice > 0) {
+          enrichedPurchasePrices.push({
+            itemCode: mp.partNo,
+            customerPn: '',
+            itemName: mp.partName || '',
+            supplier: mp.supplier || '',
+            currentPrice: mp.unitPrice,
+            previousPrice: 0,
+          });
+          ppExists.add(key);
+        }
+      }
+
+      const currentMonth = new Date().getMonth(); // 0-based
+
+      // 12개월 반복: 제품별 월별 수량/비용 수집
+      const productMap = new Map<string, {
+        name: string; costPerEa: number; supplyType: string;
+        resinPerEa: number; paintPerEa: number; purchasePerEa: number;
+        monthlyQty: number[];
+      }>();
+
+      for (let m = 0; m < 12; m++) {
+        const monthResult = calcProductBasedMaterialCost({
+          forecastData,
+          itemStandardCosts: itemStandardCosts,
+          bomRecords,
+          refInfo,
+          materialCodes: mergedMaterialCodes,
+          purchasePrices: enrichedPurchasePrices,
+          outsourcePrices: dbOutsourcePrices as OutsourcePrice[],
+          paintMixRatios,
+          productCodes,
+          paintConsumptionData: paintConsumptionData as { itemCode: string; custPN?: string; paintGPerEa: number; paintCostPerEa: number }[],
+          fallbackStandardCosts: fallbackStandardCosts as { productCode: string; customerPn?: string; eaCost: number; processType?: string; productName?: string }[],
+          fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
+          actualRevenue: (revenueData || []) as ItemRevenueRow[],
+          monthIndex: m,
+          currentMonth,
+        });
+
+        for (const ir of monthResult.itemRows) {
+          const existing = productMap.get(ir.itemCode);
+          if (existing) {
+            existing.monthlyQty[m] = ir.production;
+          } else {
+            const mq = new Array(12).fill(0);
+            mq[m] = ir.production;
+            productMap.set(ir.itemCode, {
+              name: ir.itemName,
+              costPerEa: ir.totalCostPerEa,
+              supplyType: ir.supplyType,
+              resinPerEa: ir.injectionCost,
+              paintPerEa: ir.paintCostPerEa,
+              purchasePerEa: ir.purchaseCostPerEa,
+              monthlyQty: mq,
+            });
+          }
+        }
+      }
+
+      // MRPMaterialRow 변환 (유형별 분리)
+      const materials: MRPMaterialRow[] = [];
+      for (const [code, data] of productMap) {
+        const totalQty = data.monthlyQty.reduce((s, q) => s + q, 0);
+        if (totalQty <= 0) continue;
+
+        if (data.resinPerEa > 0) {
+          materials.push({
+            materialCode: code, materialName: data.name + ' 사출', materialType: 'RESIN',
+            unit: 'EA', requiredQty: totalQty, unitPrice: data.resinPerEa,
+            totalCost: totalQty * data.resinPerEa, parentProducts: [code],
+            monthlyQty: [...data.monthlyQty], supplier: '',
+          });
+        }
+        if (data.paintPerEa > 0) {
+          materials.push({
+            materialCode: code, materialName: data.name + ' 도장', materialType: 'PAINT',
+            unit: 'EA', requiredQty: totalQty, unitPrice: data.paintPerEa,
+            totalCost: totalQty * data.paintPerEa, parentProducts: [code],
+            monthlyQty: [...data.monthlyQty], supplier: '',
+          });
+        }
+        if (data.purchasePerEa > 0) {
+          materials.push({
+            materialCode: code, materialName: data.name,
+            materialType: /외주/.test(data.supplyType) ? '외주' : '구매',
+            unit: 'EA', requiredQty: totalQty, unitPrice: data.purchasePerEa,
+            totalCost: totalQty * data.purchasePerEa, parentProducts: [code],
+            monthlyQty: [...data.monthlyQty], supplier: '',
+          });
+        }
+        // 유형별 분리 없이 costPerEa만 있는 경우
+        if (data.resinPerEa <= 0 && data.paintPerEa <= 0 && data.purchasePerEa <= 0 && data.costPerEa > 0) {
+          materials.push({
+            materialCode: code, materialName: data.name,
+            materialType: /구매/.test(data.supplyType) ? '구매' : /외주/.test(data.supplyType) ? '외주' : 'RESIN',
+            unit: 'EA', requiredQty: totalQty, unitPrice: data.costPerEa,
+            totalCost: totalQty * data.costPerEa, parentProducts: [code],
+            monthlyQty: [...data.monthlyQty], supplier: '',
+          });
+        }
+      }
+
+      const totalCost = materials.reduce((s, m) => s + m.totalCost, 0);
+      const byMonth = Array.from({ length: 12 }, (_, i) => ({
+        month: `${i + 1}월`,
+        totalQty: materials.reduce((s, m) => s + m.monthlyQty[i], 0),
+        totalCost: materials.reduce((s, m) => s + m.monthlyQty[i] * m.unitPrice, 0),
+      }));
+
+      const result: MRPResult = {
+        materials,
+        byMonth,
+        summary: {
+          totalMaterials: materials.length,
+          totalRequiredQty: materials.reduce((s, m) => s + m.requiredQty, 0),
+          totalCost,
+          bomMatchRate: productMap.size > 0 ? 100 : 0,
+          unmatchedProducts: [],
+          fuzzyMatchedProducts: [],
+          matchedProducts: productMap.size,
+          directCostProducts: 0,
+          noPriceMaterials: materials.filter(m => m.unitPrice <= 0).length,
+          priceMatchRate: materials.length > 0 ? (materials.filter(m => m.unitPrice > 0).length / materials.length) * 100 : 0,
+        },
+      };
+      console.log(`[MRP 통합엔진] ${productMap.size}제품 → ${materials.length}행, 총 ${(totalCost / 1e8).toFixed(2)}億`);
       setMrpResult(result);
     } catch (err) {
       console.error('MRP 계산 실패:', err);
