@@ -1467,49 +1467,6 @@ const ProductMaterialCostView: React.FC = () => {
         if (bomParent) {
           // 트리뷰용: 중간 노드 포함 DFS 전개
           const treeNodes = expandBomToTree(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
-          // 도료 원재료 P/N map: rawMaterialCode + paintQty > 0인 품번
-          // 소스: 1) 제품 기준정보, 2) 도장 중간노드 기준정보
-          const paintRawPnMap = new Map<string, { pqLot: number; lotDiv: number }>();
-          const addPaintRef = (ref: typeof productRefEarly) => {
-            if (!ref) return;
-            const rc = [ref.rawMaterialCode1, ref.rawMaterialCode2, ref.rawMaterialCode3, ref.rawMaterialCode4 || ''];
-            const pq = [ref.paintQty1, ref.paintQty2, ref.paintQty3, ref.paintQty4 || 0];
-            const lotDiv = (ref.lotQty && ref.lotQty > 0) ? ref.lotQty : 1;
-            for (let i = 0; i < rc.length; i++) {
-              if (rc[i] && (pq[i] || 0) > 0) {
-                paintRawPnMap.set(normalizePn(rc[i]), { pqLot: pq[i] || 0, lotDiv });
-              }
-            }
-          };
-          addPaintRef(productRefEarly);
-          // 도장 중간노드의 기준정보도 탐색 (paintIntermediatePns: ref info processType 기반, BOM partType보다 정확)
-          for (const nd of treeNodes) {
-            if (!nd.isLeaf) {
-              const ndNorm = normalizePn(nd.childPn);
-              if (paintIntermediatePns.has(ndNorm)
-                || paintIntermediatePns.has(custToInternal.get(ndNorm) || '')
-                || paintIntermediatePns.has(internalToCust.get(ndNorm) || '')) {
-                addPaintRef(
-                  refInfoMap.get(ndNorm)
-                  || refInfoMap.get(custToInternal.get(ndNorm) || '')
-                  || refInfoMap.get(internalToCust.get(ndNorm) || '')
-                );
-              }
-            }
-          }
-          // DEBUG: 도료 소요량 추적 (문자열 출력)
-          if (forecastPn.toUpperCase().includes('SCRC')) {
-            const refE = productRefEarly;
-            console.log(`[도료디버그] ${forecastPn} | refEarly=${!!refE} processType="${refE?.processType}" rawMat1="${refE?.rawMaterialCode1}" rawMat2="${refE?.rawMaterialCode2}" pq1=${refE?.paintQty1} pq2=${refE?.paintQty2} lotQty=${refE?.lotQty}`);
-            for (const nd of treeNodes.filter(n => !n.isLeaf)) {
-              const ndN = normalizePn(nd.childPn);
-              const inSet = paintIntermediatePns.has(ndN) || paintIntermediatePns.has(custToInternal.get(ndN) || '') || paintIntermediatePns.has(internalToCust.get(ndN) || '');
-              const ndRef = refInfoMap.get(ndN) || refInfoMap.get(custToInternal.get(ndN) || '') || refInfoMap.get(internalToCust.get(ndN) || '');
-              console.log(`  중간노드 ${nd.childPn} | partType="${nd.partType}" inPaintSet=${inSet} hasRef=${!!ndRef} rawMat1="${ndRef?.rawMaterialCode1}" rawMat2="${ndRef?.rawMaterialCode2}" pq1=${ndRef?.paintQty1} pq2=${ndRef?.paintQty2} lotQty=${ndRef?.lotQty}`);
-            }
-            console.log(`  paintRawPnMap keys=[${[...paintRawPnMap.keys()].join(',')}] size=${paintRawPnMap.size}`);
-          }
-
           bomLeaves = treeNodes.map(node => {
             // 중간 노드 (서브어셈블리): 표시용, 가격 없음
             if (!node.isLeaf) {
@@ -1580,27 +1537,39 @@ const ProductMaterialCostView: React.FC = () => {
             let finalPrice = price;
             let finalSource = source;
 
-            // 도료 원재료 판정: 제품 기준정보의 rawMaterialCode + paintQty > 0
-            const paintEntry = paintRawPnMap.get(normalizePn(l.childPn));
-            const isPaintRawMat = !!paintEntry;
-            // DEBUG
-            if (l.childPn.toUpperCase().includes('XDR') && forecastPn.toUpperCase().includes('SCRC')) {
-              console.log(`  [도료leaf] ${l.childPn} | norm="${normalizePn(l.childPn)}" isPaint=${isPaintRawMat} entry=${JSON.stringify(paintEntry)} parent=${l.parentPn} totalReq=${l.totalRequired}`);
-            }
+            // 도료 원재료 판정: 부모가 도장 중간노드(paintIntermediatePns)이고 leaf가 원재료 타입
+            const parentNorm = normalizePn(l.parentPn);
+            const isPaintRawMat = /원재료/.test(partType) && (
+              paintIntermediatePns.has(parentNorm)
+              || paintIntermediatePns.has(custToInternal.get(parentNorm) || '')
+              || paintIntermediatePns.has(internalToCust.get(parentNorm) || '')
+            );
 
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
 
-            if (isPaintRawMat && paintEntry) {
-              // 소요량: paintQty(g/LOT) ÷ lotQty = g/EA
-              overrideQty = paintEntry.pqLot / paintEntry.lotDiv;
-              // 단가: 배합가(₩/kg) → ₩/g (/1000)
+            if (isPaintRawMat) {
+              // 단가: 배합가(₩/kg) → ₩/g, 없으면 재질단가 ₩/kg → ₩/g
               const { price: bp } = getPaintBlendedPrice(l.childPn);
               if (bp > 0) {
-                finalPrice = bp / 1000; // ₩/g
+                finalPrice = bp / 1000;
                 finalSource = '배합가';
               } else if (price > 0) {
-                finalPrice = price / 1000; // ₩/g fallback
+                finalPrice = price / 1000;
                 finalSource = source + '(g→kg)';
+              }
+              // 소요량: 부모 기준정보 paintQty/lotQty 사용 가능시 override
+              const parentRef = refInfoMap.get(parentNorm)
+                || refInfoMap.get(custToInternal.get(parentNorm) || '')
+                || refInfoMap.get(internalToCust.get(parentNorm) || '');
+              if (parentRef) {
+                const pq = [parentRef.paintQty1, parentRef.paintQty2, parentRef.paintQty3, parentRef.paintQty4 || 0];
+                const lotDiv = (parentRef.lotQty && parentRef.lotQty > 0) ? parentRef.lotQty : 1;
+                for (let i = 0; i < pq.length; i++) {
+                  if ((pq[i] || 0) > 0) {
+                    overrideQty = (pq[i] || 0) / lotDiv;
+                    break;
+                  }
+                }
               }
             } else if (paintCalcDetail && paintCalcDetail.totalCalcCost > 0 && price <= 0) {
               finalPrice = paintCalcDetail.totalCalcCost;

@@ -390,26 +390,24 @@ export function calcProductBasedMaterialCost(params: CalcProductBasedParams): Un
     const bomParent = findBomParent(forecastPn);
     let bomMaterialCost = 0;
     if (bomParent) {
-      // 도료 원재료 P/N set (paintQty > 0인 rawMaterialCode) → BOM leaf에서 제외
-      const paintSkipPns = new Set<string>();
-      const addSkipRef = (ref: ReferenceInfoRecord | undefined) => {
-        if (!ref) return;
-        const rc = [ref.rawMaterialCode1, ref.rawMaterialCode2, ref.rawMaterialCode3, ref.rawMaterialCode4 || ''];
-        const pq = [ref.paintQty1, ref.paintQty2, ref.paintQty3, ref.paintQty4 || 0];
-        for (let i = 0; i < rc.length; i++) {
-          if (rc[i] && (pq[i] || 0) > 0) paintSkipPns.add(normalizePn(rc[i]));
-        }
-      };
-      addSkipRef(productRef);
       const leaves = expandBomToLeaves(bomParent, 1, bomRelations, undefined, 0, 10, forceLeafPns, paintIntermediatePns);
-      // 도장 중간노드(paintIntermediatePns)의 기준정보도 탐색
+      // 도장 중간노드의 원재료 자식 → bomMaterialCost에서 제외 (도장재료비는 calcProductPaintCost에서 별도 처리)
+      const paintSkipPns = new Set<string>();
       for (const leaf of leaves) {
-        if (paintIntermediatePns.has(normalizePn(leaf.childPn))) {
-          addSkipRef(refInfoMap.get(normalizePn(leaf.childPn)));
+        const leafNorm = normalizePn(leaf.childPn);
+        if (paintIntermediatePns.has(leafNorm)) {
+          // 이 leaf는 도장 중간노드(alsoEmitPns로 추가됨) → BOM 자식 중 원재료를 skip set에 추가
+          const paintChildren = bomRelations.get(leafNorm);
+          if (paintChildren) {
+            for (const pc of paintChildren) {
+              if (/원재료/.test(pc.partType || '')) {
+                paintSkipPns.add(normalizePn(pc.childPn));
+              }
+            }
+          }
         }
       }
       for (const leaf of leaves) {
-        // 도료 원재료는 BOM leaf에서 제외 → calcProductPaintCost에서 별도 처리
         if (paintSkipPns.has(normalizePn(leaf.childPn))) continue;
         const { price } = getLeafPrice(leaf.childPn);
         bomMaterialCost += leaf.totalRequired * price;
