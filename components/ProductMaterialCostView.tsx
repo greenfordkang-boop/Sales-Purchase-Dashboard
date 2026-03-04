@@ -1453,6 +1453,14 @@ const ProductMaterialCostView: React.FC = () => {
         const bomParent = findBomParent(forecastPn);
         const hasBom = !!bomParent;
 
+        // 제품 기준정보 (BOM 전개 전에 조회 — 도료 소요량 산출에 필요)
+        const productRefEarly = refInfoMap.get(forecastPn)
+          || refInfoMap.get(custToInternal.get(forecastPn) || '')
+          || refInfoMap.get(internalToCust.get(forecastPn) || '')
+          || (f.partNo ? refInfoMap.get(normalizePn(f.partNo)) : undefined)
+          || (f.partNo ? refInfoMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined)
+          || (f.newPartNo ? refInfoMap.get(custToInternal.get(normalizePn(f.newPartNo)) || '') : undefined);
+
         // BOM 전개
         let bomLeaves: BomLeaf[] = [];
         let bomMaterialCost = 0;
@@ -1536,19 +1544,20 @@ const ProductMaterialCostView: React.FC = () => {
             let overrideQty: number | null = null; // null → BOM totalRequired 사용
 
             if (isPaintRawMat) {
-              // 소요량: 도장 부모노드 기준정보의 paintQty ÷ lotQty = g/EA
-              const paintParentRef = refInfoMap.get(normalizePn(l.parentPn));
-              if (paintParentRef) {
+              // 소요량: 기준정보의 paintQty ÷ lotQty = g/EA
+              // 1순위: 도장 부모노드, 2순위: 제품 기준정보
+              const paintRef = refInfoMap.get(normalizePn(l.parentPn)) || productRefEarly;
+              if (paintRef) {
                 const rawCodes = [
-                  paintParentRef.rawMaterialCode1,
-                  paintParentRef.rawMaterialCode2,
-                  paintParentRef.rawMaterialCode3,
-                  paintParentRef.rawMaterialCode4 || '',
+                  paintRef.rawMaterialCode1,
+                  paintRef.rawMaterialCode2,
+                  paintRef.rawMaterialCode3,
+                  paintRef.rawMaterialCode4 || '',
                 ].map(c => normalizePn(c || ''));
                 const idx = rawCodes.indexOf(normalizePn(l.childPn));
                 if (idx >= 0) {
-                  const pqLot = [paintParentRef.paintQty1, paintParentRef.paintQty2, paintParentRef.paintQty3, paintParentRef.paintQty4 || 0][idx] || 0;
-                  const lotDiv = (paintParentRef.lotQty && paintParentRef.lotQty > 0) ? paintParentRef.lotQty : 1;
+                  const pqLot = [paintRef.paintQty1, paintRef.paintQty2, paintRef.paintQty3, paintRef.paintQty4 || 0][idx] || 0;
+                  const lotDiv = (paintRef.lotQty && paintRef.lotQty > 0) ? paintRef.lotQty : 1;
                   overrideQty = pqLot / lotDiv; // g/EA
                 }
               }
@@ -1587,13 +1596,8 @@ const ProductMaterialCostView: React.FC = () => {
         // [도장재료비 자동 산입] 1순위: 실측 데이터, 2순위: 기준정보 paintQty × 배합가
         let paintCost = 0;
         let paintSource: 'measured' | 'calculated' | 'none' = 'none';
-        // refInfo 매칭: forecast P/N → 직접 → custToInternal → internalToCust → partNo도 시도
-        const productRef = refInfoMap.get(forecastPn)
-          || refInfoMap.get(custToInternal.get(forecastPn) || '')
-          || refInfoMap.get(internalToCust.get(forecastPn) || '')
-          || (f.partNo ? refInfoMap.get(normalizePn(f.partNo)) : undefined)
-          || (f.partNo ? refInfoMap.get(custToInternal.get(normalizePn(f.partNo)) || '') : undefined)
-          || (f.newPartNo ? refInfoMap.get(custToInternal.get(normalizePn(f.newPartNo)) || '') : undefined);
+        // refInfo 매칭 (productRefEarly 재활용)
+        const productRef = productRefEarly;
         if (productRef) _debugRefMatched++; else _debugRefMissed++;
 
         // 1순위: 실측 도장소요량 데이터 (paintConsumptionByProduct.json)
