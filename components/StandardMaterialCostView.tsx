@@ -472,6 +472,12 @@ const StandardMaterialCostView: React.FC = () => {
       return '';
     };
 
+    console.log(`[Supplier 맵 진단] suppMap: ${suppMap.size}건 (purchaseData: ${purchaseData.length}, masterRefInfo: ${masterRefInfo.length}, enrichedPP: ${enrichedPurchasePrices.length})`);
+    if (suppMap.size > 0) {
+      const sample = [...suppMap.entries()].slice(0, 3);
+      console.log(`[Supplier 맵 진단] 샘플:`, sample);
+    }
+
     // ── supplyType 보완 맵: masterRefInfo에서 조달구분 조회 ──
     const supplyTypeMap = new Map<string, string>();
     masterRefInfo.forEach(ri => {
@@ -523,8 +529,8 @@ const StandardMaterialCostView: React.FC = () => {
         id: `isc-${ir.itemCode}-${idx}`,
         childPn: ir.itemCode,
         childName: ir.itemName,
-        supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
-        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn),
+        supplier: lookupSupplier(ir.itemCode, ir.customerPn),
+        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -535,6 +541,12 @@ const StandardMaterialCostView: React.FC = () => {
         diffRate: 0,
       }));
       rows.sort((a, b) => b.standardCost - a.standardCost);
+      const suppFilled = rows.filter(r => r.supplier).length;
+      console.log(`[Supplier 결과] 경로: calcProductBased, 총 ${rows.length}건 중 supplier 있음: ${suppFilled}건`);
+      if (suppFilled === 0 && rows.length > 0) {
+        const samplePns = rows.slice(0, 3).map(r => r.childPn);
+        console.log(`[Supplier 결과] 샘플 품번 (조회 실패):`, samplePns, '→ suppMap keys 샘플:', [...suppMap.keys()].slice(0, 5));
+      }
 
       const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
 
@@ -629,8 +641,8 @@ const StandardMaterialCostView: React.FC = () => {
         id: `master-${ir.itemCode}-${idx}`,
         childPn: ir.itemCode,
         childName: ir.itemName,
-        supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
-        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn),
+        supplier: lookupSupplier(ir.itemCode, ir.customerPn),
+        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -1368,13 +1380,13 @@ const StandardMaterialCostView: React.FC = () => {
         rows.length = 0; // BOM rows 제거
         let ufIdx = 0;
         for (const ir of unifiedResult.itemRows) {
-          const materialType = classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn);
+          const materialType = classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn);
 
           rows.push({
             id: `uf-${ir.itemCode}-${ufIdx++}`,
             childPn: ir.itemCode,
             childName: ir.itemName,
-            supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
+            supplier: lookupSupplier(ir.itemCode, ir.customerPn),
             materialType,
             parentProducts: [],
             standardReq: ir.production,
