@@ -369,8 +369,8 @@ const MRPView: React.FC = () => {
         }
       }
 
-      // ===== BOM 리프 자재 전개 기반 MRP =====
-      // P/N bridge: customerPn → internalCode (BOM key)
+      // ===== 원재료 기준 MRP: BOM leaf → refInfo rawMaterialCode로 전개 =====
+      // P/N bridge
       const c2i = new Map<string, string>();
       for (const pc of productCodes) {
         if (pc.customerPn && pc.productCode) c2i.set(normalizePn(pc.customerPn), normalizePn(pc.productCode));
@@ -382,7 +382,6 @@ const MRPView: React.FC = () => {
         }
       }
 
-      // normalized bomRel
       const normBomRel = new Map<string, BomRecord[]>();
       for (const [k, v] of bomRel) normBomRel.set(normalizePn(k), v);
 
@@ -393,12 +392,17 @@ const MRPView: React.FC = () => {
         return null;
       };
 
-      // forceLeafPns: 구매/외주 품목
-      const forceLeaf = new Set<string>();
+      // refInfo 맵
+      const refInfoMap = new Map<string, typeof refInfo[0]>();
       for (const ri of refInfo) {
-        if (ri.supplyType && /구매|외주/.test(ri.supplyType)) {
-          forceLeaf.add(normalizePn(ri.itemCode));
-        }
+        refInfoMap.set(normalizePn(ri.itemCode), ri);
+        if (ri.customerPn) refInfoMap.set(normalizePn(ri.customerPn), ri);
+      }
+
+      // 재질코드 맵 (materialCode → record)
+      const matCodeMap = new Map<string, typeof mergedMaterialCodes[0]>();
+      for (const mc of mergedMaterialCodes) {
+        matCodeMap.set(normalizePn(mc.materialCode), mc);
       }
 
       // supplier 맵
@@ -409,34 +413,35 @@ const MRPView: React.FC = () => {
       for (const ri of refInfo) { setSupp(ri.itemCode, ri.supplier); setSupp(ri.customerPn, ri.supplier); }
       for (const p of mergedPurchaseData) { setSupp(p.partNo, p.supplier); }
 
-      // unitPrice 맵
-      const priceMap = new Map<string, number>();
+      // 구매단가 맵
+      const purchasePriceMap = new Map<string, number>();
       for (const pp of enrichedPurchasePrices) {
         const k = normalizePn(pp.itemCode);
-        if (pp.currentPrice > 0) priceMap.set(k, pp.currentPrice);
+        if (pp.currentPrice > 0) purchasePriceMap.set(k, pp.currentPrice);
       }
 
-      // materialType 판별
-      const typeFromRef = (childKey: string): string => {
-        for (const ri of refInfo) {
-          if (normalizePn(ri.itemCode) === childKey || normalizePn(ri.customerPn) === childKey) {
-            if (ri.supplyType?.includes('외주')) return '외주';
-            if (ri.processType?.includes('사출')) return 'RESIN';
-            if (ri.processType?.includes('도장')) return 'PAINT';
-            if (ri.supplyType === '구매') return '구매';
-          }
+      // 원재료 집계 구조
+      type RawMatAgg = {
+        name: string; unit: string; materialType: string;
+        totalReq: number; monthlyQty: number[]; parents: Set<string>;
+      };
+      const rawAgg = new Map<string, RawMatAgg>();
+
+      const addToRawAgg = (rawCode: string, name: string, unit: string, matType: string, qty: number, monthIdx: number, parentKey: string) => {
+        const ex = rawAgg.get(rawCode);
+        if (ex) {
+          ex.totalReq += qty;
+          ex.monthlyQty[monthIdx] += qty;
+          ex.parents.add(parentKey);
+        } else {
+          const mq = new Array(12).fill(0);
+          mq[monthIdx] = qty;
+          rawAgg.set(rawCode, { name, unit, materialType: matType, totalReq: qty, monthlyQty: mq, parents: new Set([parentKey]) });
         }
-        return '구매';
       };
 
-      // 12개월 BOM 리프 전개
-      const leafAgg = new Map<string, {
-        childName: string; supplier: string; totalReq: number;
-        monthlyQty: number[]; parents: Set<string>;
-      }>();
-
+      // 12개월 BOM 전개 → 원재료 집계
       for (let m = 0; m < 12; m++) {
-        // 해당 월 forecast 수량
         const forecastByPn = new Map<string, number>();
         for (const item of forecastData) {
           if (!item.partNo) continue;
@@ -447,27 +452,62 @@ const MRPView: React.FC = () => {
           forecastByPn.set(key, (forecastByPn.get(key) || 0) + qty);
         }
 
-        // BOM 리프 전개
-        for (const [bomKey, qty] of forecastByPn) {
+        for (const [bomKey, productQty] of forecastByPn) {
           if (!normBomRel.has(bomKey)) continue;
-          const leaves = expandBomToLeaves(bomKey, qty, normBomRel, undefined, 0, 10, forceLeaf);
+          const leaves = expandBomToLeaves(bomKey, productQty, normBomRel, undefined, 0, 10);
           for (const leaf of leaves) {
             const ck = normalizePn(leaf.childPn);
-            const ex = leafAgg.get(ck);
-            if (ex) {
-              ex.monthlyQty[m] += leaf.totalRequired;
-              ex.totalReq += leaf.totalRequired;
-              ex.parents.add(bomKey);
+            const ri = refInfoMap.get(ck);
+
+            if (ri && /사출/.test(ri.processType || '')) {
+              // 사출품: rawMaterialCode + 중량으로 원재료(수지) 소요량 산출
+              const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
+              const nw = ri.netWeight || 0;
+              const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+              const rw = ri.runnerWeight || 0;
+              const lossM = 1 + ((ri.lossRate || 0) / 100);
+              let resolved = false;
+              for (const rawCode of rawCodes) {
+                const rawNorm = normalizePn(rawCode);
+                const mc = matCodeMap.get(rawNorm);
+                if (mc && /PAINT|도료/i.test(mc.materialType || '')) continue; // 도료는 skip
+                if (nw > 0) {
+                  const wPerEa = (nw + rw / cavity) * lossM / 1000; // kg per EA
+                  const totalKg = leaf.totalRequired * wPerEa;
+                  const matName = mc?.materialName || rawCode;
+                  addToRawAgg(rawNorm, matName, 'KG', 'RESIN', totalKg, m, bomKey);
+                  resolved = true;
+                }
+              }
+              if (!resolved) {
+                // rawMaterialCode 없으면 부품 자체를 EA로 집계
+                addToRawAgg(ck, leaf.childName || ck, 'EA', 'RESIN', leaf.totalRequired, m, bomKey);
+              }
+            } else if (ri && /도장/.test(ri.processType || '')) {
+              // 도장품: paintQty × rawMaterialCode로 도료 소요량 산출
+              const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''].filter(Boolean) as string[];
+              const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
+              const lossM = 1 + ((ri.lossRate || 0) / 100);
+              const lotDiv = (ri.lotQty && ri.lotQty > 0) ? ri.lotQty : 1;
+              let resolved = false;
+              for (let pi = 0; pi < rawCodes.length; pi++) {
+                const pq = paintQtys[pi] || 0;
+                if (pq <= 0) continue;
+                const rawNorm = normalizePn(rawCodes[pi]);
+                const mc = matCodeMap.get(rawNorm);
+                const matName = mc?.materialName || rawCodes[pi];
+                const kgPerEa = (pq / 1000) * lossM / lotDiv;
+                const totalKg = leaf.totalRequired * kgPerEa;
+                addToRawAgg(rawNorm, matName, 'KG', 'PAINT', totalKg, m, bomKey);
+                resolved = true;
+              }
+              if (!resolved) {
+                addToRawAgg(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, m, bomKey);
+              }
             } else {
-              const mq = new Array(12).fill(0);
-              mq[m] = leaf.totalRequired;
-              leafAgg.set(ck, {
-                childName: leaf.childName,
-                supplier: leaf.supplier,
-                totalReq: leaf.totalRequired,
-                monthlyQty: mq,
-                parents: new Set([bomKey]),
-              });
+              // 구매/외주/기타: 부품 자체를 EA로 집계
+              const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
+              addToRawAgg(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, m, bomKey);
             }
           }
         }
@@ -475,15 +515,16 @@ const MRPView: React.FC = () => {
 
       // MRPMaterialRow 변환
       const materials: MRPMaterialRow[] = [];
-      for (const [ck, data] of leafAgg) {
+      for (const [code, data] of rawAgg) {
         if (data.totalReq <= 0) continue;
-        const supplier = suppMap.get(ck) || data.supplier || '';
-        const unitPrice = priceMap.get(ck) || 0;
+        const supplier = suppMap.get(code) || '';
+        const mc = matCodeMap.get(code);
+        const unitPrice = mc?.currentPrice || purchasePriceMap.get(code) || 0;
         materials.push({
-          materialCode: ck,
-          materialName: data.childName || ck,
-          materialType: typeFromRef(ck),
-          unit: 'EA',
+          materialCode: code,
+          materialName: data.name,
+          materialType: data.materialType,
+          unit: data.unit,
           requiredQty: data.totalReq,
           unitPrice,
           totalCost: data.totalReq * unitPrice,
@@ -495,7 +536,7 @@ const MRPView: React.FC = () => {
       materials.sort((a, b) => b.totalCost - a.totalCost);
 
       const matchedProducts = new Set<string>();
-      for (const data of leafAgg.values()) data.parents.forEach(p => matchedProducts.add(p));
+      for (const data of rawAgg.values()) data.parents.forEach(p => matchedProducts.add(p));
 
       const totalCost = materials.reduce((s, m) => s + m.totalCost, 0);
       const byMonth = Array.from({ length: 12 }, (_, i) => ({

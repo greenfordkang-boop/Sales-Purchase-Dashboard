@@ -3694,13 +3694,14 @@ const StandardMaterialCostView: React.FC = () => {
   const calc = autoCalcResult;
   const exSummary = excelData?.summary;
 
-  // ===== 구입처별 발주용: BOM 리프 자재 전개 =====
+  // ===== 구입처별 발주용: BOM leaf → refInfo rawMaterialCode로 원재료 전개 =====
   interface LeafOrderRow {
     id: string;
     childPn: string;
     childName: string;
     supplier: string;
     materialType: string;
+    unit: string;
     totalRequired: number;
     unitPrice: number;
     totalCost: number;
@@ -3710,12 +3711,12 @@ const StandardMaterialCostView: React.FC = () => {
   const leafOrderRows = useMemo<LeafOrderRow[]>(() => {
     if (bomData.length === 0 || forecastData.length === 0) return [];
 
-    // 1. BOM relations
+    // BOM relations
     const rawRel = buildBomRelations(bomData);
     const bomRel = new Map<string, BomRecord[]>();
     for (const [k, v] of rawRel) bomRel.set(normalizePn(k), v);
 
-    // 2. P/N bridge (pnMapping + masterRefInfo)
+    // P/N bridge
     const c2i = new Map<string, string>();
     pnMapping.forEach(m => {
       if (m.customerPn && m.internalCode) c2i.set(normalizePn(m.customerPn), normalizePn(m.internalCode));
@@ -3734,23 +3735,40 @@ const StandardMaterialCostView: React.FC = () => {
       return null;
     };
 
-    // 3. forceLeafPns: 구매/외주 품목은 더 이상 전개하지 않음
-    const forceLeaf = new Set<string>();
+    // refInfo 맵
+    const refMap = new Map<string, typeof masterRefInfo[0]>();
     masterRefInfo.forEach(ri => {
-      if (ri.supplyType && /구매|외주/.test(ri.supplyType)) {
-        forceLeaf.add(normalizePn(ri.itemCode));
-      }
+      refMap.set(normalizePn(ri.itemCode), ri);
+      if (ri.customerPn) refMap.set(normalizePn(ri.customerPn), ri);
     });
 
-    // 4. Forecast quantities by product
+    // 재질코드 맵
+    const matCodeMap = new Map<string, typeof enrichedMaterialCodes[0]>();
+    enrichedMaterialCodes.forEach(mc => matCodeMap.set(normalizePn(mc.materialCode), mc));
+
+    // supplier 맵
+    const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
+    const sMap = new Map<string, string>();
+    const setS = (k: string, s: string) => { if (k && isValidSupp(s)) sMap.set(normalizePn(k), s); };
+    enrichedPurchasePrices.forEach(pp => { setS(pp.itemCode, pp.supplier); setS(pp.customerPn, pp.supplier); });
+    masterRefInfo.forEach(ri => { setS(ri.itemCode, ri.supplier); setS(ri.customerPn, ri.supplier); });
+    purchaseData.forEach(p => { setS(p.itemCode, p.supplier); if (p.customerPn) setS(p.customerPn, p.supplier); });
+
+    // 구매단가 맵
+    const ppMap = new Map<string, number>();
+    enrichedPurchasePrices.forEach(pp => {
+      const k = normalizePn(pp.itemCode);
+      if (pp.currentPrice > 0) ppMap.set(k, pp.currentPrice);
+    });
+
+    // Forecast quantities
     const forecastByPn = new Map<string, number>();
     forecastData.forEach(item => {
       if (!item.partNo) return;
       const raw = normalizePn(item.partNo);
       let qty = 0;
-      if (selectedMonth === 'All') {
-        qty = item.totalQty || 0;
-      } else {
+      if (selectedMonth === 'All') qty = item.totalQty || 0;
+      else {
         const mi = parseInt(selectedMonth.replace('월', ''), 10) - 1;
         qty = (mi >= 0 && mi < 12) ? (item.monthlyQty?.[mi] || 0) : 0;
       }
@@ -3759,62 +3777,81 @@ const StandardMaterialCostView: React.FC = () => {
       forecastByPn.set(key, (forecastByPn.get(key) || 0) + qty);
     });
 
-    // 5. BOM leaf expansion + aggregation
-    const agg = new Map<string, { childName: string; supplier: string; totalReq: number; parents: Set<string> }>();
-    for (const [bomKey, qty] of forecastByPn) {
+    // 원재료 집계
+    type RawAgg = { name: string; unit: string; matType: string; totalReq: number; parents: Set<string> };
+    const rawAgg = new Map<string, RawAgg>();
+    const addRaw = (code: string, name: string, unit: string, matType: string, qty: number, parent: string) => {
+      const ex = rawAgg.get(code);
+      if (ex) { ex.totalReq += qty; ex.parents.add(parent); }
+      else rawAgg.set(code, { name, unit, matType, totalReq: qty, parents: new Set([parent]) });
+    };
+
+    // BOM 전개 → 원재료 집계
+    for (const [bomKey, productQty] of forecastByPn) {
       if (!bomRel.has(bomKey)) continue;
-      const leaves = expandBomToLeaves(bomKey, qty, bomRel, undefined, 0, 10, forceLeaf);
+      const leaves = expandBomToLeaves(bomKey, productQty, bomRel, undefined, 0, 10);
       for (const leaf of leaves) {
         const ck = normalizePn(leaf.childPn);
-        const ex = agg.get(ck);
-        if (ex) {
-          ex.totalReq += leaf.totalRequired;
-          ex.parents.add(bomKey);
+        const ri = refMap.get(ck);
+
+        if (ri && /사출/.test(ri.processType || '')) {
+          // 사출품 → rawMaterialCode + 중량으로 수지 소요량 산출
+          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
+          const nw = ri.netWeight || 0;
+          const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+          const rw = ri.runnerWeight || 0;
+          const lossM = 1 + ((ri.lossRate || 0) / 100);
+          let resolved = false;
+          for (const rawCode of rawCodes) {
+            const rawNorm = normalizePn(rawCode);
+            const mc = matCodeMap.get(rawNorm);
+            if (mc && /PAINT|도료/i.test(mc.materialType || '')) continue;
+            if (nw > 0) {
+              const wPerEa = (nw + rw / cavity) * lossM / 1000; // kg/EA
+              const totalKg = leaf.totalRequired * wPerEa;
+              addRaw(rawNorm, mc?.materialName || rawCode, 'KG', 'RESIN', totalKg, bomKey);
+              resolved = true;
+            }
+          }
+          if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'RESIN', leaf.totalRequired, bomKey);
+        } else if (ri && /도장/.test(ri.processType || '')) {
+          // 도장품 → paintQty × rawMaterialCode로 도료 소요량 산출
+          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''].filter(Boolean) as string[];
+          const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
+          const lossM = 1 + ((ri.lossRate || 0) / 100);
+          const lotDiv = (ri.lotQty && ri.lotQty > 0) ? ri.lotQty : 1;
+          let resolved = false;
+          for (let pi = 0; pi < rawCodes.length; pi++) {
+            const pq = paintQtys[pi] || 0;
+            if (pq <= 0) continue;
+            const rawNorm = normalizePn(rawCodes[pi]);
+            const mc = matCodeMap.get(rawNorm);
+            const kgPerEa = (pq / 1000) * lossM / lotDiv;
+            addRaw(rawNorm, mc?.materialName || rawCodes[pi], 'KG', 'PAINT', leaf.totalRequired * kgPerEa, bomKey);
+            resolved = true;
+          }
+          if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, bomKey);
         } else {
-          agg.set(ck, { childName: leaf.childName, supplier: leaf.supplier, totalReq: leaf.totalRequired, parents: new Set([bomKey]) });
+          // 구매/외주/기타
+          const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
+          addRaw(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, bomKey);
         }
       }
     }
 
-    // 6. Enrich: supplier + unitPrice + materialType
-    const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
-    const sMap = new Map<string, string>();
-    const setS = (k: string, s: string) => { if (k && isValidSupp(s)) sMap.set(normalizePn(k), s); };
-    enrichedPurchasePrices.forEach(pp => { setS(pp.itemCode, pp.supplier); setS(pp.customerPn, pp.supplier); });
-    masterRefInfo.forEach(ri => { setS(ri.itemCode, ri.supplier); setS(ri.customerPn, ri.supplier); });
-    purchaseData.forEach(p => { setS(p.itemCode, p.supplier); if (p.customerPn) setS(p.customerPn, p.supplier); });
-
-    // unitPrice 맵
-    const priceMap = new Map<string, number>();
-    enrichedPurchasePrices.forEach(pp => {
-      const k = normalizePn(pp.itemCode);
-      if (pp.currentPrice > 0) priceMap.set(k, pp.currentPrice);
-    });
-
-    // materialType 맵
-    const typeFromRef = (childKey: string): string => {
-      for (const ri of masterRefInfo) {
-        if (normalizePn(ri.itemCode) === childKey || normalizePn(ri.customerPn) === childKey) {
-          if (ri.supplyType?.includes('외주')) return '외주';
-          if (ri.processType?.includes('사출')) return 'RESIN';
-          if (ri.processType?.includes('도장')) return 'PAINT';
-          if (ri.supplyType === '구매') return '구매';
-        }
-      }
-      return '구매';
-    };
-
-    // 7. Build final rows
+    // Build final rows
     const rows: LeafOrderRow[] = [];
-    for (const [ck, data] of agg) {
-      const supplier = sMap.get(ck) || data.supplier || '';
-      const unitPrice = priceMap.get(ck) || 0;
+    for (const [code, data] of rawAgg) {
+      const supplier = sMap.get(code) || '';
+      const mc = matCodeMap.get(code);
+      const unitPrice = mc?.currentPrice || ppMap.get(code) || 0;
       rows.push({
-        id: `leaf-${ck}`,
-        childPn: ck,
-        childName: data.childName || ck,
+        id: `raw-${code}`,
+        childPn: code,
+        childName: data.name,
         supplier,
-        materialType: typeFromRef(ck),
+        materialType: data.matType,
+        unit: data.unit,
         totalRequired: data.totalReq,
         unitPrice,
         totalCost: data.totalReq * unitPrice,
@@ -3823,7 +3860,7 @@ const StandardMaterialCostView: React.FC = () => {
     }
     rows.sort((a, b) => b.totalCost - a.totalCost);
     return rows;
-  }, [bomData, forecastData, selectedMonth, pnMapping, masterRefInfo, enrichedPurchasePrices, purchaseData]);
+  }, [bomData, forecastData, selectedMonth, pnMapping, masterRefInfo, enrichedPurchasePrices, enrichedMaterialCodes, purchaseData]);
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
@@ -4830,8 +4867,8 @@ const StandardMaterialCostView: React.FC = () => {
         const totalAmount = filtered.reduce((s, r) => s + r.totalCost, 0);
         const types = [...new Set(orderRows.map(r => r.materialType))].sort();
         const handleOrderDownload = () => {
-          const headers = ['구입처', '자재품번', '자재명', '유형', '소요량', '단가', '금액', '관련제품'];
-          const csvRows = filtered.map(r => [r.supplier, r.childPn, r.childName, r.materialType, r.totalRequired, r.unitPrice, Math.round(r.totalCost), r.parentProducts.join(', ')]);
+          const headers = ['구입처', '자재품번', '자재명', '유형', '단위', '소요량', '단가', '금액', '관련제품'];
+          const csvRows = filtered.map(r => [r.supplier, r.childPn, r.childName, r.materialType, r.unit, r.totalRequired, r.unitPrice, Math.round(r.totalCost), r.parentProducts.join(', ')]);
           downloadCSV('구입처별_발주목록', headers, csvRows);
         };
         return (
@@ -4908,8 +4945,8 @@ const StandardMaterialCostView: React.FC = () => {
                                     'bg-blue-50 text-blue-700'
                                   }`}>{r.materialType}</span>
                                 </td>
-                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">{Math.round(r.totalRequired).toLocaleString()}</td>
-                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">₩{r.unitPrice.toFixed(1)}</td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">{r.unit === 'KG' ? r.totalRequired.toFixed(1) : Math.round(r.totalRequired).toLocaleString()} <span className="text-[10px] text-slate-400">{r.unit}</span></td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">₩{r.unitPrice.toFixed(1)}/{r.unit}</td>
                                 <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-700">₩{Math.round(r.totalCost).toLocaleString()}</td>
                                 <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{r.parentProducts.length > 0 ? `${r.parentProducts.length}개 제품` : '-'}</td>
                               </tr>
