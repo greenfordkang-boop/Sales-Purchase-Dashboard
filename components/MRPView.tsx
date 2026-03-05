@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import MetricCard from './MetricCard';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
-import { BomRecord, normalizePn, buildBomRelations } from '../utils/bomDataParser';
+import { BomRecord, normalizePn, buildBomRelations, expandBomToLeaves } from '../utils/bomDataParser';
 import { ForecastItem } from '../utils/salesForecastParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord, BomMasterRecord } from '../utils/bomMasterParser';
 import { calculateMRP, MRPResult, MRPMaterialRow } from '../utils/mrpCalculator';
@@ -369,96 +369,133 @@ const MRPView: React.FC = () => {
         }
       }
 
-      const currentMonth = new Date().getMonth(); // 0-based
+      // ===== BOM 리프 자재 전개 기반 MRP =====
+      // P/N bridge: customerPn → internalCode (BOM key)
+      const c2i = new Map<string, string>();
+      for (const pc of productCodes) {
+        if (pc.customerPn && pc.productCode) c2i.set(normalizePn(pc.customerPn), normalizePn(pc.productCode));
+      }
+      for (const ri of refInfo) {
+        if (ri.customerPn && ri.itemCode) {
+          const k = normalizePn(ri.customerPn);
+          if (!c2i.has(k)) c2i.set(k, normalizePn(ri.itemCode));
+        }
+      }
 
-      // 12개월 반복: 제품별 월별 수량/비용 수집
-      const productMap = new Map<string, {
-        name: string; costPerEa: number; supplyType: string;
-        resinPerEa: number; paintPerEa: number; purchasePerEa: number;
-        monthlyQty: number[];
+      // normalized bomRel
+      const normBomRel = new Map<string, BomRecord[]>();
+      for (const [k, v] of bomRel) normBomRel.set(normalizePn(k), v);
+
+      const findBomKey = (pn: string): string | null => {
+        if (normBomRel.has(pn)) return pn;
+        const asInt = c2i.get(pn);
+        if (asInt && normBomRel.has(asInt)) return asInt;
+        return null;
+      };
+
+      // forceLeafPns: 구매/외주 품목
+      const forceLeaf = new Set<string>();
+      for (const ri of refInfo) {
+        if (ri.supplyType && /구매|외주/.test(ri.supplyType)) {
+          forceLeaf.add(normalizePn(ri.itemCode));
+        }
+      }
+
+      // supplier 맵
+      const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
+      const suppMap = new Map<string, string>();
+      const setSupp = (k: string, s: string) => { if (k && isValidSupp(s)) suppMap.set(normalizePn(k), s); };
+      for (const pp of enrichedPurchasePrices) { setSupp(pp.itemCode, pp.supplier); setSupp(pp.customerPn, pp.supplier); }
+      for (const ri of refInfo) { setSupp(ri.itemCode, ri.supplier); setSupp(ri.customerPn, ri.supplier); }
+      for (const p of mergedPurchaseData) { setSupp(p.partNo, p.supplier); }
+
+      // unitPrice 맵
+      const priceMap = new Map<string, number>();
+      for (const pp of enrichedPurchasePrices) {
+        const k = normalizePn(pp.itemCode);
+        if (pp.currentPrice > 0) priceMap.set(k, pp.currentPrice);
+      }
+
+      // materialType 판별
+      const typeFromRef = (childKey: string): string => {
+        for (const ri of refInfo) {
+          if (normalizePn(ri.itemCode) === childKey || normalizePn(ri.customerPn) === childKey) {
+            if (ri.supplyType?.includes('외주')) return '외주';
+            if (ri.processType?.includes('사출')) return 'RESIN';
+            if (ri.processType?.includes('도장')) return 'PAINT';
+            if (ri.supplyType === '구매') return '구매';
+          }
+        }
+        return '구매';
+      };
+
+      // 12개월 BOM 리프 전개
+      const leafAgg = new Map<string, {
+        childName: string; supplier: string; totalReq: number;
+        monthlyQty: number[]; parents: Set<string>;
       }>();
 
       for (let m = 0; m < 12; m++) {
-        const monthResult = calcProductBasedMaterialCost({
-          forecastData,
-          itemStandardCosts: itemStandardCosts,
-          bomRecords,
-          refInfo,
-          materialCodes: mergedMaterialCodes,
-          purchasePrices: enrichedPurchasePrices,
-          outsourcePrices: dbOutsourcePrices as OutsourcePrice[],
-          paintMixRatios,
-          productCodes,
-          paintConsumptionData: paintConsumptionData as { itemCode: string; custPN?: string; paintGPerEa: number; paintCostPerEa: number }[],
-          fallbackStandardCosts: fallbackStandardCosts as { productCode: string; customerPn?: string; eaCost: number; processType?: string; productName?: string }[],
-          fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
-          actualRevenue: (revenueData || []) as ItemRevenueRow[],
-          monthIndex: m,
-          currentMonth,
-        });
+        // 해당 월 forecast 수량
+        const forecastByPn = new Map<string, number>();
+        for (const item of forecastData) {
+          if (!item.partNo) continue;
+          const raw = normalizePn(item.partNo);
+          const qty = (item.monthlyQty?.[m] || 0);
+          if (qty <= 0) continue;
+          const key = findBomKey(raw) || raw;
+          forecastByPn.set(key, (forecastByPn.get(key) || 0) + qty);
+        }
 
-        for (const ir of monthResult.itemRows) {
-          const existing = productMap.get(ir.itemCode);
-          if (existing) {
-            existing.monthlyQty[m] = ir.production;
-          } else {
-            const mq = new Array(12).fill(0);
-            mq[m] = ir.production;
-            productMap.set(ir.itemCode, {
-              name: ir.itemName,
-              costPerEa: ir.totalCostPerEa,
-              supplyType: ir.supplyType,
-              resinPerEa: ir.injectionCost,
-              paintPerEa: ir.paintCostPerEa,
-              purchasePerEa: ir.purchaseCostPerEa,
-              monthlyQty: mq,
-            });
+        // BOM 리프 전개
+        for (const [bomKey, qty] of forecastByPn) {
+          if (!normBomRel.has(bomKey)) continue;
+          const leaves = expandBomToLeaves(bomKey, qty, normBomRel, undefined, 0, 10, forceLeaf);
+          for (const leaf of leaves) {
+            const ck = normalizePn(leaf.childPn);
+            const ex = leafAgg.get(ck);
+            if (ex) {
+              ex.monthlyQty[m] += leaf.totalRequired;
+              ex.totalReq += leaf.totalRequired;
+              ex.parents.add(bomKey);
+            } else {
+              const mq = new Array(12).fill(0);
+              mq[m] = leaf.totalRequired;
+              leafAgg.set(ck, {
+                childName: leaf.childName,
+                supplier: leaf.supplier,
+                totalReq: leaf.totalRequired,
+                monthlyQty: mq,
+                parents: new Set([bomKey]),
+              });
+            }
           }
         }
       }
 
-      // MRPMaterialRow 변환 (유형별 분리)
+      // MRPMaterialRow 변환
       const materials: MRPMaterialRow[] = [];
-      for (const [code, data] of productMap) {
-        const totalQty = data.monthlyQty.reduce((s, q) => s + q, 0);
-        if (totalQty <= 0) continue;
-
-        if (data.resinPerEa > 0) {
-          materials.push({
-            materialCode: code, materialName: data.name + ' 사출', materialType: 'RESIN',
-            unit: 'EA', requiredQty: totalQty, unitPrice: data.resinPerEa,
-            totalCost: totalQty * data.resinPerEa, parentProducts: [code],
-            monthlyQty: [...data.monthlyQty], supplier: '',
-          });
-        }
-        if (data.paintPerEa > 0) {
-          materials.push({
-            materialCode: code, materialName: data.name + ' 도장', materialType: 'PAINT',
-            unit: 'EA', requiredQty: totalQty, unitPrice: data.paintPerEa,
-            totalCost: totalQty * data.paintPerEa, parentProducts: [code],
-            monthlyQty: [...data.monthlyQty], supplier: '',
-          });
-        }
-        if (data.purchasePerEa > 0) {
-          materials.push({
-            materialCode: code, materialName: data.name,
-            materialType: /외주/.test(data.supplyType) ? '외주' : '구매',
-            unit: 'EA', requiredQty: totalQty, unitPrice: data.purchasePerEa,
-            totalCost: totalQty * data.purchasePerEa, parentProducts: [code],
-            monthlyQty: [...data.monthlyQty], supplier: '',
-          });
-        }
-        // 유형별 분리 없이 costPerEa만 있는 경우
-        if (data.resinPerEa <= 0 && data.paintPerEa <= 0 && data.purchasePerEa <= 0 && data.costPerEa > 0) {
-          materials.push({
-            materialCode: code, materialName: data.name,
-            materialType: /구매/.test(data.supplyType) ? '구매' : /외주/.test(data.supplyType) ? '외주' : 'RESIN',
-            unit: 'EA', requiredQty: totalQty, unitPrice: data.costPerEa,
-            totalCost: totalQty * data.costPerEa, parentProducts: [code],
-            monthlyQty: [...data.monthlyQty], supplier: '',
-          });
-        }
+      for (const [ck, data] of leafAgg) {
+        if (data.totalReq <= 0) continue;
+        const supplier = suppMap.get(ck) || data.supplier || '';
+        const unitPrice = priceMap.get(ck) || 0;
+        materials.push({
+          materialCode: ck,
+          materialName: data.childName || ck,
+          materialType: typeFromRef(ck),
+          unit: 'EA',
+          requiredQty: data.totalReq,
+          unitPrice,
+          totalCost: data.totalReq * unitPrice,
+          parentProducts: [...data.parents],
+          monthlyQty: data.monthlyQty,
+          supplier,
+        });
       }
+      materials.sort((a, b) => b.totalCost - a.totalCost);
+
+      const matchedProducts = new Set<string>();
+      for (const data of leafAgg.values()) data.parents.forEach(p => matchedProducts.add(p));
 
       const totalCost = materials.reduce((s, m) => s + m.totalCost, 0);
       const byMonth = Array.from({ length: 12 }, (_, i) => ({
@@ -474,16 +511,16 @@ const MRPView: React.FC = () => {
           totalMaterials: materials.length,
           totalRequiredQty: materials.reduce((s, m) => s + m.requiredQty, 0),
           totalCost,
-          bomMatchRate: productMap.size > 0 ? 100 : 0,
+          bomMatchRate: matchedProducts.size > 0 ? 100 : 0,
           unmatchedProducts: [],
           fuzzyMatchedProducts: [],
-          matchedProducts: productMap.size,
+          matchedProducts: matchedProducts.size,
           directCostProducts: 0,
           noPriceMaterials: materials.filter(m => m.unitPrice <= 0).length,
           priceMatchRate: materials.length > 0 ? (materials.filter(m => m.unitPrice > 0).length / materials.length) * 100 : 0,
         },
       };
-      console.log(`[MRP 통합엔진] ${productMap.size}제품 → ${materials.length}행, 총 ${(totalCost / 1e8).toFixed(2)}億`);
+      console.log(`[MRP 리프전개] ${matchedProducts.size}제품 → ${materials.length}리프자재, 총 ${(totalCost / 1e8).toFixed(2)}億`);
       setMrpResult(result);
     } catch (err) {
       console.error('MRP 계산 실패:', err);
