@@ -1045,8 +1045,8 @@ const MRPView: React.FC = () => {
                     className={`hover:bg-blue-50 cursor-pointer ${selectedMaterial?.materialCode === m.materialCode ? 'bg-blue-50' : m.unitPrice <= 0 ? 'bg-red-50' : ''}`}
                     onClick={() => setSelectedMaterial(selectedMaterial?.materialCode === m.materialCode ? null : m)}
                   >
-                    <td className="px-3 py-1.5 font-mono text-gray-700">{m.materialCode}</td>
-                    <td className="px-3 py-1.5 text-gray-600 max-w-36 truncate">{m.materialName}</td>
+                    <td className="px-3 py-1.5 font-mono text-gray-700 whitespace-nowrap">{m.materialCode}</td>
+                    <td className="px-3 py-1.5 text-gray-600 max-w-72 truncate" title={m.materialName}>{m.materialName}</td>
                     <td className="px-3 py-1.5">
                       <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{
                         backgroundColor: `${TYPE_COLORS[m.materialType] || '#94a3b8'}20`,
@@ -1056,7 +1056,7 @@ const MRPView: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-gray-500 text-center">{m.unit || '-'}</td>
-                    <td className="px-3 py-1.5 text-gray-500 max-w-24 truncate">{m.supplier || '-'}</td>
+                    <td className="px-3 py-1.5 text-gray-500 max-w-40 truncate" title={m.supplier || ''}>{m.supplier || '-'}</td>
                     <MrpQtyCell m={m} />
                     <td className="px-3 py-1.5 text-right text-gray-600">
                       {m.unitPrice > 0 ? `₩${Math.round(m.unitPrice).toLocaleString()}` : '-'}
