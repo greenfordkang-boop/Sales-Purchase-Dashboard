@@ -17,6 +17,7 @@ import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchase
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { purchaseService } from '../services/supabaseService';
+import { useColumnResize } from '../hooks/useColumnResize';
 
 const PurchaseView: React.FC = () => {
   // --- Initialization Helpers ---
@@ -530,21 +531,28 @@ const PurchaseView: React.FC = () => {
     { id: 'dataGuide', label: '데이터 품질 가이드' },
   ];
 
+  // Column resize hooks
+  const inboundResize = useColumnResize([100, 70, 80, 130, 200, 100, 120]);
+  const purchasePriceResize = useColumnResize([200, 130, 60, 110, 110, 110, 100]);
+  const supplierResize = useColumnResize([180, 130, 80, 100, 100]);
+
   // Helper component for table headers
-  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: any) => void }) => (
-    <th 
+  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort, style, onResizeStart }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: any) => void, style?: React.CSSProperties, onResizeStart?: (e: React.MouseEvent) => void }) => (
+    <th
         className={`px-4 py-3 min-w-[100px] ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group`}
+        style={style}
         onClick={() => onSort(sortKey)}
     >
         <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
             {label}
             <span className={`text-[10px] ${currentSort?.key === sortKey ? 'text-blue-600 font-bold' : 'text-slate-300 group-hover:text-slate-400'}`}>
-                {currentSort?.key === sortKey 
-                    ? (currentSort.direction === 'asc' ? '▲' : '▼') 
+                {currentSort?.key === sortKey
+                    ? (currentSort.direction === 'asc' ? '▲' : '▼')
                     : '⇅'
                 }
             </span>
         </div>
+        {onResizeStart && <div onMouseDown={onResizeStart} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />}
     </th>
   );
 
@@ -776,16 +784,17 @@ const PurchaseView: React.FC = () => {
             
             {purchaseListOpen && (
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
+                <table className="w-full text-xs text-left" style={inboundResize.getTableStyle()}>
+                  <colgroup>{inboundResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <SortableHeader label="입고일자" sortKey="date" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="구분" sortKey="category" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="유형" sortKey="type" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="발주처" sortKey="supplier" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="품명 (Item Name)" sortKey="itemName" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="입고수량" sortKey="qty" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} />
-                      <SortableHeader label="입고금액" sortKey="amount" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} />
+                      <SortableHeader label="입고일자" sortKey="date" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(0)} onResizeStart={e => inboundResize.startResize(0, e)} />
+                      <SortableHeader label="구분" sortKey="category" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(1)} onResizeStart={e => inboundResize.startResize(1, e)} />
+                      <SortableHeader label="유형" sortKey="type" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(2)} onResizeStart={e => inboundResize.startResize(2, e)} />
+                      <SortableHeader label="발주처" sortKey="supplier" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(3)} onResizeStart={e => inboundResize.startResize(3, e)} />
+                      <SortableHeader label="품명 (Item Name)" sortKey="itemName" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(4)} onResizeStart={e => inboundResize.startResize(4, e)} />
+                      <SortableHeader label="입고수량" sortKey="qty" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(5)} onResizeStart={e => inboundResize.startResize(5, e)} />
+                      <SortableHeader label="입고금액" sortKey="amount" align="right" currentSort={inboundSortConfig} onSort={handleInboundSort} style={inboundResize.getHeaderStyle(6)} onResizeStart={e => inboundResize.startResize(6, e)} />
                     </tr>
                     <tr className="bg-slate-50">
                       <th className="px-2 py-2"><input type="text" placeholder="날짜 검색" className="w-full p-1 border rounded text-xs font-normal" value={filter.date} onChange={(e) => handleFilterChange('date', e.target.value)} /></th>
@@ -893,19 +902,29 @@ const PurchaseView: React.FC = () => {
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                    <table className="w-full text-xs text-left">
+                    <table className="w-full text-xs text-left" style={purchasePriceResize.getTableStyle()}>
+                        <colgroup>{purchasePriceResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                             <tr>
-                                <SortableHeader label="품명 (Item Name)" sortKey="name" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="발주처" sortKey="supplier" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="단위" sortKey="unit" align="center" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="최신단가" sortKey="latestPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="최고단가" sortKey="maxPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="최저단가" sortKey="minPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
-                                <SortableHeader label="최근 입고일" sortKey="date" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} />
+                                <SortableHeader label="품명 (Item Name)" sortKey="name" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(0)} onResizeStart={e => purchasePriceResize.startResize(0, e)} />
+                                <SortableHeader label="발주처" sortKey="supplier" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(1)} onResizeStart={e => purchasePriceResize.startResize(1, e)} />
+                                <SortableHeader label="단위" sortKey="unit" align="center" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(2)} onResizeStart={e => purchasePriceResize.startResize(2, e)} />
+                                <SortableHeader label="최신단가" sortKey="latestPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(3)} onResizeStart={e => purchasePriceResize.startResize(3, e)} />
+                                <SortableHeader label="최고단가" sortKey="maxPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(4)} onResizeStart={e => purchasePriceResize.startResize(4, e)} />
+                                <SortableHeader label="최저단가" sortKey="minPrice" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(5)} onResizeStart={e => purchasePriceResize.startResize(5, e)} />
+                                <SortableHeader label="최근 입고일" sortKey="date" align="right" currentSort={priceSortConfig} onSort={handlePriceSort} style={purchasePriceResize.getHeaderStyle(6)} onResizeStart={e => purchasePriceResize.startResize(6, e)} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
+                            {priceStats.length > 0 && (
+                              <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                                <td colSpan={3} className="px-3 py-2 text-right">집계 ({priceStats.length}건)</td>
+                                <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(priceStats.reduce((s, p) => s + p.latestPrice, 0) / priceStats.length).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(Math.max(...priceStats.map(p => p.maxPrice))).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(Math.min(...priceStats.map(p => p.minPrice))).toLocaleString()}</td>
+                                <td className="px-3 py-2"></td>
+                              </tr>
+                            )}
                             {priceStats.map((item, idx) => (
                                 <tr key={idx} className="hover:bg-slate-50">
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
@@ -958,17 +977,27 @@ const PurchaseView: React.FC = () => {
                 </div>
 
                 <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                    <table className="w-full text-xs text-left">
+                    <table className="w-full text-xs text-left" style={supplierResize.getTableStyle()}>
+                        <colgroup>{supplierResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                         <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                             <tr>
-                                <SortableHeader label="협력사명" sortKey="name" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
-                                <SortableHeader label="총 매입액" sortKey="totalAmount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
-                                <SortableHeader label="점유율" sortKey="share" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
-                                <SortableHeader label="입고 건수" sortKey="count" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
-                                <SortableHeader label="취급 품목 수" sortKey="itemCount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} />
+                                <SortableHeader label="협력사명" sortKey="name" currentSort={supplierSortConfig} onSort={handleSupplierSort} style={supplierResize.getHeaderStyle(0)} onResizeStart={e => supplierResize.startResize(0, e)} />
+                                <SortableHeader label="총 매입액" sortKey="totalAmount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} style={supplierResize.getHeaderStyle(1)} onResizeStart={e => supplierResize.startResize(1, e)} />
+                                <SortableHeader label="점유율" sortKey="share" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} style={supplierResize.getHeaderStyle(2)} onResizeStart={e => supplierResize.startResize(2, e)} />
+                                <SortableHeader label="입고 건수" sortKey="count" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} style={supplierResize.getHeaderStyle(3)} onResizeStart={e => supplierResize.startResize(3, e)} />
+                                <SortableHeader label="취급 품목 수" sortKey="itemCount" align="right" currentSort={supplierSortConfig} onSort={handleSupplierSort} style={supplierResize.getHeaderStyle(4)} onResizeStart={e => supplierResize.startResize(4, e)} />
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
+                            {supplierStats.length > 0 && (
+                              <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                                <td className="px-3 py-2 text-right font-bold">집계 ({supplierStats.length}개사)</td>
+                                <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(supplierStats.reduce((s, p) => s + p.totalAmount, 0)).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-mono">100.0%</td>
+                                <td className="px-3 py-2 text-right font-mono">{supplierStats.reduce((s, p) => s + p.count, 0).toLocaleString()}</td>
+                                <td className="px-3 py-2 text-right font-mono">{supplierStats.reduce((s, p) => s + p.itemCount, 0)}</td>
+                              </tr>
+                            )}
                             {supplierStats.map((item, idx) => (
                                 <tr key={idx} className="hover:bg-slate-50">
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>

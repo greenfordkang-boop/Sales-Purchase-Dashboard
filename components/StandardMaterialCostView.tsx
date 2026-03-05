@@ -41,6 +41,7 @@ import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import paintConsumptionData from '../data/paintConsumptionByProduct.json';
 import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService, materialCodeService, paintMixLogService } from '../services/supabaseService';
 import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
+import { useColumnResize } from '../hooks/useColumnResize';
 import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
 
 // ============================================================
@@ -3585,9 +3586,15 @@ const StandardMaterialCostView: React.FC = () => {
   const hasAutoData = bomData.length > 0;
   const hasExcelData = excelData !== null;
 
+  // Column resize hooks
+  const materialResize = useColumnResize([120, 200, 120, 70, 100, 100, 120, 100, 120, 110, 80]);
+  const comparisonResize = useColumnResize([100, 180, 80, 90, 100, 120, 90, 100, 120, 110, 80, 70]);
+  const diagResize = useColumnResize([120, 100, 160, 60, 60, 100, 120, 100, 120, 80, 80, 60]);
+
   // SortableHeader
-  const SortableHeader = ({ label, sortKey, align = 'left' }: { label: string; sortKey: string; align?: string }) => (
+  const SortableHeader = ({ label, sortKey, align = 'left', style, onResizeStart }: { label: string; sortKey: string; align?: string; style?: React.CSSProperties; onResizeStart?: (e: React.MouseEvent) => void }) => (
     <th className={`px-3 py-2.5 min-w-[80px] ${align === 'right' ? 'text-right' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group whitespace-nowrap`}
+      style={style}
       onClick={() => handleSort(sortKey)}>
       <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
         {label}
@@ -3595,6 +3602,7 @@ const StandardMaterialCostView: React.FC = () => {
           {sortConfig?.key === sortKey ? (sortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
         </span>
       </div>
+      {onResizeStart && <div onMouseDown={onResizeStart} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />}
     </th>
   );
 
@@ -4025,20 +4033,21 @@ const StandardMaterialCostView: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-            <table className="w-full text-xs text-left">
+            <table className="w-full text-xs text-left" style={materialResize.getTableStyle()}>
+              <colgroup>{materialResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
               <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10">
                 <tr>
-                  <SortableHeader label="자재품번" sortKey="childPn" />
-                  <SortableHeader label="자재명" sortKey="childName" />
-                  <SortableHeader label="협력업체" sortKey="supplier" />
-                  <SortableHeader label="유형" sortKey="materialType" />
-                  <SortableHeader label="표준소요량" sortKey="standardReq" align="right" />
-                  <SortableHeader label="평균단가" sortKey="avgUnitPrice" align="right" />
-                  <SortableHeader label="표준재료비" sortKey="standardCost" align="right" />
-                  <SortableHeader label="실투입량" sortKey="actualQty" align="right" />
-                  <SortableHeader label="매입재료비" sortKey="actualCost" align="right" />
-                  <SortableHeader label="차이" sortKey="diff" align="right" />
-                  <SortableHeader label="차이율" sortKey="diffRate" align="right" />
+                  <SortableHeader label="자재품번" sortKey="childPn" style={materialResize.getHeaderStyle(0)} onResizeStart={e => materialResize.startResize(0, e)} />
+                  <SortableHeader label="자재명" sortKey="childName" style={materialResize.getHeaderStyle(1)} onResizeStart={e => materialResize.startResize(1, e)} />
+                  <SortableHeader label="협력업체" sortKey="supplier" style={materialResize.getHeaderStyle(2)} onResizeStart={e => materialResize.startResize(2, e)} />
+                  <SortableHeader label="유형" sortKey="materialType" style={materialResize.getHeaderStyle(3)} onResizeStart={e => materialResize.startResize(3, e)} />
+                  <SortableHeader label="표준소요량" sortKey="standardReq" align="right" style={materialResize.getHeaderStyle(4)} onResizeStart={e => materialResize.startResize(4, e)} />
+                  <SortableHeader label="평균단가" sortKey="avgUnitPrice" align="right" style={materialResize.getHeaderStyle(5)} onResizeStart={e => materialResize.startResize(5, e)} />
+                  <SortableHeader label="표준재료비" sortKey="standardCost" align="right" style={materialResize.getHeaderStyle(6)} onResizeStart={e => materialResize.startResize(6, e)} />
+                  <SortableHeader label="실투입량" sortKey="actualQty" align="right" style={materialResize.getHeaderStyle(7)} onResizeStart={e => materialResize.startResize(7, e)} />
+                  <SortableHeader label="매입재료비" sortKey="actualCost" align="right" style={materialResize.getHeaderStyle(8)} onResizeStart={e => materialResize.startResize(8, e)} />
+                  <SortableHeader label="차이" sortKey="diff" align="right" style={materialResize.getHeaderStyle(9)} onResizeStart={e => materialResize.startResize(9, e)} />
+                  <SortableHeader label="차이율" sortKey="diffRate" align="right" style={materialResize.getHeaderStyle(10)} onResizeStart={e => materialResize.startResize(10, e)} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -4147,21 +4156,22 @@ const StandardMaterialCostView: React.FC = () => {
 
             {/* 테이블 */}
             <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-              <table className="w-full text-xs text-left">
+              <table className="w-full text-xs text-left" style={comparisonResize.getTableStyle()}>
+                <colgroup>{comparisonResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                 <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-10">
                   <tr>
-                    <SortableHeader label="품목코드" sortKey="itemCode" />
-                    <SortableHeader label="품목명" sortKey="itemName" />
-                    <SortableHeader label="조달구분" sortKey="supplyType" />
-                    <SortableHeader label="표준수량" sortKey="stdQty" align="right" />
-                    <SortableHeader label="표준단가" sortKey="stdUnitPrice" align="right" />
-                    <SortableHeader label="표준금액" sortKey="stdAmount" align="right" />
-                    <SortableHeader label="매입수량" sortKey="actQty" align="right" />
-                    <SortableHeader label="매입단가" sortKey="actUnitPrice" align="right" />
-                    <SortableHeader label="매입금액" sortKey="actAmount" align="right" />
-                    <SortableHeader label="차이금액" sortKey="diffAmount" align="right" />
-                    <SortableHeader label="차이율" sortKey="diffRate" align="right" />
-                    <th className="px-3 py-2.5 text-center whitespace-nowrap">매칭</th>
+                    <SortableHeader label="품목코드" sortKey="itemCode" style={comparisonResize.getHeaderStyle(0)} onResizeStart={e => comparisonResize.startResize(0, e)} />
+                    <SortableHeader label="품목명" sortKey="itemName" style={comparisonResize.getHeaderStyle(1)} onResizeStart={e => comparisonResize.startResize(1, e)} />
+                    <SortableHeader label="조달구분" sortKey="supplyType" style={comparisonResize.getHeaderStyle(2)} onResizeStart={e => comparisonResize.startResize(2, e)} />
+                    <SortableHeader label="표준수량" sortKey="stdQty" align="right" style={comparisonResize.getHeaderStyle(3)} onResizeStart={e => comparisonResize.startResize(3, e)} />
+                    <SortableHeader label="표준단가" sortKey="stdUnitPrice" align="right" style={comparisonResize.getHeaderStyle(4)} onResizeStart={e => comparisonResize.startResize(4, e)} />
+                    <SortableHeader label="표준금액" sortKey="stdAmount" align="right" style={comparisonResize.getHeaderStyle(5)} onResizeStart={e => comparisonResize.startResize(5, e)} />
+                    <SortableHeader label="매입수량" sortKey="actQty" align="right" style={comparisonResize.getHeaderStyle(6)} onResizeStart={e => comparisonResize.startResize(6, e)} />
+                    <SortableHeader label="매입단가" sortKey="actUnitPrice" align="right" style={comparisonResize.getHeaderStyle(7)} onResizeStart={e => comparisonResize.startResize(7, e)} />
+                    <SortableHeader label="매입금액" sortKey="actAmount" align="right" style={comparisonResize.getHeaderStyle(8)} onResizeStart={e => comparisonResize.startResize(8, e)} />
+                    <SortableHeader label="차이금액" sortKey="diffAmount" align="right" style={comparisonResize.getHeaderStyle(9)} onResizeStart={e => comparisonResize.startResize(9, e)} />
+                    <SortableHeader label="차이율" sortKey="diffRate" align="right" style={comparisonResize.getHeaderStyle(10)} onResizeStart={e => comparisonResize.startResize(10, e)} />
+                    <th className="px-3 py-2.5 text-center whitespace-nowrap" style={{...comparisonResize.getHeaderStyle(11), cursor: 'default'}}><div className="flex items-center justify-center">매칭</div><div onMouseDown={e => comparisonResize.startResize(11, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" /></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -4345,24 +4355,36 @@ const StandardMaterialCostView: React.FC = () => {
           {/* 진단 테이블 */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" style={diagResize.getTableStyle()}>
+                <colgroup>{diagResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr className="text-slate-500 text-xs font-bold">
-                    <SortableHeader label="고객사P/N" sortKey="customerPn" />
-                    <SortableHeader label="내부코드" sortKey="internalCode" />
-                    <SortableHeader label="품목명" sortKey="itemName" />
-                    <SortableHeader label="조달" sortKey="supplyType" />
-                    <SortableHeader label="BOM" sortKey="bomChildCount" align="right" />
-                    <SortableHeader label="매출수량" sortKey="forecastQty" align="right" />
-                    <SortableHeader label="매출금액" sortKey="forecastRevenue" align="right" />
-                    <SortableHeader label="합계단가" sortKey="unitCostPerEa" align="right" />
-                    <SortableHeader label="표준재료비" sortKey="stdAmount" align="right" />
-                    <SortableHeader label="재료비율" sortKey="materialRatio" align="right" />
-                    <th className="px-3 py-2.5 text-center min-w-[80px]">진단</th>
-                    <th className="px-3 py-2.5 text-center min-w-[60px]">확인</th>
+                    <SortableHeader label="고객사P/N" sortKey="customerPn" style={diagResize.getHeaderStyle(0)} onResizeStart={e => diagResize.startResize(0, e)} />
+                    <SortableHeader label="내부코드" sortKey="internalCode" style={diagResize.getHeaderStyle(1)} onResizeStart={e => diagResize.startResize(1, e)} />
+                    <SortableHeader label="품목명" sortKey="itemName" style={diagResize.getHeaderStyle(2)} onResizeStart={e => diagResize.startResize(2, e)} />
+                    <SortableHeader label="조달" sortKey="supplyType" style={diagResize.getHeaderStyle(3)} onResizeStart={e => diagResize.startResize(3, e)} />
+                    <SortableHeader label="BOM" sortKey="bomChildCount" align="right" style={diagResize.getHeaderStyle(4)} onResizeStart={e => diagResize.startResize(4, e)} />
+                    <SortableHeader label="매출수량" sortKey="forecastQty" align="right" style={diagResize.getHeaderStyle(5)} onResizeStart={e => diagResize.startResize(5, e)} />
+                    <SortableHeader label="매출금액" sortKey="forecastRevenue" align="right" style={diagResize.getHeaderStyle(6)} onResizeStart={e => diagResize.startResize(6, e)} />
+                    <SortableHeader label="합계단가" sortKey="unitCostPerEa" align="right" style={diagResize.getHeaderStyle(7)} onResizeStart={e => diagResize.startResize(7, e)} />
+                    <SortableHeader label="표준재료비" sortKey="stdAmount" align="right" style={diagResize.getHeaderStyle(8)} onResizeStart={e => diagResize.startResize(8, e)} />
+                    <SortableHeader label="재료비율" sortKey="materialRatio" align="right" style={diagResize.getHeaderStyle(9)} onResizeStart={e => diagResize.startResize(9, e)} />
+                    <th className="px-3 py-2.5 text-center" style={{...diagResize.getHeaderStyle(10), cursor: 'default'}}><div className="flex items-center justify-center">진단</div><div onMouseDown={e => diagResize.startResize(10, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" /></th>
+                    <th className="px-3 py-2.5 text-center" style={{...diagResize.getHeaderStyle(11), cursor: 'default'}}><div className="flex items-center justify-center">확인</div><div onMouseDown={e => diagResize.startResize(11, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" /></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
+                  {filteredDiagRows.length > 0 && (
+                    <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <td colSpan={5} className="px-3 py-2 text-right">집계 ({filteredDiagRows.length}건)</td>
+                      <td className="px-3 py-2 text-right font-mono">{filteredDiagRows.reduce((s, r) => s + r.forecastQty, 0).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-right font-mono">{formatWon(filteredDiagRows.reduce((s, r) => s + r.forecastRevenue, 0))}</td>
+                      <td className="px-3 py-2 text-right font-mono">{(() => { const totalRev = filteredDiagRows.reduce((s, r) => s + r.forecastRevenue, 0); const totalQty = filteredDiagRows.reduce((s, r) => s + r.forecastQty, 0); return totalQty > 0 ? Math.round(totalRev / totalQty).toLocaleString() : '-'; })()}</td>
+                      <td className="px-3 py-2 text-right font-mono">{formatWon(filteredDiagRows.reduce((s, r) => s + r.stdAmount, 0))}</td>
+                      <td className="px-3 py-2 text-right font-mono">{(() => { const totalRev = filteredDiagRows.reduce((s, r) => s + r.forecastRevenue, 0); const totalStd = filteredDiagRows.reduce((s, r) => s + r.stdAmount, 0); return totalRev > 0 ? `${((totalStd / totalRev) * 100).toFixed(1)}%` : '-'; })()}</td>
+                      <td colSpan={2} className="px-3 py-2"></td>
+                    </tr>
+                  )}
                   {pagedDiagRows.map((r, i) => {
                     const ratioColor = r.materialRatio > 0 ? (
                       r.materialRatio >= TARGET_RATIO_IDEAL_MIN && r.materialRatio <= TARGET_RATIO_IDEAL_MAX ? 'text-emerald-600' :

@@ -16,6 +16,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { salesService, crService, rfqService, revenueService, itemRevenueService } from '../services/supabaseService';
 import SalesForecast from './SalesForecast';
 import type { ForecastItem, ForecastSummary } from '../utils/salesForecastParser';
+import { useColumnResize } from '../hooks/useColumnResize';
 
 // Options for Dropdowns
 const RFQ_PROCESS_OPTIONS = ['I', 'I/S', 'I/S/A', 'I/S/P', 'I/S/P/A', '선행', '기타'];
@@ -1144,21 +1145,30 @@ const SalesView: React.FC = () => {
   // Helper
   const SUB_TABS = [{ id: 'forecast', label: '매출계획' }, { id: 'sales', label: '매출현황' }, { id: 'unitprice', label: '단가현황' }, { id: 'cr', label: 'CR현황' }];
 
+  // Column resize hooks
+  const qtyResize = useColumnResize([120, 120, 120, 200, 100, 100, 80]);
+  const revenueResize = useColumnResize([80, 120, 120, 120, 150]);
+  const itemRevenueResize = useColumnResize([120, 120, 120, 200, 120, 130, 80]);
+  const rfqResize = useColumnResize([60, 100, 80, 120, 80, 80, 90, 90, 90, 100, 90, 90, 110, 120]);
+  const salesPriceResize = useColumnResize([120, 120, 100, 100, 100, 100, 100, 80]);
+
   // Helper component for table headers
-  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T | string) => void }) => (
-    <th 
+  const SortableHeader = <T,>({ label, sortKey, align = 'left', currentSort, onSort, style, onResizeStart }: { label: string, sortKey: keyof T | string, align?: string, currentSort: { key: keyof T | string, direction: 'asc' | 'desc' } | null, onSort: (key: keyof T | string) => void, style?: React.CSSProperties, onResizeStart?: (e: React.MouseEvent) => void }) => (
+    <th
         className={`px-4 py-3 min-w-[${String(sortKey) === 'index' ? '50px' : '100px'}] ${align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : 'text-left'} cursor-pointer hover:bg-slate-100 transition-colors select-none group`}
+        style={style}
         onClick={() => onSort(sortKey)}
     >
         <div className={`flex items-center gap-1 ${align === 'center' ? 'justify-center' : align === 'right' ? 'justify-end' : 'justify-start'}`}>
             {label}
             <span className={`text-[10px] ${currentSort?.key === sortKey ? 'text-blue-600 font-bold' : 'text-slate-300 group-hover:text-slate-400'}`}>
-                {currentSort?.key === sortKey 
-                    ? (currentSort.direction === 'asc' ? '▲' : '▼') 
+                {currentSort?.key === sortKey
+                    ? (currentSort.direction === 'asc' ? '▲' : '▼')
                     : '⇅'
                 }
             </span>
         </div>
+        {onResizeStart && <div onMouseDown={onResizeStart} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />}
     </th>
   );
 
@@ -1238,20 +1248,29 @@ const SalesView: React.FC = () => {
             <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
             {qtyListOpen && (
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
+                <table className="w-full text-xs text-left" style={qtyResize.getTableStyle()}>
+                  <colgroup>{qtyResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                        <SortableHeader label="고객사" sortKey="customer" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="Model" sortKey="model" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="품번" sortKey="partNo" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="품명" sortKey="partName" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="총계획" sortKey="totalPlan" align="right" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="총실적" sortKey="totalActual" align="right" currentSort={qtySortConfig} onSort={handleQtySort} />
-                        <SortableHeader label="달성률" sortKey="rate" align="center" currentSort={qtySortConfig} onSort={handleQtySort} />
+                        <SortableHeader label="고객사" sortKey="customer" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(0)} onResizeStart={e => qtyResize.startResize(0, e)} />
+                        <SortableHeader label="Model" sortKey="model" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(1)} onResizeStart={e => qtyResize.startResize(1, e)} />
+                        <SortableHeader label="품번" sortKey="partNo" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(2)} onResizeStart={e => qtyResize.startResize(2, e)} />
+                        <SortableHeader label="품명" sortKey="partName" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(3)} onResizeStart={e => qtyResize.startResize(3, e)} />
+                        <SortableHeader label="총계획" sortKey="totalPlan" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(4)} onResizeStart={e => qtyResize.startResize(4, e)} />
+                        <SortableHeader label="총실적" sortKey="totalActual" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(5)} onResizeStart={e => qtyResize.startResize(5, e)} />
+                        <SortableHeader label="달성률" sortKey="rate" align="center" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(6)} onResizeStart={e => qtyResize.startResize(6, e)} />
                     </tr>
                     <tr className="bg-slate-50"><th className="px-2 py-2"><input type="text" placeholder="고객사 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.customer} onChange={(e) => handleQtyFilterChange('customer', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="Model 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.model} onChange={(e) => handleQtyFilterChange('model', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품번 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partNo} onChange={(e) => handleQtyFilterChange('partNo', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품명 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partName} onChange={(e) => handleQtyFilterChange('partName', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="계획" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.plan} onChange={(e) => handleQtyFilterChange('plan', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="실적" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.actual} onChange={(e) => handleQtyFilterChange('actual', e.target.value)} /></th><th className="px-2 py-2"></th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
+                    {filteredQtyItems.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={4} className="px-3 py-2 text-right">집계 ({filteredQtyItems.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td>
+                      </tr>
+                    )}
                     {filteredQtyItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 font-mono text-slate-500">{item.partNo}</td><td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.partName}>{item.partName}</td><td className="px-4 py-3 text-right font-mono text-slate-500">{item.totalPlan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.totalActual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${item.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : item.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{item.rate.toFixed(1)}%</span></td></tr>))}
                      {filteredQtyItems.length === 0 && (<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
                   </tbody>
@@ -1433,14 +1452,15 @@ const SalesView: React.FC = () => {
 
             {revenueListOpen && (
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
+                <table className="w-full text-xs text-left" style={revenueResize.getTableStyle()}>
+                  <colgroup>{revenueResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <SortableHeader<RevenueItem> label="월" sortKey="month" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
-                      <SortableHeader<RevenueItem> label="고객사" sortKey="customer" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
-                      <SortableHeader<RevenueItem> label="Model" sortKey="model" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
-                      <SortableHeader<RevenueItem> label="매출수량" sortKey="qty" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
-                      <SortableHeader<RevenueItem> label="매출금액" sortKey="amount" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} />
+                      <SortableHeader<RevenueItem> label="월" sortKey="month" currentSort={revenueSortConfig} onSort={handleRevenueSort} style={revenueResize.getHeaderStyle(0)} onResizeStart={e => revenueResize.startResize(0, e)} />
+                      <SortableHeader<RevenueItem> label="고객사" sortKey="customer" currentSort={revenueSortConfig} onSort={handleRevenueSort} style={revenueResize.getHeaderStyle(1)} onResizeStart={e => revenueResize.startResize(1, e)} />
+                      <SortableHeader<RevenueItem> label="Model" sortKey="model" currentSort={revenueSortConfig} onSort={handleRevenueSort} style={revenueResize.getHeaderStyle(2)} onResizeStart={e => revenueResize.startResize(2, e)} />
+                      <SortableHeader<RevenueItem> label="매출수량" sortKey="qty" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} style={revenueResize.getHeaderStyle(3)} onResizeStart={e => revenueResize.startResize(3, e)} />
+                      <SortableHeader<RevenueItem> label="매출금액" sortKey="amount" align="right" currentSort={revenueSortConfig} onSort={handleRevenueSort} style={revenueResize.getHeaderStyle(4)} onResizeStart={e => revenueResize.startResize(4, e)} />
                     </tr>
                     <tr className="bg-slate-50">
                       <th className="px-2 py-2">
@@ -1567,16 +1587,17 @@ const SalesView: React.FC = () => {
 
             {itemRevenueListOpen && (
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left">
+                <table className="w-full text-xs text-left" style={itemRevenueResize.getTableStyle()}>
+                  <colgroup>{itemRevenueResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                   <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                     <tr>
-                      <SortableHeader label="Model" sortKey="model" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="품번" sortKey="partNo" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="고객사 P/N" sortKey="customerPN" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="품명" sortKey="partName" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="매출수량" sortKey="qty" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="매출금액" sortKey="amount" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
-                      <SortableHeader label="비중(%)" sortKey="share" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} />
+                      <SortableHeader label="Model" sortKey="model" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(0)} onResizeStart={e => itemRevenueResize.startResize(0, e)} />
+                      <SortableHeader label="품번" sortKey="partNo" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(1)} onResizeStart={e => itemRevenueResize.startResize(1, e)} />
+                      <SortableHeader label="고객사 P/N" sortKey="customerPN" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(2)} onResizeStart={e => itemRevenueResize.startResize(2, e)} />
+                      <SortableHeader label="품명" sortKey="partName" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(3)} onResizeStart={e => itemRevenueResize.startResize(3, e)} />
+                      <SortableHeader label="매출수량" sortKey="qty" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(4)} onResizeStart={e => itemRevenueResize.startResize(4, e)} />
+                      <SortableHeader label="매출금액" sortKey="amount" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(5)} onResizeStart={e => itemRevenueResize.startResize(5, e)} />
+                      <SortableHeader label="비중(%)" sortKey="share" align="right" currentSort={itemRevenueSortConfig} onSort={handleItemRevenueSort} style={itemRevenueResize.getHeaderStyle(6)} onResizeStart={e => itemRevenueResize.startResize(6, e)} />
                     </tr>
                     <tr className="bg-slate-50">
                       <th className="px-2 py-2">
@@ -1737,24 +1758,25 @@ const SalesView: React.FC = () => {
                             {uniqueRfqCustomers.map(c => <option key={c} value={c} />)}
                         </datalist>
 
-                        <table className="w-full text-xs text-left whitespace-nowrap">
+                        <table className="w-full text-xs text-left whitespace-nowrap" style={rfqResize.getTableStyle()}>
+                            <colgroup>{rfqResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                             <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                                 <tr>
                                     {isEditingRFQ && <th className="px-2 py-3 min-w-[30px] text-center sticky left-0 bg-slate-50 z-10">삭제</th>}
-                                    <SortableHeader label="순번" sortKey="index" align="center" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="고객사" sortKey="customer" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="제품군" sortKey="projectType" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="프로젝트명" sortKey="projectName" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="공정단계" sortKey="process" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="현상태" sortKey="status" align="center" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="시작일" sortKey="dateSelection" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="견적일" sortKey="dateQuotation" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="최초주문일" sortKey="datePO" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="Model" sortKey="model" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="월평균수량" sortKey="qty" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="예상단가" sortKey="unitPrice" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="예상매출" sortKey="amount" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} />
-                                    <SortableHeader label="비고" sortKey="remark" currentSort={rfqSortConfig} onSort={handleRfqSort} />
+                                    <SortableHeader label="순번" sortKey="index" align="center" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(0)} onResizeStart={e => rfqResize.startResize(0, e)} />
+                                    <SortableHeader label="고객사" sortKey="customer" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(1)} onResizeStart={e => rfqResize.startResize(1, e)} />
+                                    <SortableHeader label="제품군" sortKey="projectType" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(2)} onResizeStart={e => rfqResize.startResize(2, e)} />
+                                    <SortableHeader label="프로젝트명" sortKey="projectName" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(3)} onResizeStart={e => rfqResize.startResize(3, e)} />
+                                    <SortableHeader label="공정단계" sortKey="process" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(4)} onResizeStart={e => rfqResize.startResize(4, e)} />
+                                    <SortableHeader label="현상태" sortKey="status" align="center" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(5)} onResizeStart={e => rfqResize.startResize(5, e)} />
+                                    <SortableHeader label="시작일" sortKey="dateSelection" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(6)} onResizeStart={e => rfqResize.startResize(6, e)} />
+                                    <SortableHeader label="견적일" sortKey="dateQuotation" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(7)} onResizeStart={e => rfqResize.startResize(7, e)} />
+                                    <SortableHeader label="최초주문일" sortKey="datePO" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(8)} onResizeStart={e => rfqResize.startResize(8, e)} />
+                                    <SortableHeader label="Model" sortKey="model" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(9)} onResizeStart={e => rfqResize.startResize(9, e)} />
+                                    <SortableHeader label="월평균수량" sortKey="qty" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(10)} onResizeStart={e => rfqResize.startResize(10, e)} />
+                                    <SortableHeader label="예상단가" sortKey="unitPrice" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(11)} onResizeStart={e => rfqResize.startResize(11, e)} />
+                                    <SortableHeader label="예상매출" sortKey="amount" align="right" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(12)} onResizeStart={e => rfqResize.startResize(12, e)} />
+                                    <SortableHeader label="비고" sortKey="remark" currentSort={rfqSortConfig} onSort={handleRfqSort} style={rfqResize.getHeaderStyle(13)} onResizeStart={e => rfqResize.startResize(13, e)} />
                                 </tr>
                                 <tr className="bg-slate-50">
                                     {isEditingRFQ && <th className="px-2 py-2 sticky left-0 bg-slate-50 z-10"></th>}
@@ -1770,11 +1792,21 @@ const SalesView: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
+                                {filteredRfqItems.length > 0 && (
+                                  <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                                    {isEditingRFQ && <td className="px-2 py-2"></td>}
+                                    <td colSpan={10} className="px-3 py-2 text-right">집계 ({filteredRfqItems.length}건)</td>
+                                    <td className="px-3 py-2 text-right font-mono">{filteredRfqItems.reduce((s, r) => s + r.qty, 0).toLocaleString()}</td>
+                                    <td className="px-3 py-2"></td>
+                                    <td className="px-3 py-2 text-right font-mono">{filteredRfqItems.reduce((s, r) => s + r.amount, 0).toLocaleString()}</td>
+                                    <td className="px-3 py-2"></td>
+                                  </tr>
+                                )}
                                 {filteredRfqItems.map((item) => (
                                     <tr key={item.id} className="hover:bg-slate-50">
                                         {isEditingRFQ && (
                                             <td className="px-2 py-3 text-center sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
-                                                <button 
+                                                <button
                                                     type="button"
                                                     onClick={(e) => handleDeleteRfqRow(item.id, e)} 
                                                     className="bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs transition-colors" 
@@ -2173,11 +2205,13 @@ const SalesView: React.FC = () => {
 
                {/* Table */}
                <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                  <table className="w-full text-xs text-left">
+                  <table className="w-full text-xs text-left" style={salesPriceResize.getTableStyle()}>
+                     <colgroup>{salesPriceResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
                      <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
                         <tr>
                            <th
                               className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(0)}
                               onClick={() => handlePriceSort('model')}
                            >
                               <div className="flex items-center gap-1">
@@ -2186,9 +2220,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'model' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(0, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(1)}
                               onClick={() => handlePriceSort('customer')}
                            >
                               <div className="flex items-center gap-1">
@@ -2197,9 +2233,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'customer' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(1, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(2)}
                               onClick={() => handlePriceSort('latestPrice')}
                            >
                               <div className="flex items-center justify-end gap-1">
@@ -2208,9 +2246,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'latestPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(2, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(3)}
                               onClick={() => handlePriceSort('maxPrice')}
                            >
                               <div className="flex items-center justify-end gap-1">
@@ -2219,9 +2259,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'maxPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(3, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(4)}
                               onClick={() => handlePriceSort('minPrice')}
                            >
                               <div className="flex items-center justify-end gap-1">
@@ -2230,9 +2272,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'minPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(4, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(5)}
                               onClick={() => handlePriceSort('avgPrice')}
                            >
                               <div className="flex items-center justify-end gap-1">
@@ -2241,9 +2285,11 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'avgPrice' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(5, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
                            <th
                               className="px-4 py-3 text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                              style={salesPriceResize.getHeaderStyle(6)}
                               onClick={() => handlePriceSort('totalQty')}
                            >
                               <div className="flex items-center justify-end gap-1">
@@ -2252,8 +2298,12 @@ const SalesView: React.FC = () => {
                                     {priceSortConfig?.key === 'totalQty' ? (priceSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                                  </span>
                               </div>
+                              <div onMouseDown={e => salesPriceResize.startResize(6, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
                            </th>
-                           <th className="px-4 py-3 text-right">최근월</th>
+                           <th className="px-4 py-3 text-right" style={salesPriceResize.getHeaderStyle(7)}>
+                              최근월
+                              <div onMouseDown={e => salesPriceResize.startResize(7, e)} className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-blue-400" />
+                           </th>
                         </tr>
                         <tr className="bg-slate-50">
                            <th className="px-2 py-2">
@@ -2278,6 +2328,17 @@ const SalesView: React.FC = () => {
                         </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-100">
+                        {priceStats.length > 0 && (
+                          <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                            <td colSpan={2} className="px-3 py-2 text-right">집계 ({priceStats.length}건)</td>
+                            <td className="px-3 py-2 text-right font-mono">{Math.round(priceStats.reduce((s, p) => s + p.latestPrice, 0) / priceStats.length).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-mono">{Math.round(Math.max(...priceStats.map(p => p.maxPrice))).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-mono">{Math.round(Math.min(...priceStats.map(p => p.minPrice))).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-mono">{Math.round(priceStats.reduce((s, p) => s + p.avgPrice, 0) / priceStats.length).toLocaleString()}</td>
+                            <td className="px-3 py-2 text-right font-mono">{priceStats.reduce((s, p) => s + p.totalQty, 0).toLocaleString()}</td>
+                            <td className="px-3 py-2"></td>
+                          </tr>
+                        )}
                         {priceStats.map((item, idx) => (
                            <tr key={idx} className="hover:bg-slate-50">
                               <td className="px-4 py-3 font-medium text-slate-800">{item.model}</td>

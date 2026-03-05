@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, CSSProperties } from 'react';
+import React, { useState, useCallback, useRef, useEffect, CSSProperties } from 'react';
 
 export function useColumnResize(initialWidths: number[]) {
   const [widths, setWidths] = useState<number[]>(initialWidths);
@@ -50,5 +50,10 @@ export function useColumnResize(initialWidths: number[]) {
     whiteSpace: 'nowrap',
   }), [widths]);
 
-  return { widths, startResize, getHeaderStyle, getCellStyle };
+  const getTableStyle = useCallback((): CSSProperties => ({
+    tableLayout: 'fixed' as const,
+    minWidth: widths.reduce((a, b) => a + b, 0),
+  }), [widths]);
+
+  return { widths, startResize, getHeaderStyle, getCellStyle, getTableStyle };
 }
