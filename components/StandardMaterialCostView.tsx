@@ -3753,6 +3753,16 @@ const StandardMaterialCostView: React.FC = () => {
     enrichedPurchasePrices.forEach(pp => { setS(pp.itemCode, pp.supplier); setS(pp.customerPn, pp.supplier); });
     masterRefInfo.forEach(ri => { setS(ri.itemCode, ri.supplier); setS(ri.customerPn, ri.supplier); });
     purchaseData.forEach(p => { setS(p.itemCode, p.supplier); if (p.customerPn) setS(p.customerPn, p.supplier); });
+    // 원재료코드 → 구입처 역매핑
+    for (const ri of masterRefInfo) {
+      const riSupp = sMap.get(normalizePn(ri.itemCode)) || ri.supplier;
+      if (!riSupp || !isValidSupp(riSupp)) continue;
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+      for (const rc of rawCodes) {
+        const rk = normalizePn(rc);
+        if (!sMap.has(rk)) sMap.set(rk, riSupp);
+      }
+    }
 
     // 구매단가 맵
     const ppMap = new Map<string, number>();
@@ -3832,9 +3842,18 @@ const StandardMaterialCostView: React.FC = () => {
           }
           if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, bomKey);
         } else {
-          // 구매/외주/기타
-          const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
-          addRaw(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, bomKey);
+          // 구매/외주/기타: matCodeMap에서 materialType/unit 확인 후 분류
+          const mc = matCodeMap.get(ck);
+          if (mc && /RESIN|수지/i.test(mc.materialType || '')) {
+            const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
+            addRaw(ck, mc.materialName || leaf.childName || ck, unitStr, 'RESIN', leaf.totalRequired, bomKey);
+          } else if (mc && /PAINT|도료/i.test(mc.materialType || mc.paintCategory || '')) {
+            const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
+            addRaw(ck, mc.materialName || leaf.childName || ck, unitStr, 'PAINT', leaf.totalRequired, bomKey);
+          } else {
+            const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
+            addRaw(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, bomKey);
+          }
         }
       }
     }

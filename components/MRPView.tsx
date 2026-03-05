@@ -412,6 +412,16 @@ const MRPView: React.FC = () => {
       for (const pp of enrichedPurchasePrices) { setSupp(pp.itemCode, pp.supplier); setSupp(pp.customerPn, pp.supplier); }
       for (const ri of refInfo) { setSupp(ri.itemCode, ri.supplier); setSupp(ri.customerPn, ri.supplier); }
       for (const p of mergedPurchaseData) { setSupp(p.partNo, p.supplier); }
+      // 원재료코드 → 구입처 역매핑: refInfo의 rawMaterialCode가 사용되는 부품의 구입처를 원재료에도 적용
+      for (const ri of refInfo) {
+        const riSupp = suppMap.get(normalizePn(ri.itemCode)) || ri.supplier;
+        if (!riSupp || !isValidSupp(riSupp)) continue;
+        const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+        for (const rc of rawCodes) {
+          const rk = normalizePn(rc);
+          if (!suppMap.has(rk)) suppMap.set(rk, riSupp);
+        }
+      }
 
       // 구매단가 맵
       const purchasePriceMap = new Map<string, number>();
@@ -505,9 +515,20 @@ const MRPView: React.FC = () => {
                 addToRawAgg(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, m, bomKey);
               }
             } else {
-              // 구매/외주/기타: 부품 자체를 EA로 집계
-              const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
-              addToRawAgg(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, m, bomKey);
+              // 구매/외주/기타: matCodeMap에서 materialType/unit 확인 후 분류
+              const mc = matCodeMap.get(ck);
+              if (mc && /RESIN|수지/i.test(mc.materialType || '')) {
+                // 원재료(수지)가 BOM 리프로 직접 등록된 경우
+                const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
+                addToRawAgg(ck, mc.materialName || leaf.childName || ck, unitStr, 'RESIN', leaf.totalRequired, m, bomKey);
+              } else if (mc && /PAINT|도료/i.test(mc.materialType || mc.paintCategory || '')) {
+                // 도료가 BOM 리프로 직접 등록된 경우
+                const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
+                addToRawAgg(ck, mc.materialName || leaf.childName || ck, unitStr, 'PAINT', leaf.totalRequired, m, bomKey);
+              } else {
+                const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
+                addToRawAgg(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, m, bomKey);
+              }
             }
           }
         }
