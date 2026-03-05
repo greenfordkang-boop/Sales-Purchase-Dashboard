@@ -205,7 +205,7 @@ export async function uploadMaterialMaster(file: File): Promise<UploadResult> {
   }
 }
 
-// ─── 10. 서배합표준 ───
+// ─── 10. 배합표준서 ───
 export async function uploadStandardMix(file: File): Promise<UploadResult> {
   try {
     const buffer = await readFileAsArrayBuffer(file);
@@ -219,7 +219,7 @@ export async function uploadStandardMix(file: File): Promise<UploadResult> {
   }
 }
 
-// ─── 11. 가재질단 ───
+// ─── 11. 재질단가 ───
 export async function uploadMaterialPrice(file: File): Promise<UploadResult> {
   try {
     const buffer = await readFileAsArrayBuffer(file);

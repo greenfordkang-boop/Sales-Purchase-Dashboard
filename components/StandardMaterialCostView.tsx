@@ -120,14 +120,41 @@ const classifyMaterialType = (
   const c = (purchaseCategory || '').toUpperCase();
   const masterType = (itemMaster?.purchaseType || itemMaster?.materialType || '').toUpperCase();
 
-  if (t.includes('RESIN') || masterType.includes('사출') || masterType.includes('RESIN')) return 'RESIN';
-  if (t.includes('PAINT') || t.includes('도장') || masterType.includes('도장') || masterType.includes('PAINT')) return 'PAINT';
+  // 명시적 원재료 타입 먼저 체크
   if (c === 'MATERIAL' || t.includes('원재료')) {
     if (t.includes('RESIN') || t.includes('수지')) return 'RESIN';
     if (t.includes('PAINT') || t.includes('페인트') || t.includes('도료')) return 'PAINT';
-    return 'RESIN'; // 원재료 기본값
+    return '원재료';
   }
+  if (t.includes('RESIN') || t.includes('수지') || masterType.includes('RESIN') || masterType.includes('수지')) return 'RESIN';
+  if (t.includes('PAINT') || t.includes('도장') || t.includes('도료') || masterType.includes('도장') || masterType.includes('PAINT')) return 'PAINT';
+  if (masterType.includes('사출')) return 'RESIN';
   if (masterType.includes('외주') || t.includes('외주')) return '외주';
+  if (c === 'PARTS') return '구매';
+  return '구매';
+};
+
+/** supplyType + 원가 구성으로 materialType 결정 (ItemRow용) */
+const classifyBySupplyType = (
+  supplyType: string | undefined,
+  injectionCost: number,
+  paintCostPerEa: number,
+  purchaseUnitPrice?: number
+): string => {
+  const st = (supplyType || '').trim();
+  if (st === '구매') return '구매';
+  if (st.includes('외주')) return '외주';
+  if (st.includes('자작') || !st) {
+    // 자작 품목: 사출비+도장비가 모두 있으면 '자작'(조립품)
+    const hasInj = injectionCost > 0;
+    const hasPaint = paintCostPerEa > 0;
+    const hasPurch = (purchaseUnitPrice || 0) > 0;
+    if (hasInj && hasPaint) return '자작';
+    if (hasInj && !hasPaint) return 'RESIN';
+    if (!hasInj && hasPaint) return 'PAINT';
+    if (hasPurch) return '구매';
+    return '자작';
+  }
   return '구매';
 };
 
@@ -250,22 +277,22 @@ const StandardMaterialCostView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      setPaintUploadStatus('서배합표준 파싱 중...');
+      setPaintUploadStatus('배합표준서 파싱 중...');
       const buffer = await file.arrayBuffer();
       const records = parseStandardMixFile(buffer);
       if (records.length === 0) {
-        alert('서배합표준 파싱 실패: 재질코드/도료코드 컬럼을 확인해주세요.');
+        alert('배합표준서 파싱 실패: 재질코드/도료코드 컬럼을 확인해주세요.');
         setPaintUploadStatus('');
         e.target.value = '';
         return;
       }
       await paintMixRatioService.saveAll(records);
-      setPaintUploadStatus(`서배합표준 ${records.length}건 저장 완료`);
-      alert(`서배합표준에서 ${records.length}건 배합비율 로드 완료 (Supabase 저장됨)`);
+      setPaintUploadStatus(`배합표준서 ${records.length}건 저장 완료`);
+      alert(`배합표준서에서 ${records.length}건 배합비율 로드 완료 (Supabase 저장됨)`);
       // Reload data to reflect changes
       loadAllData();
     } catch (err) {
-      console.error('서배합표준 파싱 오류:', err);
+      console.error('배합표준서 파싱 오류:', err);
       alert('파일 파싱 중 오류가 발생했습니다.');
       setPaintUploadStatus('');
     }
@@ -276,21 +303,21 @@ const StandardMaterialCostView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      setPaintUploadStatus('가재질단 파싱 중...');
+      setPaintUploadStatus('재질단가 파싱 중...');
       const buffer = await file.arrayBuffer();
       const records = parseMaterialPriceFile(buffer);
       if (records.length === 0) {
-        alert('가재질단 파싱 실패: 재질코드 컬럼을 확인해주세요.');
+        alert('재질단가 파싱 실패: 재질코드 컬럼을 확인해주세요.');
         setPaintUploadStatus('');
         e.target.value = '';
         return;
       }
       const result = await materialCodeService.updatePrices(records);
-      setPaintUploadStatus(`가재질단 ${records.length}건 (갱신 ${result.updated}, 신규 ${result.inserted})`);
-      alert(`가재질단에서 ${records.length}건 로드\n- 단가 갱신: ${result.updated}건\n- 신규 등록: ${result.inserted}건`);
+      setPaintUploadStatus(`재질단가 ${records.length}건 (갱신 ${result.updated}, 신규 ${result.inserted})`);
+      alert(`재질단가에서 ${records.length}건 로드\n- 단가 갱신: ${result.updated}건\n- 신규 등록: ${result.inserted}건`);
       loadAllData();
     } catch (err) {
-      console.error('가재질단 파싱 오류:', err);
+      console.error('재질단가 파싱 오류:', err);
       alert('파일 파싱 중 오류가 발생했습니다.');
       setPaintUploadStatus('');
     }
@@ -437,7 +464,7 @@ const StandardMaterialCostView: React.FC = () => {
         childPn: ir.itemCode,
         childName: ir.itemName,
         supplier: '',
-        materialType: ir.supplyType === '구매' ? '구매' : ir.supplyType?.includes('외주') ? '외주' : ir.injectionCost > 0 ? 'RESIN' : ir.paintCostPerEa > 0 ? 'PAINT' : '자작',
+        materialType: classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -543,7 +570,7 @@ const StandardMaterialCostView: React.FC = () => {
         childPn: ir.itemCode,
         childName: ir.itemName,
         supplier: '',
-        materialType: ir.supplyType === '구매' ? '구매' : ir.supplyType?.includes('외주') ? '외주' : ir.injectionCost > 0 ? 'RESIN' : ir.paintCostPerEa > 0 ? 'PAINT' : '자작',
+        materialType: classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -1090,10 +1117,14 @@ const StandardMaterialCostView: React.FC = () => {
         }
       }
 
-      // 조달구분 기반 materialType
-      if (supplyType.includes('자작')) materialType = 'RESIN';
-      else if (supplyType.includes('외주')) materialType = '외주';
-      else if (supplyType.includes('구매')) materialType = '구매';
+      // 조달구분 기반 materialType — pnMaster 원가 구성으로 정밀 분류
+      const masterForType = lookupKeys.map(lk => pnMasterLookup.get(lk)).find(Boolean);
+      materialType = classifyBySupplyType(
+        supplyType,
+        masterForType?.injectionCost || 0,
+        masterForType?.paintCost || 0,
+        masterForType?.purchaseUnitPrice || 0,
+      );
 
       if (unitCost <= 0) continue;
 
@@ -1277,14 +1308,7 @@ const StandardMaterialCostView: React.FC = () => {
         rows.length = 0; // BOM rows 제거
         let ufIdx = 0;
         for (const ir of unifiedResult.itemRows) {
-          const isOut = ir.supplyType?.includes('외주');
-          const isPur = ir.supplyType === '구매';
-          let materialType = 'RESIN';
-          if (isOut) materialType = '외주';
-          else if (isPur) materialType = '구매';
-          else if (ir.paintCostPerEa > 0 && ir.injectionCost <= 0) materialType = 'PAINT';
-          else if (ir.injectionCost > 0) materialType = 'RESIN';
-          else materialType = '구매';
+          const materialType = classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice);
 
           rows.push({
             id: `uf-${ir.itemCode}-${ufIdx++}`,
@@ -3713,13 +3737,13 @@ const StandardMaterialCostView: React.FC = () => {
         <details className="mb-4">
           <summary className="cursor-pointer text-xs font-bold text-violet-600 hover:text-violet-800 flex items-center gap-1">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-            도장 참조데이터 업로드 (서배합표준 / 가재질단 / 배합일지)
+            도장 참조데이터 업로드 (배합표준서 / 재질단가 / 배합일지)
           </summary>
           <div className="mt-2 p-4 bg-violet-50 rounded-xl border border-violet-200 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* 서배합표준 */}
+              {/* 배합표준서 */}
               <label className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-violet-200 hover:border-violet-400 cursor-pointer transition-colors">
-                <div className="text-xs font-bold text-violet-700">서배합표준 (표준배합비)</div>
+                <div className="text-xs font-bold text-violet-700">배합표준서 (표준배합비)</div>
                 <div className="text-[10px] text-slate-500">S코드 → P/H/T 코드 + 비율</div>
                 <div className="flex items-center gap-1 px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
@@ -3727,9 +3751,9 @@ const StandardMaterialCostView: React.FC = () => {
                 </div>
                 <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleStandardMixUpload} />
               </label>
-              {/* 가재질단 */}
+              {/* 재질단가 */}
               <label className="flex flex-col items-center gap-2 p-3 bg-white rounded-lg border border-violet-200 hover:border-violet-400 cursor-pointer transition-colors">
-                <div className="text-xs font-bold text-violet-700">가재질단 (재질단가)</div>
+                <div className="text-xs font-bold text-violet-700">재질단가 (재질단가)</div>
                 <div className="text-[10px] text-slate-500">H/P/T 코드 → 현재단가 (원/kg)</div>
                 <div className="flex items-center gap-1 px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>

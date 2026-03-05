@@ -808,17 +808,17 @@ export function parseStandardMaterialExcel(
 }
 
 // ============================================================
-// 개별 파일 파서 (서배합표준, 가재질단, 배합일지)
+// 개별 파일 파서 (배합표준서, 재질단가, 배합일지)
 // ============================================================
 
 /**
- * 서배합표준.xlsx 파싱 → PaintMixRatio[]
+ * 배합표준서.xlsx 파싱 → PaintMixRatio[]
  * 컬럼 매핑:
  *   col1=재질코드(S)→paintCode, col4=주제도료(P)→mainCode,
  *   col6=주제비율→mainRatio, col7=경화제(H)→hardenerCode,
  *   col9=경화제비율, col10=희석제(T)→thinnerCode, col12=희석제비율
  *
- * 실제 서배합표준은 헤더 행이 다를 수 있으므로 유연하게 탐색
+ * 실제 배합표준서은 헤더 행이 다를 수 있으므로 유연하게 탐색
  */
 export function parseStandardMixFile(buffer: ArrayBuffer): PaintMixRatio[] {
   const wb = XLSX.read(buffer, { type: 'array' });
@@ -830,7 +830,7 @@ export function parseStandardMixFile(buffer: ArrayBuffer): PaintMixRatio[] {
   // 유연한 헤더 탐색: '재질코드' 또는 '배합' 포함 행 찾기
   const { headerRow, colMap } = findHeaderAndColMap(data, '재질코드', '도료코드', '품목코드');
   if (headerRow < 0) {
-    // 고정 인덱스 폴백 (서배합표준 표준 레이아웃)
+    // 고정 인덱스 폴백 (배합표준서 표준 레이아웃)
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
       const paintCode = str(row[0]) || str(row[1]);
@@ -851,7 +851,7 @@ export function parseStandardMixFile(buffer: ArrayBuffer): PaintMixRatio[] {
       });
     }
     if (items.length > 0) {
-      console.log(`[서배합표준] 고정 인덱스 파싱: ${items.length}건`);
+      console.log(`[배합표준서] 고정 인덱스 파싱: ${items.length}건`);
       return items;
     }
     return items;
@@ -892,12 +892,12 @@ export function parseStandardMixFile(buffer: ArrayBuffer): PaintMixRatio[] {
     });
   }
 
-  console.log(`[서배합표준] 헤더 기반 파싱: ${items.length}건`);
+  console.log(`[배합표준서] 헤더 기반 파싱: ${items.length}건`);
   return items;
 }
 
 /**
- * 가재질단.xlsx 파싱 → MaterialPrice[] (단가 포함)
+ * 재질단가.xlsx 파싱 → MaterialPrice[] (단가 포함)
  * 컬럼: col1=재질코드, col2=재질명, col3=단위, col4=품목유형, col5=재질분류,
  *        col6=업체코드, col7=업체명, col8=단가구분, col9=최초단가, col10=현재단가
  */
@@ -931,7 +931,7 @@ export function parseMaterialPriceFile(buffer: ArrayBuffer): MaterialPrice[] {
       });
     }
     if (items.length > 0) {
-      console.log(`[가재질단] 고정 인덱스 파싱: ${items.length}건`);
+      console.log(`[재질단가] 고정 인덱스 파싱: ${items.length}건`);
     }
     return items;
   }
@@ -965,7 +965,7 @@ export function parseMaterialPriceFile(buffer: ArrayBuffer): MaterialPrice[] {
     });
   }
 
-  console.log(`[가재질단] 헤더 기반 파싱: ${items.length}건 (단가 보유: ${items.filter(i => i.currentPrice > 0).length}건)`);
+  console.log(`[재질단가] 헤더 기반 파싱: ${items.length}건 (단가 보유: ${items.filter(i => i.currentPrice > 0).length}건)`);
   return items;
 }
 

@@ -2711,7 +2711,7 @@ export const materialCodeService = {
     }
   },
 
-  /** 가재질단 데이터로 material_code_master 단가 일괄 갱신 (기존 레코드 upsert) */
+  /** 재질단가 데이터로 material_code_master 단가 일괄 갱신 (기존 레코드 upsert) */
   async updatePrices(prices: MaterialPrice[]): Promise<{ updated: number; inserted: number }> {
     let updated = 0;
     let inserted = 0;

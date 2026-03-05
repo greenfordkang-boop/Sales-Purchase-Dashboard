@@ -284,9 +284,9 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   handler={uploadBomMaster} />
                 <Row id="purch-material-master" label="자재마스터" format="XLS" accept={xlsAccept}
                   handler={uploadMaterialMaster} />
-                <Row id="purch-std-mix" label="서배합표준" format="XLS" accept={xlsAccept}
+                <Row id="purch-std-mix" label="배합표준서" format="XLS" accept={xlsAccept}
                   handler={uploadStandardMix} />
-                <Row id="purch-mat-price" label="가재질단" format="XLS" accept={xlsAccept}
+                <Row id="purch-mat-price" label="재질단가" format="XLS" accept={xlsAccept}
                   handler={uploadMaterialPrice} />
                 <Row id="purch-mix-log" label="배합일지" format="XLS" accept={xlsAccept}
                   handler={uploadPaintMixLog} />
