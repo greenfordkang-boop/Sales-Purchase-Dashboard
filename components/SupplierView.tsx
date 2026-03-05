@@ -54,7 +54,8 @@ const SupplierView: React.FC = () => {
 
   // --- 통합 업로더 모달에서 업로드 후 데이터 새로고침 ---
   useEffect(() => {
-    const handler = () => {
+    const handler = (e: Event) => {
+      if (!(e instanceof CustomEvent) || !e.detail) return;
       try {
         const stored = localStorage.getItem('dashboard_supplierData');
         if (stored) setSupplierData(JSON.parse(stored));

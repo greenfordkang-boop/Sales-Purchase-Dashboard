@@ -284,7 +284,8 @@ const SalesView: React.FC = () => {
 
   // --- 통합 업로더 모달에서 업로드 후 데이터 새로고침 ---
   useEffect(() => {
-    const handler = () => {
+    const handler = (e: Event) => {
+      if (!(e instanceof CustomEvent) || !e.detail) return;
       try {
         const s = localStorage.getItem('dashboard_salesData');
         if (s) setSalesData(JSON.parse(s));
