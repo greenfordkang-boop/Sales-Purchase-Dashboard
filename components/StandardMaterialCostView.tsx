@@ -443,25 +443,27 @@ const StandardMaterialCostView: React.FC = () => {
     // Supabase 로딩 중이면 스킵 (완료 후 1회만 계산)
     if (supabaseLoading) return null;
 
-    // ── Supplier 조회 맵 (우선순위: 입고실적 < 기준정보 < 구매단가) ──
+    // ── Supplier 조회 맵 (나중 set이 우선 → 입고실적이 최종) ──
+    const isValidSupplier = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
     const suppMap = new Map<string, string>();
-    purchaseData.forEach(p => {
-      if (p.supplier) {
-        if (p.itemCode) suppMap.set(normalizePn(p.itemCode), p.supplier);
-        if (p.customerPn) suppMap.set(normalizePn(p.customerPn), p.supplier);
-      }
-    });
-    masterRefInfo.forEach(ri => {
-      if (ri.supplier) {
-        suppMap.set(normalizePn(ri.itemCode), ri.supplier);
-        if (ri.customerPn) suppMap.set(normalizePn(ri.customerPn), ri.supplier);
-      }
-    });
+    const setSupp = (key: string, supplier: string) => {
+      if (!key || !isValidSupplier(supplier)) return;
+      suppMap.set(normalizePn(key), supplier);
+    };
+    // 3순위 (가장 먼저 set → 나중에 덮어쓸 수 있음)
     enrichedPurchasePrices.forEach(pp => {
-      if (pp.supplier) {
-        suppMap.set(normalizePn(pp.itemCode), pp.supplier);
-        if (pp.customerPn) suppMap.set(normalizePn(pp.customerPn), pp.supplier);
-      }
+      setSupp(pp.itemCode, pp.supplier);
+      setSupp(pp.customerPn, pp.supplier);
+    });
+    // 2순위
+    masterRefInfo.forEach(ri => {
+      setSupp(ri.itemCode, ri.supplier);
+      setSupp(ri.customerPn, ri.supplier);
+    });
+    // 1순위 (입고실적 — 실제 거래된 업체명, 최종 덮어쓰기)
+    purchaseData.forEach(p => {
+      setSupp(p.itemCode, p.supplier);
+      if (p.customerPn) setSupp(p.customerPn, p.supplier);
     });
     const lookupSupplier = (...keys: string[]) => {
       for (const k of keys) {
