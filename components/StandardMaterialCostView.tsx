@@ -144,8 +144,10 @@ const classifyBySupplyType = (
   const st = (supplyType || '').trim();
   if (st === '구매') return '구매';
   if (st.includes('외주')) return '외주';
-  if (st.includes('자작') || !st) {
-    // 자작 품목: 사출비+도장비가 모두 있으면 '자작'(조립품)
+  // supplyType이 '자작'으로 명시 → 무조건 자작
+  if (st.includes('자작')) return '자작';
+  // supplyType 비어있을 때만 원가 구성으로 추론
+  if (!st) {
     const hasInj = injectionCost > 0;
     const hasPaint = paintCostPerEa > 0;
     const hasPurch = (purchaseUnitPrice || 0) > 0;
