@@ -372,11 +372,13 @@ export const expandBomToLeaves = (
     const normalizedChild = normalizePn(child.childPn);
     const grandChildren = bomRelations.get(normalizedChild);
 
-    // 원재료/구매/외주 부품은 항상 leaf 노드로 처리 (타 제품 BOM 교차 전개 방지)
+    // 자식이 없는 경우 또는 최대 깊이 도달 → 무조건 leaf
+    // 자식이 있는 경우: partType/forceLeaf로 leaf 판정하되, 자식이 있으면 계속 전개
+    const hasGrandChildren = grandChildren && grandChildren.length > 0;
     const isLeafType = /원재료|구매|외주/.test(child.partType || '');
-    // 기준정보에서 구매/외주로 확인된 품번도 leaf로 처리 (외주 도장품 등)
     const isForcedLeaf = forceLeafPns?.has(normalizedChild) || false;
-    if (!grandChildren || grandChildren.length === 0 || depth + 1 >= maxDepth || isLeafType || isForcedLeaf) {
+    // 자식이 있으면 isLeafType/isForcedLeaf 무시하고 계속 전개 (실제 최하위까지 도달)
+    if (!hasGrandChildren || depth + 1 >= maxDepth) {
       // leaf 노드 또는 최대 깊이 도달
       results.push({
         childPn: child.childPn,
