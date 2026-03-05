@@ -52,6 +52,18 @@ const SupplierView: React.FC = () => {
     loadFromSupabase();
   }, []);
 
+  // --- 통합 업로더 모달에서 업로드 후 데이터 새로고침 ---
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const stored = localStorage.getItem('dashboard_supplierData');
+        if (stored) setSupplierData(JSON.parse(stored));
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('dashboard-data-updated', handler);
+    return () => window.removeEventListener('dashboard-data-updated', handler);
+  }, []);
+
   // --- Persistence ---
   useEffect(() => {
     if (supplierData.length > 0) {

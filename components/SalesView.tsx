@@ -282,6 +282,26 @@ const SalesView: React.FC = () => {
     loadFromSupabase();
   }, []);
 
+  // --- 통합 업로더 모달에서 업로드 후 데이터 새로고침 ---
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const s = localStorage.getItem('dashboard_salesData');
+        if (s) setSalesData(JSON.parse(s));
+        const r = localStorage.getItem('dashboard_revenueData');
+        if (r) setRevenueData(JSON.parse(r));
+        const ir = localStorage.getItem('dashboard_itemRevenueData');
+        if (ir) setItemRevenueData(JSON.parse(ir));
+        const rq = localStorage.getItem('dashboard_rfqData');
+        if (rq) setRfqData(JSON.parse(rq));
+        const cr = localStorage.getItem('dashboard_crData');
+        if (cr) setCrData(JSON.parse(cr));
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('dashboard-data-updated', handler);
+    return () => window.removeEventListener('dashboard-data-updated', handler);
+  }, []);
+
   // --- Persistence Effects (localStorage 저장) ---
   useEffect(() => {
     safeSetItem('dashboard_salesData', JSON.stringify(salesData));

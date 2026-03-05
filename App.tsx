@@ -9,6 +9,7 @@ import InventoryView from './components/InventoryView';
 import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
 import UserGuideModal from './components/UserGuideModal';
+import UploaderModal from './components/UploaderModal';
 import {
   BarChart,
   Bar,
@@ -53,6 +54,7 @@ const App: React.FC = () => {
   // 대시보드 상태
   const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(DashboardTab.OVERVIEW);
   const [showGuide, setShowGuide] = useState(false);
+  const [showUploader, setShowUploader] = useState(false);
 
   // 관리자 패널 상태
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -657,6 +659,12 @@ const App: React.FC = () => {
                 {tab.label}
               </button>
             ))}
+            <button
+              onClick={() => setShowUploader(true)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-emerald-400 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-400/50"
+            >
+              업로더
+            </button>
             {isAdmin(currentUser?.email) && (
               <button
                 onClick={() => setActiveTab('admin')}
@@ -711,6 +719,7 @@ const App: React.FC = () => {
       </main>
 
       <UserGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
+      <UploaderModal isOpen={showUploader} onClose={() => setShowUploader(false)} />
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
         신성오토텍 영업/구매 대시보드 v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}

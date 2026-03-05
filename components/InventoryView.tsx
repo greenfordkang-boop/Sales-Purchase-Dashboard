@@ -370,6 +370,18 @@ const InventoryView: React.FC = () => {
     loadFromSupabase();
   }, []);
 
+  // --- 통합 업로더 모달에서 업로드 후 데이터 새로고침 ---
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const stored = localStorage.getItem('dashboard_inventory_v2');
+        if (stored) setInventoryData(JSON.parse(stored));
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('dashboard-data-updated', handler);
+    return () => window.removeEventListener('dashboard-data-updated', handler);
+  }, []);
+
   // --- Handlers ---
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'resin' | 'paint' | 'parts') => {
     const file = e.target.files?.[0];
