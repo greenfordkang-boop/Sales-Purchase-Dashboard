@@ -539,6 +539,15 @@ const StandardMaterialCostView: React.FC = () => {
       rows.sort((a, b) => b.standardCost - a.standardCost);
       const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
 
+      // BOM진단 연동: 제품 P/N별 EA단가 맵 (customerPn + itemCode 양쪽 등록)
+      const costByPn = new Map<string, number>();
+      for (const ir of result.itemRows) {
+        if (ir.totalCostPerEa > 0) {
+          costByPn.set(normalizePn(ir.itemCode), ir.totalCostPerEa);
+          costByPn.set(normalizePn(ir.customerPn), ir.totalCostPerEa);
+        }
+      }
+
       return {
         rows,
         totalStandard: result.totalStandard,
@@ -556,6 +565,7 @@ const StandardMaterialCostView: React.FC = () => {
           purchaseMatched: 0,
           calcSource: dataMode === 'auto' ? 'AutoProductBased' : 'ProductBased',
         },
+        costByPn,
       };
     }
 
@@ -646,6 +656,14 @@ const StandardMaterialCostView: React.FC = () => {
 
       const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
 
+      const costByPn = new Map<string, number>();
+      for (const ir of result.itemRows) {
+        if (ir.totalCostPerEa > 0) {
+          costByPn.set(normalizePn(ir.itemCode), ir.totalCostPerEa);
+          costByPn.set(normalizePn(ir.customerPn), ir.totalCostPerEa);
+        }
+      }
+
       return {
         rows,
         totalStandard: result.totalStandard,
@@ -663,6 +681,7 @@ const StandardMaterialCostView: React.FC = () => {
           purchaseMatched: 0,
           calcSource: 'Master',
         },
+        costByPn,
       };
     }
 
@@ -1541,6 +1560,11 @@ const StandardMaterialCostView: React.FC = () => {
       }
     }
 
+    const costByPn = new Map<string, number>();
+    for (const r of rows) {
+      if (r.avgUnitPrice > 0) costByPn.set(normalizePn(r.childPn), r.avgUnitPrice);
+    }
+
     return {
       rows,
       totalStandard: finalStandard,
@@ -1558,6 +1582,7 @@ const StandardMaterialCostView: React.FC = () => {
         purchaseMatched,
         calcSource,
       },
+      costByPn,
     };
   }, [dataMode, forecastData, itemRevenueData, bomData, pnMapping, purchaseData, itemMasterData, selectedYear, selectedMonth, excelData, masterRefInfo, masterMaterialCodes, masterPurchasePrices, masterOutsourcePrices, masterPaintMixRatios, masterItemStandardCosts, masterProductCodes, supabaseLoading, enrichedMaterialCodes, enrichedPurchasePrices, enrichedStdCostMap]);
 
@@ -2636,11 +2661,21 @@ const StandardMaterialCostView: React.FC = () => {
         if (!refInfo) refInfo = refLookup.get(lk);
       }
 
-      // ★ Priority 0: 표준재료비 JSON (standardMaterialCost.json 2659건 — autoCalcResult 동일 소스)
+      // ★ Priority 0: autoCalcResult (실제 산출 엔진 결과 — BOM전개+stdCost+refInfo 통합)
       let stdEaCost = 0;
-      for (const lk of lookupKeys) {
-        stdEaCost = enrichedStdCostMap.get(lk) || 0;
-        if (stdEaCost > 0) break;
+      const autoCalcCost = autoCalcResult?.costByPn;
+      if (autoCalcCost) {
+        for (const lk of lookupKeys) {
+          stdEaCost = autoCalcCost.get(lk) || 0;
+          if (stdEaCost > 0) break;
+        }
+      }
+      // Priority 1: enrichedStdCostMap (부품 코드 직접 매칭 — fallback)
+      if (stdEaCost === 0) {
+        for (const lk of lookupKeys) {
+          stdEaCost = enrichedStdCostMap.get(lk) || 0;
+          if (stdEaCost > 0) break;
+        }
       }
 
       let injCost = 0, pntCost = 0, purPrice = 0;
@@ -2822,7 +2857,8 @@ const StandardMaterialCostView: React.FC = () => {
     });
 
     const stdHitCount = forecastRows.filter(r => r.breakPoint.includes('표준재료비')).length;
-    console.log(`[BOM진단] P/N브릿지: ${custToInt.size}건, BOM: ${bomRelations.size}개, 매출: ${forecastRows.length}개, 표준재료비JSON: ${enrichedStdCostMap.size}건 (매칭 ${stdHitCount}건)`);
+    const autoCalcHitCount = forecastRows.filter(r => r.hasUnitCost).length;
+    console.log(`[BOM진단] P/N브릿지: ${custToInt.size}건, BOM: ${bomRelations.size}개, 매출: ${forecastRows.length}개, autoCalc매칭: ${autoCalcResult?.costByPn?.size || 0}건→${autoCalcHitCount}건 적용, stdJSON: ${stdHitCount}건`);
     console.log(`[BOM진단] BOM매칭: ${bomHitCount}/${forecastRows.length} (${forecastRows.length > 0 ? (bomHitCount / forecastRows.length * 100).toFixed(0) : 0}%), P/N미매핑: ${pnMissCount}, 단가없음: ${costMissCount} (BOM누락 ${noBomRows.length} + 단가누락 ${noCostRows.length}), 비율이상: ${ratioIssueCount}, 정상: ${okCount}`);
     console.log(`[BOM진단] BOM없는 전체 ${allNoBomRows.length}건 조달구분: 자작 ${noBomBySupply['자작']}, 외주 ${noBomBySupply['외주']}, 구매 ${noBomBySupply['구매']}, 미분류 ${noBomBySupply['미분류']}`);
     if (noBomRows.length > 0) {
@@ -2853,7 +2889,7 @@ const StandardMaterialCostView: React.FC = () => {
       unmatchedCount: unmatchedRows.length,
       coverageRate: forecastRows.length > 0 ? (okCount / forecastRows.length) * 100 : 0,
     };
-  }, [forecastData, pnMapping, masterRefInfo, bomData, purchaseData, excelData, selectedMonth, selectedYear, enrichedStdCostMap]);
+  }, [forecastData, pnMapping, masterRefInfo, bomData, purchaseData, excelData, selectedMonth, selectedYear, enrichedStdCostMap, autoCalcResult]);
 
   // Filtered diagnostic rows
   const filteredDiagRows = useMemo(() => {

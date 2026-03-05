@@ -29,6 +29,7 @@ export interface AutoCalcResult {
   actualRatio: number;      // 실적재료비율
   matchRate: number;        // BOM 매칭율
   debug: { forecastItems: number; bomProducts: number; bomMissing: number; materials: number; purchaseMatched: number; calcSource?: string };
+  costByPn?: Map<string, number>;  // 제품 P/N별 EA단가 (BOM진단 연동용)
 }
 
 export interface MonthlySummaryRow {
