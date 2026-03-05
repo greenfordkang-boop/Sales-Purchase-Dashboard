@@ -399,9 +399,23 @@ const MRPView: React.FC = () => {
         if (ri.customerPn) refInfoMap.set(normalizePn(ri.customerPn), ri);
       }
 
-      // 재질코드 맵 (materialCode → record)
+      // 쓰레기 코드 필터: 파싱 오류로 생성된 행번호 기반 코드 제외
+      const isJunkCode = (code: string) => /^MATRCOD\d/i.test(code) || /ROW\d{3,}$/i.test(code) || /^MATR_COD/i.test(code);
+
+      // 자재명 기반 RESIN/PAINT 추론 (matCodeMap에 없을 때 fallback)
+      const inferTypeFromName = (name: string): 'RESIN' | 'PAINT' | null => {
+        if (!name) return null;
+        const n = name.toUpperCase();
+        if (/\b(PC|ABS|PP|PE|PA|POM|PBT|TPU|TPE|NYLON|LEXAN|NORYL|CYCOLOY|BAYBLEND|ASA|SAN|PMMA|PVC|PS)\b/.test(n)) return 'RESIN';
+        if (/수지|레진|RESIN/i.test(n)) return 'RESIN';
+        if (/도료|PAINT|페인트|프라이머|PRIMER|클리어|CLEAR\s*COAT|THINNER|신나|경화제|HARDENER/i.test(n)) return 'PAINT';
+        return null;
+      };
+
+      // 재질코드 맵 (materialCode → record) — 쓰레기 코드 제외
       const matCodeMap = new Map<string, typeof mergedMaterialCodes[0]>();
       for (const mc of mergedMaterialCodes) {
+        if (isJunkCode(mc.materialCode)) continue;
         matCodeMap.set(normalizePn(mc.materialCode), mc);
       }
 
@@ -494,6 +508,7 @@ const MRPView: React.FC = () => {
               const lossM = 1 + ((ri.lossRate || 0) / 100);
               let resolved = false;
               for (const rawCode of rawCodes) {
+                if (isJunkCode(rawCode)) continue;
                 const rawNorm = normalizePn(rawCode);
                 const rcMc = matCodeMap.get(rawNorm);
                 if (rcMc && /PAINT|도료/i.test(rcMc.materialType || '')) continue;
@@ -517,7 +532,7 @@ const MRPView: React.FC = () => {
               let resolved = false;
               for (let pi = 0; pi < rawCodes.length; pi++) {
                 const pq = paintQtys[pi] || 0;
-                if (pq <= 0) continue;
+                if (pq <= 0 || isJunkCode(rawCodes[pi])) continue;
                 const rawNorm = normalizePn(rawCodes[pi]);
                 const rcMc = matCodeMap.get(rawNorm);
                 const kgPerEa = (pq / 1000) * lossM / lotDiv;
@@ -529,9 +544,17 @@ const MRPView: React.FC = () => {
                 addToRawAgg(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, m, bomKey);
               }
             }
-            // 5) 기타 구매품
+            // 5) 기타: 자재명 패턴으로 RESIN/PAINT 추론, 쓰레기 코드 제외
             else {
-              addToRawAgg(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, m, bomKey);
+              if (isJunkCode(ck)) continue; // 쓰레기 코드 skip
+              const inferred = inferTypeFromName(leaf.childName || ck);
+              if (inferred === 'RESIN') {
+                addToRawAgg(ck, leaf.childName || ck, 'KG', 'RESIN', leaf.totalRequired, m, bomKey);
+              } else if (inferred === 'PAINT') {
+                addToRawAgg(ck, leaf.childName || ck, 'KG', 'PAINT', leaf.totalRequired, m, bomKey);
+              } else {
+                addToRawAgg(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, m, bomKey);
+              }
             }
           }
         }

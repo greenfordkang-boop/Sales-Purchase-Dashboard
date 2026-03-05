@@ -3742,9 +3742,20 @@ const StandardMaterialCostView: React.FC = () => {
       if (ri.customerPn) refMap.set(normalizePn(ri.customerPn), ri);
     });
 
-    // 재질코드 맵
+    // 쓰레기 코드 필터 + 자재명 기반 타입 추론
+    const isJunkCode = (code: string) => /^MATRCOD\d/i.test(code) || /ROW\d{3,}$/i.test(code) || /^MATR_COD/i.test(code);
+    const inferTypeFromName = (name: string): 'RESIN' | 'PAINT' | null => {
+      if (!name) return null;
+      const n = name.toUpperCase();
+      if (/\b(PC|ABS|PP|PE|PA|POM|PBT|TPU|TPE|NYLON|LEXAN|NORYL|CYCOLOY|BAYBLEND|ASA|SAN|PMMA|PVC|PS)\b/.test(n)) return 'RESIN';
+      if (/수지|레진|RESIN/i.test(n)) return 'RESIN';
+      if (/도료|PAINT|페인트|프라이머|PRIMER|클리어|CLEAR\s*COAT|THINNER|신나|경화제|HARDENER/i.test(n)) return 'PAINT';
+      return null;
+    };
+
+    // 재질코드 맵 — 쓰레기 코드 제외
     const matCodeMap = new Map<string, typeof enrichedMaterialCodes[0]>();
-    enrichedMaterialCodes.forEach(mc => matCodeMap.set(normalizePn(mc.materialCode), mc));
+    enrichedMaterialCodes.forEach(mc => { if (!isJunkCode(mc.materialCode)) matCodeMap.set(normalizePn(mc.materialCode), mc); });
 
     // supplier 맵
     const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
@@ -3829,6 +3840,7 @@ const StandardMaterialCostView: React.FC = () => {
           const lossM = 1 + ((ri.lossRate || 0) / 100);
           let resolved = false;
           for (const rawCode of rawCodes) {
+            if (isJunkCode(rawCode)) continue;
             const rawNorm = normalizePn(rawCode);
             const rcMc = matCodeMap.get(rawNorm);
             if (rcMc && /PAINT|도료/i.test(rcMc.materialType || '')) continue;
@@ -3849,7 +3861,7 @@ const StandardMaterialCostView: React.FC = () => {
           let resolved = false;
           for (let pi = 0; pi < rawCodes.length; pi++) {
             const pq = paintQtys[pi] || 0;
-            if (pq <= 0) continue;
+            if (pq <= 0 || isJunkCode(rawCodes[pi])) continue;
             const rawNorm = normalizePn(rawCodes[pi]);
             const rcMc = matCodeMap.get(rawNorm);
             const kgPerEa = (pq / 1000) * lossM / lotDiv;
@@ -3858,9 +3870,17 @@ const StandardMaterialCostView: React.FC = () => {
           }
           if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, bomKey);
         }
-        // 5) 기타 구매품
+        // 5) 기타: 자재명 패턴으로 RESIN/PAINT 추론, 쓰레기 코드 제외
         else {
-          addRaw(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, bomKey);
+          if (isJunkCode(ck)) continue;
+          const inferred = inferTypeFromName(leaf.childName || ck);
+          if (inferred === 'RESIN') {
+            addRaw(ck, leaf.childName || ck, 'KG', 'RESIN', leaf.totalRequired, bomKey);
+          } else if (inferred === 'PAINT') {
+            addRaw(ck, leaf.childName || ck, 'KG', 'PAINT', leaf.totalRequired, bomKey);
+          } else {
+            addRaw(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, bomKey);
+          }
         }
       }
     }
