@@ -2636,32 +2636,44 @@ const StandardMaterialCostView: React.FC = () => {
         if (!refInfo) refInfo = refLookup.get(lk);
       }
 
-      let injCost = exItem?.injectionCost || master?.injectionCost || 0;
-      let pntCost = exItem?.paintCost || master?.paintCost || 0;
-      let purPrice = exItem?.purchasePrice || master?.purchaseUnitPrice || 0;
-
-      // materialCost 폴백: 개별 단가 없으면 총 재료비 단가 사용
-      if (injCost === 0 && pntCost === 0 && purPrice === 0 && master?.materialCost && master.materialCost > 0) {
-        purPrice = master.materialCost;
+      // ★ Priority 0: 표준재료비 JSON (standardMaterialCost.json 2659건 — autoCalcResult 동일 소스)
+      let stdEaCost = 0;
+      for (const lk of lookupKeys) {
+        stdEaCost = enrichedStdCostMap.get(lk) || 0;
+        if (stdEaCost > 0) break;
       }
 
-      // 입고평균 단가로 보강 (BOM 리프별 단가가 없을 때)
-      if (injCost === 0 && pntCost === 0 && purPrice === 0 && hasBom && leafCount > 0) {
-        // BOM 리프별 입고단가 합산
-        const leaves = expandBomToLeaves(bomKey!, 1, bomRelations);
-        let bomBasedCost = 0;
-        for (const leaf of leaves) {
-          const lc = normalizePn(leaf.childPn);
-          const price = purchaseAvgPrice.get(lc) || 0;
-          bomBasedCost += price * leaf.totalRequired;
+      let injCost = 0, pntCost = 0, purPrice = 0;
+      if (stdEaCost > 0) {
+        // 표준재료비 JSON에 전체 EA단가 있으면 그대로 사용
+        purPrice = stdEaCost;
+      } else {
+        injCost = exItem?.injectionCost || master?.injectionCost || 0;
+        pntCost = exItem?.paintCost || master?.paintCost || 0;
+        purPrice = exItem?.purchasePrice || master?.purchaseUnitPrice || 0;
+
+        // materialCost 폴백: 개별 단가 없으면 총 재료비 단가 사용
+        if (injCost === 0 && pntCost === 0 && purPrice === 0 && master?.materialCost && master.materialCost > 0) {
+          purPrice = master.materialCost;
         }
-        if (bomBasedCost > 0) purPrice = bomBasedCost; // BOM 전개 기반 단가
-      }
 
-      // 입고평균 단가 폴백 (제품 P/N 자체의 입고 데이터 확인)
-      if (injCost === 0 && pntCost === 0 && purPrice === 0) {
-        const directPrice = purchaseAvgPrice.get(custPn) || (internalCode ? purchaseAvgPrice.get(internalCode) : 0) || 0;
-        if (directPrice > 0) purPrice = directPrice;
+        // 입고평균 단가로 보강 (BOM 리프별 단가가 없을 때)
+        if (injCost === 0 && pntCost === 0 && purPrice === 0 && hasBom && leafCount > 0) {
+          const leaves = expandBomToLeaves(bomKey!, 1, bomRelations);
+          let bomBasedCost = 0;
+          for (const leaf of leaves) {
+            const lc = normalizePn(leaf.childPn);
+            const price = purchaseAvgPrice.get(lc) || 0;
+            bomBasedCost += price * leaf.totalRequired;
+          }
+          if (bomBasedCost > 0) purPrice = bomBasedCost;
+        }
+
+        // 입고평균 단가 폴백 (제품 P/N 자체의 입고 데이터 확인)
+        if (injCost === 0 && pntCost === 0 && purPrice === 0) {
+          const directPrice = purchaseAvgPrice.get(custPn) || (internalCode ? purchaseAvgPrice.get(internalCode) : 0) || 0;
+          if (directPrice > 0) purPrice = directPrice;
+        }
       }
 
       const unitCost = injCost + pntCost + purPrice;
@@ -2679,23 +2691,29 @@ const StandardMaterialCostView: React.FC = () => {
       const needsBom = isSelfMade || !supplyType; // 자작 또는 미분류만 BOM 필요
       let breakPoint = '정상';
       let breakLevel: 0 | 1 | 2 | 3 | 4 = 0;
-      if (!hasPnMapping) { breakPoint = 'P/N 매핑 없음'; breakLevel = 2; }
-      else if (!hasBom && needsBom) { breakPoint = 'BOM 누락 (자작)'; breakLevel = 3; }
-      else if (!hasBom && !needsBom && !hasUnitCost) { breakPoint = '단가 없음 (구매/외주)'; breakLevel = 3; }
-      else if (!hasBom && !needsBom && hasUnitCost) { breakPoint = `정상 (${supplyType}·BOM불요)`; breakLevel = 0; }
-      else if (!hasUnitCost) { breakPoint = '단가 없음'; breakLevel = 3; }
-      else if (revenue > 0 && (materialRatio < TARGET_RATIO_MIN || materialRatio > TARGET_RATIO_MAX)) {
+      if (!hasUnitCost) {
+        // 단가가 전혀 없는 경우에만 파이프라인 진단
+        if (!hasPnMapping) { breakPoint = 'P/N 매핑 없음'; breakLevel = 2; }
+        else if (!hasBom && needsBom) { breakPoint = 'BOM 누락 (자작)'; breakLevel = 3; }
+        else if (!hasBom && !needsBom) { breakPoint = '단가 없음 (구매/외주)'; breakLevel = 3; }
+        else { breakPoint = '단가 없음'; breakLevel = 3; }
+      } else if (revenue > 0 && (materialRatio < TARGET_RATIO_MIN || materialRatio > TARGET_RATIO_MAX)) {
         if (materialRatio > TARGET_RATIO_MAX) {
           breakPoint = `비율 과다 ${(materialRatio * 100).toFixed(0)}%`;
         } else {
-          // 비율 과소 원인 세분화
+          // 비율 과소 원인 세분화 (stdEaCost 사용시 개별 사출/도장 분리 안됨)
           const missingParts: string[] = [];
-          if (injCost === 0 && (supplyType === '자작' || processType === '사출' || !supplyType)) missingParts.push('사출');
-          if (pntCost === 0 && (processType === '도장' || supplyType === '자작' || !supplyType)) missingParts.push('도장');
-          if (purPrice === 0 && supplyType !== '자작') missingParts.push('구매단가');
+          if (!stdEaCost) {
+            if (injCost === 0 && (supplyType === '자작' || processType === '사출' || !supplyType)) missingParts.push('사출');
+            if (pntCost === 0 && (processType === '도장' || supplyType === '자작' || !supplyType)) missingParts.push('도장');
+            if (purPrice === 0 && supplyType !== '자작') missingParts.push('구매단가');
+          }
           breakPoint = `비율 과소 ${(materialRatio * 100).toFixed(0)}%${missingParts.length > 0 ? ` (${missingParts.join('+')} 누락)` : ''}`;
         }
         breakLevel = 4;
+      } else {
+        // 정상: 소스 표시
+        breakPoint = stdEaCost > 0 ? '정상 (표준재료비)' : !hasBom && !needsBom ? `정상 (${supplyType}·BOM불요)` : '정상';
       }
 
       rows.push({
@@ -2803,8 +2821,9 @@ const StandardMaterialCostView: React.FC = () => {
       else noBomBySupply['미분류']++;
     });
 
-    console.log(`[BOM진단] P/N브릿지: ${custToInt.size}건 (1:N ${custToInts.size}건), BOM: ${bomRelations.size}개 모품번, 매출: ${forecastRows.length}개 품목`);
-    console.log(`[BOM진단] BOM매칭: ${bomHitCount}/${forecastRows.length} (${forecastRows.length > 0 ? (bomHitCount / forecastRows.length * 100).toFixed(0) : 0}%), P/N미매핑: ${pnMissCount}, 진짜 누락: ${costMissCount} (BOM필요인데없음 ${noBomRows.length} + 단가없음 ${noCostRows.length}), BOM불요정상: ${noBomOkRows.length}, 비율이상: ${ratioIssueCount}, 정상: ${okCount}`);
+    const stdHitCount = forecastRows.filter(r => r.breakPoint.includes('표준재료비')).length;
+    console.log(`[BOM진단] P/N브릿지: ${custToInt.size}건, BOM: ${bomRelations.size}개, 매출: ${forecastRows.length}개, 표준재료비JSON: ${enrichedStdCostMap.size}건 (매칭 ${stdHitCount}건)`);
+    console.log(`[BOM진단] BOM매칭: ${bomHitCount}/${forecastRows.length} (${forecastRows.length > 0 ? (bomHitCount / forecastRows.length * 100).toFixed(0) : 0}%), P/N미매핑: ${pnMissCount}, 단가없음: ${costMissCount} (BOM누락 ${noBomRows.length} + 단가누락 ${noCostRows.length}), 비율이상: ${ratioIssueCount}, 정상: ${okCount}`);
     console.log(`[BOM진단] BOM없는 전체 ${allNoBomRows.length}건 조달구분: 자작 ${noBomBySupply['자작']}, 외주 ${noBomBySupply['외주']}, 구매 ${noBomBySupply['구매']}, 미분류 ${noBomBySupply['미분류']}`);
     if (noBomRows.length > 0) {
       console.log(`[BOM진단] 진짜 BOM누락 품목 샘플:`, noBomRows.slice(0, 10).map(r => `${r.customerPn} → ${r.internalCode} (${r.supplyType})`));
@@ -2834,7 +2853,7 @@ const StandardMaterialCostView: React.FC = () => {
       unmatchedCount: unmatchedRows.length,
       coverageRate: forecastRows.length > 0 ? (okCount / forecastRows.length) * 100 : 0,
     };
-  }, [forecastData, pnMapping, masterRefInfo, bomData, purchaseData, excelData, selectedMonth, selectedYear]);
+  }, [forecastData, pnMapping, masterRefInfo, bomData, purchaseData, excelData, selectedMonth, selectedYear, enrichedStdCostMap]);
 
   // Filtered diagnostic rows
   const filteredDiagRows = useMemo(() => {
