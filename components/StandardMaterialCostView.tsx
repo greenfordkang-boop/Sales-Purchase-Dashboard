@@ -3803,9 +3803,16 @@ const StandardMaterialCostView: React.FC = () => {
       for (const leaf of leaves) {
         const ck = normalizePn(leaf.childPn);
         const ri = refMap.get(ck);
+        const supplyType = ri?.supplyType || '';
+        const isOutsourced = /외주/.test(supplyType);
+        const isSelfMade = !supplyType || /자작/.test(supplyType);
 
-        if (ri && /사출/.test(ri.processType || '')) {
-          // 사출품 → rawMaterialCode + 중량으로 수지 소요량 산출
+        // 1) 외주품: 원재료 전개 없이 외주/EA
+        if (isOutsourced) {
+          addRaw(ck, leaf.childName || ck, 'EA', '외주', leaf.totalRequired, bomKey);
+        }
+        // 2) 자작 사출품: rawMaterialCode → RESIN KG
+        else if (isSelfMade && ri && /사출/.test(ri.processType || '')) {
           const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
           const nw = ri.netWeight || 0;
           const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
@@ -3817,15 +3824,15 @@ const StandardMaterialCostView: React.FC = () => {
             const mc = matCodeMap.get(rawNorm);
             if (mc && /PAINT|도료/i.test(mc.materialType || '')) continue;
             if (nw > 0) {
-              const wPerEa = (nw + rw / cavity) * lossM / 1000; // kg/EA
-              const totalKg = leaf.totalRequired * wPerEa;
-              addRaw(rawNorm, mc?.materialName || rawCode, 'KG', 'RESIN', totalKg, bomKey);
+              const wPerEa = (nw + rw / cavity) * lossM / 1000;
+              addRaw(rawNorm, mc?.materialName || rawCode, 'KG', 'RESIN', leaf.totalRequired * wPerEa, bomKey);
               resolved = true;
             }
           }
           if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'RESIN', leaf.totalRequired, bomKey);
-        } else if (ri && /도장/.test(ri.processType || '')) {
-          // 도장품 → paintQty × rawMaterialCode로 도료 소요량 산출
+        }
+        // 3) 자작 도장품: paintQty × rawMaterialCode → PAINT KG
+        else if (isSelfMade && ri && /도장/.test(ri.processType || '')) {
           const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''].filter(Boolean) as string[];
           const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
           const lossM = 1 + ((ri.lossRate || 0) / 100);
@@ -3841,8 +3848,9 @@ const StandardMaterialCostView: React.FC = () => {
             resolved = true;
           }
           if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, bomKey);
-        } else {
-          // 구매/외주/기타: matCodeMap에서 materialType/unit 확인 후 분류
+        }
+        // 4) 구매 등 기타: matCodeMap 확인 → RESIN/PAINT/구매
+        else {
           const mc = matCodeMap.get(ck);
           if (mc && /RESIN|수지/i.test(mc.materialType || '')) {
             const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
@@ -3851,8 +3859,7 @@ const StandardMaterialCostView: React.FC = () => {
             const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
             addRaw(ck, mc.materialName || leaf.childName || ck, unitStr, 'PAINT', leaf.totalRequired, bomKey);
           } else {
-            const matType = ri?.supplyType?.includes('외주') ? '외주' : '구매';
-            addRaw(ck, leaf.childName || ck, 'EA', matType, leaf.totalRequired, bomKey);
+            addRaw(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, bomKey);
           }
         }
       }
