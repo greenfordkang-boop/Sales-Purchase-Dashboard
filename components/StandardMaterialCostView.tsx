@@ -200,6 +200,12 @@ const StandardMaterialCostView: React.FC = () => {
   const [drawingAnalysis, setDrawingAnalysis] = useState<BomCompareResult | null>(null);
   const [drawingAnalyzing, setDrawingAnalyzing] = useState(false);
 
+  // --- 구입처별 발주 모달 ---
+  const [showOrderModal, setShowOrderModal] = useState(false);
+  const [orderCollapsed, setOrderCollapsed] = useState<Record<string, boolean>>({});
+  const [orderFilterType, setOrderFilterType] = useState('All');
+  const [orderSearch, setOrderSearch] = useState('');
+
   // --- 마감재료비: 월별 수동 입력 (localStorage 저장) ---
   const [closingCosts, setClosingCosts] = useState<Record<string, number>>(() => {
     try {
@@ -437,6 +443,58 @@ const StandardMaterialCostView: React.FC = () => {
     // Supabase 로딩 중이면 스킵 (완료 후 1회만 계산)
     if (supabaseLoading) return null;
 
+    // ── Supplier 조회 맵 (우선순위: 입고실적 < 기준정보 < 구매단가) ──
+    const suppMap = new Map<string, string>();
+    purchaseData.forEach(p => {
+      if (p.supplier) {
+        if (p.itemCode) suppMap.set(normalizePn(p.itemCode), p.supplier);
+        if (p.customerPn) suppMap.set(normalizePn(p.customerPn), p.supplier);
+      }
+    });
+    masterRefInfo.forEach(ri => {
+      if (ri.supplier) {
+        suppMap.set(normalizePn(ri.itemCode), ri.supplier);
+        if (ri.customerPn) suppMap.set(normalizePn(ri.customerPn), ri.supplier);
+      }
+    });
+    enrichedPurchasePrices.forEach(pp => {
+      if (pp.supplier) {
+        suppMap.set(normalizePn(pp.itemCode), pp.supplier);
+        if (pp.customerPn) suppMap.set(normalizePn(pp.customerPn), pp.supplier);
+      }
+    });
+    const lookupSupplier = (...keys: string[]) => {
+      for (const k of keys) {
+        if (!k) continue;
+        const s = suppMap.get(normalizePn(k));
+        if (s) return s;
+      }
+      return '';
+    };
+
+    // ── supplyType 보완 맵: masterRefInfo에서 조달구분 조회 ──
+    const supplyTypeMap = new Map<string, string>();
+    masterRefInfo.forEach(ri => {
+      if (ri.supplyType) {
+        supplyTypeMap.set(normalizePn(ri.itemCode), ri.supplyType);
+        if (ri.customerPn) supplyTypeMap.set(normalizePn(ri.customerPn), ri.supplyType);
+      }
+    });
+    const classifyWithFallback = (
+      supplyType: string | undefined,
+      injectionCost: number,
+      paintCostPerEa: number,
+      purchaseUnitPrice: number | undefined,
+      itemCode: string,
+      customerPn?: string,
+    ) => {
+      let st = supplyType;
+      if (!st) {
+        st = supplyTypeMap.get(normalizePn(itemCode)) || (customerPn ? supplyTypeMap.get(normalizePn(customerPn)) : undefined) || '';
+      }
+      return classifyBySupplyType(st, injectionCost, paintCostPerEa, purchaseUnitPrice);
+    };
+
     // ===== 제품별재료비 기준 통합 모드: forecastData 기준으로 모든 품목 산출 (ProductMaterialCostView 동일 로직) =====
     // master + auto 모두 forecastData 있으면 통합 함수 사용 → 3개 탭 100% 일치
     if ((dataMode === 'master' || dataMode === 'auto') && forecastData.length > 0) {
@@ -465,8 +523,8 @@ const StandardMaterialCostView: React.FC = () => {
         id: `isc-${ir.itemCode}-${idx}`,
         childPn: ir.itemCode,
         childName: ir.itemName,
-        supplier: '',
-        materialType: classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice),
+        supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
+        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -571,8 +629,8 @@ const StandardMaterialCostView: React.FC = () => {
         id: `master-${ir.itemCode}-${idx}`,
         childPn: ir.itemCode,
         childName: ir.itemName,
-        supplier: '',
-        materialType: classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice),
+        supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
+        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -1147,7 +1205,7 @@ const StandardMaterialCostView: React.FC = () => {
         id: `nonbom-${key}`,
         childPn: key,
         childName: itemName || forecast.partNo || key,
-        supplier: '',
+        supplier: lookupSupplier(key, forecast.partNo || ''),
         materialType,
         parentProducts: [key],
         standardReq: forecast.qty,
@@ -1310,13 +1368,13 @@ const StandardMaterialCostView: React.FC = () => {
         rows.length = 0; // BOM rows 제거
         let ufIdx = 0;
         for (const ir of unifiedResult.itemRows) {
-          const materialType = classifyBySupplyType(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice);
+          const materialType = classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, (ir as any).customerPn);
 
           rows.push({
             id: `uf-${ir.itemCode}-${ufIdx++}`,
             childPn: ir.itemCode,
             childName: ir.itemName,
-            supplier: '',
+            supplier: lookupSupplier(ir.itemCode, (ir as any).customerPn),
             materialType,
             parentProducts: [],
             standardReq: ir.production,
@@ -3613,7 +3671,7 @@ const StandardMaterialCostView: React.FC = () => {
   const hasExcelData = excelData !== null;
 
   // Column resize hooks
-  const materialResize = useColumnResize([120, 200, 120, 70, 100, 100, 120, 100, 120, 110, 80]);
+  const materialResize = useColumnResize([130, 260, 130, 70, 100, 100, 120, 100, 120, 110, 80]);
   const comparisonResize = useColumnResize([100, 180, 80, 90, 100, 120, 90, 100, 120, 110, 80, 70]);
   const diagResize = useColumnResize([120, 100, 160, 60, 60, 100, 120, 100, 120, 80, 80, 60]);
 
@@ -4045,6 +4103,10 @@ const StandardMaterialCostView: React.FC = () => {
             </select>
             <div className="ml-auto flex items-center gap-3">
               <span className="text-xs text-slate-500">{filteredAutoRows.length.toLocaleString()}건</span>
+              <button onClick={() => setShowOrderModal(true)} className="text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                구입처별 발주
+              </button>
               <button onClick={handleAutoDownload} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 엑셀 다운로드
@@ -4089,10 +4151,10 @@ const StandardMaterialCostView: React.FC = () => {
                 )}
                 {pagedAutoRows.map(row => (
                   <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-3 py-2.5 font-mono text-slate-700 whitespace-nowrap">{row.childPn}</td>
-                    <td className="px-3 py-2.5 text-slate-800 max-w-[180px] truncate" title={row.childName}>{row.childName}</td>
-                    <td className="px-3 py-2.5 text-slate-600">{row.supplier}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 font-mono text-slate-700 whitespace-nowrap" style={materialResize.getCellStyle(0)}>{row.childPn}</td>
+                    <td className="px-3 py-2.5 text-slate-800 whitespace-nowrap" style={materialResize.getCellStyle(1)} title={row.childName}>{row.childName}</td>
+                    <td className="px-3 py-2.5 text-slate-600 whitespace-nowrap" style={materialResize.getCellStyle(2)}>{row.supplier}</td>
+                    <td className="px-3 py-2.5" style={materialResize.getCellStyle(3)}>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         row.materialType === 'RESIN' ? 'bg-amber-50 text-amber-700' :
                         row.materialType === 'PAINT' ? 'bg-pink-50 text-pink-700' :
@@ -4100,15 +4162,15 @@ const StandardMaterialCostView: React.FC = () => {
                         'bg-blue-50 text-blue-700'
                       }`}>{row.materialType}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-slate-600">{row.standardReq > 0 ? row.standardReq.toLocaleString() : '-'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-slate-600">{row.avgUnitPrice > 0 ? `₩${row.avgUnitPrice.toFixed(1)}` : '-'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700">{row.standardCost > 0 ? `₩${Math.round(row.standardCost).toLocaleString()}` : '-'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-slate-600">{row.actualQty > 0 ? row.actualQty.toLocaleString() : '-'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700">{row.actualCost > 0 ? `₩${Math.round(row.actualCost).toLocaleString()}` : '-'}</td>
-                    <td className={`px-3 py-2.5 text-right font-mono font-bold ${row.diff >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <td className="px-3 py-2.5 text-right font-mono text-slate-600" style={materialResize.getCellStyle(4)}>{row.standardReq > 0 ? row.standardReq.toLocaleString() : '-'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-slate-600" style={materialResize.getCellStyle(5)}>{row.avgUnitPrice > 0 ? `₩${row.avgUnitPrice.toFixed(1)}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-indigo-700" style={materialResize.getCellStyle(6)}>{row.standardCost > 0 ? `₩${Math.round(row.standardCost).toLocaleString()}` : '-'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-slate-600" style={materialResize.getCellStyle(7)}>{row.actualQty > 0 ? row.actualQty.toLocaleString() : '-'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-bold text-emerald-700" style={materialResize.getCellStyle(8)}>{row.actualCost > 0 ? `₩${Math.round(row.actualCost).toLocaleString()}` : '-'}</td>
+                    <td className={`px-3 py-2.5 text-right font-mono font-bold ${row.diff >= 0 ? 'text-emerald-600' : 'text-rose-600'}`} style={materialResize.getCellStyle(9)}>
                       {row.standardCost > 0 || row.actualCost > 0 ? `₩${Math.round(row.diff).toLocaleString()}` : '-'}
                     </td>
-                    <td className={`px-3 py-2.5 text-right font-mono ${row.diffRate >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <td className={`px-3 py-2.5 text-right font-mono ${row.diffRate >= 0 ? 'text-emerald-600' : 'text-rose-600'}`} style={materialResize.getCellStyle(10)}>
                       {row.standardCost > 0 ? `${row.diffRate.toFixed(1)}%` : '-'}
                     </td>
                   </tr>
@@ -4612,6 +4674,123 @@ const StandardMaterialCostView: React.FC = () => {
           <p className="text-sm text-slate-500">분석 뷰는 자동 산출 모드에서 더 상세한 정보를 제공합니다.</p>
         </div>
       )}
+
+      {/* ===== 구입처별 발주 모달 ===== */}
+      {showOrderModal && calc && (() => {
+        const orderRows = calc.rows.filter(r => r.supplier && r.standardReq > 0);
+        let filtered = orderRows;
+        if (orderFilterType !== 'All') filtered = filtered.filter(r => r.materialType === orderFilterType);
+        if (orderSearch) {
+          const q = orderSearch.toLowerCase();
+          filtered = filtered.filter(r => r.childPn.toLowerCase().includes(q) || r.childName.toLowerCase().includes(q) || r.supplier.toLowerCase().includes(q));
+        }
+        const grouped = new Map<string, MaterialCostRow[]>();
+        filtered.forEach(r => {
+          const list = grouped.get(r.supplier) || [];
+          list.push(r);
+          grouped.set(r.supplier, list);
+        });
+        const sortedGroups = [...grouped.entries()].sort((a, b) => {
+          const sumA = a[1].reduce((s, r) => s + r.standardCost, 0);
+          const sumB = b[1].reduce((s, r) => s + r.standardCost, 0);
+          return sumB - sumA;
+        });
+        const totalAmount = filtered.reduce((s, r) => s + r.standardCost, 0);
+        const types = [...new Set(orderRows.map(r => r.materialType))].sort();
+        const handleOrderDownload = () => {
+          const headers = ['구입처', '자재품번', '자재명', '유형', '소요량', '단가', '금액'];
+          const csvRows = filtered.map(r => [r.supplier, r.childPn, r.childName, r.materialType, r.standardReq, r.avgUnitPrice, Math.round(r.standardCost)]);
+          downloadCSV('구입처별_발주목록', headers, csvRows);
+        };
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setShowOrderModal(false)} onKeyDown={e => { if (e.key === 'Escape') setShowOrderModal(false); }}>
+            <div className="absolute inset-0 bg-black/40" />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <h3 className="text-lg font-bold text-slate-800">구입처별 발주 목록</h3>
+                <div className="flex items-center gap-3">
+                  <button onClick={handleOrderDownload} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    엑셀
+                  </button>
+                  <button onClick={() => setShowOrderModal(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+              {/* Toolbar */}
+              <div className="flex items-center gap-3 px-6 py-3 border-b border-slate-100 bg-slate-50">
+                <select value={orderFilterType} onChange={e => setOrderFilterType(e.target.value)} className="text-xs border rounded-lg px-2 py-1.5">
+                  <option value="All">전체 유형</option>
+                  {types.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <input type="text" placeholder="검색..." value={orderSearch} onChange={e => setOrderSearch(e.target.value)}
+                  className="text-xs border rounded-lg px-3 py-1.5 w-48 focus:ring-2 focus:ring-blue-500" />
+                <div className="ml-auto text-xs text-slate-500">
+                  총 <span className="font-bold text-slate-700">{filtered.length}</span>건 / <span className="font-bold text-indigo-700">₩{Math.round(totalAmount).toLocaleString()}</span>
+                </div>
+              </div>
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+                {sortedGroups.length === 0 && (
+                  <div className="text-center text-slate-400 py-8 text-sm">구입처 정보가 있는 자재가 없습니다.</div>
+                )}
+                {sortedGroups.map(([supplier, rows]) => {
+                  const groupTotal = rows.reduce((s, r) => s + r.standardCost, 0);
+                  const collapsed = orderCollapsed[supplier];
+                  return (
+                    <div key={supplier} className="mb-3">
+                      <button
+                        onClick={() => setOrderCollapsed(prev => ({ ...prev, [supplier]: !prev[supplier] }))}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors text-left"
+                      >
+                        <svg className={`w-4 h-4 text-slate-500 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        <span className="font-bold text-sm text-slate-800">{supplier}</span>
+                        <span className="text-xs text-slate-500 ml-1">— {rows.length}건</span>
+                        <span className="ml-auto text-sm font-bold text-indigo-700">₩{Math.round(groupTotal).toLocaleString()}</span>
+                      </button>
+                      {!collapsed && (
+                        <table className="w-full text-xs mt-1 ml-2">
+                          <thead>
+                            <tr className="text-slate-400 border-b border-slate-100">
+                              <th className="text-left px-3 py-1.5 font-medium">자재품번</th>
+                              <th className="text-left px-3 py-1.5 font-medium">자재명</th>
+                              <th className="text-left px-3 py-1.5 font-medium">유형</th>
+                              <th className="text-right px-3 py-1.5 font-medium">소요량</th>
+                              <th className="text-right px-3 py-1.5 font-medium">단가</th>
+                              <th className="text-right px-3 py-1.5 font-medium">금액</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {rows.map(r => (
+                              <tr key={r.id} className="hover:bg-blue-50/50 border-b border-slate-50">
+                                <td className="px-3 py-1.5 font-mono text-slate-700">{r.childPn}</td>
+                                <td className="px-3 py-1.5 text-slate-800">{r.childName}</td>
+                                <td className="px-3 py-1.5">
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                    r.materialType === 'RESIN' ? 'bg-amber-50 text-amber-700' :
+                                    r.materialType === 'PAINT' ? 'bg-pink-50 text-pink-700' :
+                                    r.materialType === '외주' ? 'bg-purple-50 text-purple-700' :
+                                    'bg-blue-50 text-blue-700'
+                                  }`}>{r.materialType}</span>
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">{r.standardReq.toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">₩{r.avgUnitPrice.toFixed(1)}</td>
+                                <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-700">₩{Math.round(r.standardCost).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ===== BOM 팝업 모달 (트리 구조 + 편집) ===== */}
       {bomPopupPn && (() => {

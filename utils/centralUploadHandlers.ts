@@ -227,8 +227,10 @@ export async function uploadMaterialPrice(file: File): Promise<UploadResult> {
     if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
     if (isSupabaseConfigured()) {
       const result = await materialCodeService.updatePrices(data);
+      dispatchUpdate({ type: 'materialPrice' });
       return { success: true, count: data.length, message: `${result.updated}건 갱신, ${result.inserted}건 추가` };
     }
+    dispatchUpdate({ type: 'materialPrice' });
     return { success: true, count: data.length, message: `${data.length}건 파싱 (로컬)` };
   } catch (e: any) {
     return { success: false, count: 0, message: e.message || '업로드 실패' };
