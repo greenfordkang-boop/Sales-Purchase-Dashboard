@@ -474,12 +474,6 @@ const StandardMaterialCostView: React.FC = () => {
       return '';
     };
 
-    console.log(`[Supplier 맵 진단] suppMap: ${suppMap.size}건 (purchaseData: ${purchaseData.length}, masterRefInfo: ${masterRefInfo.length}, enrichedPP: ${enrichedPurchasePrices.length})`);
-    if (suppMap.size > 0) {
-      const sample = [...suppMap.entries()].slice(0, 3);
-      console.log(`[Supplier 맵 진단] 샘플:`, sample);
-    }
-
     // ── supplyType 보완 맵: masterRefInfo에서 조달구분 조회 ──
     const supplyTypeMap = new Map<string, string>();
     masterRefInfo.forEach(ri => {
@@ -543,13 +537,6 @@ const StandardMaterialCostView: React.FC = () => {
         diffRate: 0,
       }));
       rows.sort((a, b) => b.standardCost - a.standardCost);
-      const suppFilled = rows.filter(r => r.supplier).length;
-      console.log(`[Supplier 결과] 경로: calcProductBased, 총 ${rows.length}건 중 supplier 있음: ${suppFilled}건`);
-      if (suppFilled === 0 && rows.length > 0) {
-        const samplePns = rows.slice(0, 3).map(r => r.childPn);
-        console.log(`[Supplier 결과] 샘플 품번 (조회 실패):`, samplePns, '→ suppMap keys 샘플:', [...suppMap.keys()].slice(0, 5));
-      }
-
       const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
 
       return {
@@ -3707,6 +3694,137 @@ const StandardMaterialCostView: React.FC = () => {
   const calc = autoCalcResult;
   const exSummary = excelData?.summary;
 
+  // ===== 구입처별 발주용: BOM 리프 자재 전개 =====
+  interface LeafOrderRow {
+    id: string;
+    childPn: string;
+    childName: string;
+    supplier: string;
+    materialType: string;
+    totalRequired: number;
+    unitPrice: number;
+    totalCost: number;
+    parentProducts: string[];
+  }
+
+  const leafOrderRows = useMemo<LeafOrderRow[]>(() => {
+    if (bomData.length === 0 || forecastData.length === 0) return [];
+
+    // 1. BOM relations
+    const rawRel = buildBomRelations(bomData);
+    const bomRel = new Map<string, BomRecord[]>();
+    for (const [k, v] of rawRel) bomRel.set(normalizePn(k), v);
+
+    // 2. P/N bridge (pnMapping + masterRefInfo)
+    const c2i = new Map<string, string>();
+    pnMapping.forEach(m => {
+      if (m.customerPn && m.internalCode) c2i.set(normalizePn(m.customerPn), normalizePn(m.internalCode));
+    });
+    masterRefInfo.forEach(ri => {
+      if (ri.customerPn && ri.itemCode) {
+        const k = normalizePn(ri.customerPn);
+        if (!c2i.has(k)) c2i.set(k, normalizePn(ri.itemCode));
+      }
+    });
+
+    const findKey = (pn: string): string | null => {
+      if (bomRel.has(pn)) return pn;
+      const asInt = c2i.get(pn);
+      if (asInt && bomRel.has(asInt)) return asInt;
+      return null;
+    };
+
+    // 3. forceLeafPns: 구매/외주 품목은 더 이상 전개하지 않음
+    const forceLeaf = new Set<string>();
+    masterRefInfo.forEach(ri => {
+      if (ri.supplyType && /구매|외주/.test(ri.supplyType)) {
+        forceLeaf.add(normalizePn(ri.itemCode));
+      }
+    });
+
+    // 4. Forecast quantities by product
+    const forecastByPn = new Map<string, number>();
+    forecastData.forEach(item => {
+      if (!item.partNo) return;
+      const raw = normalizePn(item.partNo);
+      let qty = 0;
+      if (selectedMonth === 'All') {
+        qty = item.totalQty || 0;
+      } else {
+        const mi = parseInt(selectedMonth.replace('월', ''), 10) - 1;
+        qty = (mi >= 0 && mi < 12) ? (item.monthlyQty?.[mi] || 0) : 0;
+      }
+      if (qty <= 0) return;
+      const key = findKey(raw) || raw;
+      forecastByPn.set(key, (forecastByPn.get(key) || 0) + qty);
+    });
+
+    // 5. BOM leaf expansion + aggregation
+    const agg = new Map<string, { childName: string; supplier: string; totalReq: number; parents: Set<string> }>();
+    for (const [bomKey, qty] of forecastByPn) {
+      if (!bomRel.has(bomKey)) continue;
+      const leaves = expandBomToLeaves(bomKey, qty, bomRel, undefined, 0, 10, forceLeaf);
+      for (const leaf of leaves) {
+        const ck = normalizePn(leaf.childPn);
+        const ex = agg.get(ck);
+        if (ex) {
+          ex.totalReq += leaf.totalRequired;
+          ex.parents.add(bomKey);
+        } else {
+          agg.set(ck, { childName: leaf.childName, supplier: leaf.supplier, totalReq: leaf.totalRequired, parents: new Set([bomKey]) });
+        }
+      }
+    }
+
+    // 6. Enrich: supplier + unitPrice + materialType
+    const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
+    const sMap = new Map<string, string>();
+    const setS = (k: string, s: string) => { if (k && isValidSupp(s)) sMap.set(normalizePn(k), s); };
+    enrichedPurchasePrices.forEach(pp => { setS(pp.itemCode, pp.supplier); setS(pp.customerPn, pp.supplier); });
+    masterRefInfo.forEach(ri => { setS(ri.itemCode, ri.supplier); setS(ri.customerPn, ri.supplier); });
+    purchaseData.forEach(p => { setS(p.itemCode, p.supplier); if (p.customerPn) setS(p.customerPn, p.supplier); });
+
+    // unitPrice 맵
+    const priceMap = new Map<string, number>();
+    enrichedPurchasePrices.forEach(pp => {
+      const k = normalizePn(pp.itemCode);
+      if (pp.currentPrice > 0) priceMap.set(k, pp.currentPrice);
+    });
+
+    // materialType 맵
+    const typeFromRef = (childKey: string): string => {
+      for (const ri of masterRefInfo) {
+        if (normalizePn(ri.itemCode) === childKey || normalizePn(ri.customerPn) === childKey) {
+          if (ri.supplyType?.includes('외주')) return '외주';
+          if (ri.processType?.includes('사출')) return 'RESIN';
+          if (ri.processType?.includes('도장')) return 'PAINT';
+          if (ri.supplyType === '구매') return '구매';
+        }
+      }
+      return '구매';
+    };
+
+    // 7. Build final rows
+    const rows: LeafOrderRow[] = [];
+    for (const [ck, data] of agg) {
+      const supplier = sMap.get(ck) || data.supplier || '';
+      const unitPrice = priceMap.get(ck) || 0;
+      rows.push({
+        id: `leaf-${ck}`,
+        childPn: ck,
+        childName: data.childName || ck,
+        supplier,
+        materialType: typeFromRef(ck),
+        totalRequired: data.totalReq,
+        unitPrice,
+        totalCost: data.totalReq * unitPrice,
+        parentProducts: [...data.parents],
+      });
+    }
+    rows.sort((a, b) => b.totalCost - a.totalCost);
+    return rows;
+  }, [bomData, forecastData, selectedMonth, pnMapping, masterRefInfo, enrichedPurchasePrices, purchaseData]);
+
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-500">
       {/* Header + Controls */}
@@ -4689,31 +4807,31 @@ const StandardMaterialCostView: React.FC = () => {
         </div>
       )}
 
-      {/* ===== 구입처별 발주 모달 ===== */}
-      {showOrderModal && calc && (() => {
-        const orderRows = calc.rows.filter(r => r.supplier && r.standardReq > 0);
+      {/* ===== 구입처별 발주 모달 (BOM 리프 자재 기반) ===== */}
+      {showOrderModal && leafOrderRows.length > 0 && (() => {
+        const orderRows = leafOrderRows.filter(r => r.supplier && r.totalRequired > 0);
         let filtered = orderRows;
         if (orderFilterType !== 'All') filtered = filtered.filter(r => r.materialType === orderFilterType);
         if (orderSearch) {
           const q = orderSearch.toLowerCase();
           filtered = filtered.filter(r => r.childPn.toLowerCase().includes(q) || r.childName.toLowerCase().includes(q) || r.supplier.toLowerCase().includes(q));
         }
-        const grouped = new Map<string, MaterialCostRow[]>();
+        const grouped = new Map<string, LeafOrderRow[]>();
         filtered.forEach(r => {
           const list = grouped.get(r.supplier) || [];
           list.push(r);
           grouped.set(r.supplier, list);
         });
         const sortedGroups = [...grouped.entries()].sort((a, b) => {
-          const sumA = a[1].reduce((s, r) => s + r.standardCost, 0);
-          const sumB = b[1].reduce((s, r) => s + r.standardCost, 0);
+          const sumA = a[1].reduce((s, r) => s + r.totalCost, 0);
+          const sumB = b[1].reduce((s, r) => s + r.totalCost, 0);
           return sumB - sumA;
         });
-        const totalAmount = filtered.reduce((s, r) => s + r.standardCost, 0);
+        const totalAmount = filtered.reduce((s, r) => s + r.totalCost, 0);
         const types = [...new Set(orderRows.map(r => r.materialType))].sort();
         const handleOrderDownload = () => {
-          const headers = ['구입처', '자재품번', '자재명', '유형', '소요량', '단가', '금액'];
-          const csvRows = filtered.map(r => [r.supplier, r.childPn, r.childName, r.materialType, r.standardReq, r.avgUnitPrice, Math.round(r.standardCost)]);
+          const headers = ['구입처', '자재품번', '자재명', '유형', '소요량', '단가', '금액', '관련제품'];
+          const csvRows = filtered.map(r => [r.supplier, r.childPn, r.childName, r.materialType, r.totalRequired, r.unitPrice, Math.round(r.totalCost), r.parentProducts.join(', ')]);
           downloadCSV('구입처별_발주목록', headers, csvRows);
         };
         return (
@@ -4722,7 +4840,7 @@ const StandardMaterialCostView: React.FC = () => {
             <div className="relative bg-white rounded-2xl shadow-2xl w-[90vw] max-w-5xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
               {/* Header */}
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-                <h3 className="text-lg font-bold text-slate-800">구입처별 발주 목록</h3>
+                <h3 className="text-lg font-bold text-slate-800">구입처별 발주 목록 <span className="text-xs font-normal text-slate-400 ml-2">(BOM 리프 자재 기준)</span></h3>
                 <div className="flex items-center gap-3">
                   <button onClick={handleOrderDownload} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
@@ -4751,7 +4869,7 @@ const StandardMaterialCostView: React.FC = () => {
                   <div className="text-center text-slate-400 py-8 text-sm">구입처 정보가 있는 자재가 없습니다.</div>
                 )}
                 {sortedGroups.map(([supplier, rows]) => {
-                  const groupTotal = rows.reduce((s, r) => s + r.standardCost, 0);
+                  const groupTotal = rows.reduce((s, r) => s + r.totalCost, 0);
                   const collapsed = orderCollapsed[supplier];
                   return (
                     <div key={supplier} className="mb-3">
@@ -4774,6 +4892,7 @@ const StandardMaterialCostView: React.FC = () => {
                               <th className="text-right px-3 py-1.5 font-medium">소요량</th>
                               <th className="text-right px-3 py-1.5 font-medium">단가</th>
                               <th className="text-right px-3 py-1.5 font-medium">금액</th>
+                              <th className="text-center px-3 py-1.5 font-medium">관련제품</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -4789,9 +4908,10 @@ const StandardMaterialCostView: React.FC = () => {
                                     'bg-blue-50 text-blue-700'
                                   }`}>{r.materialType}</span>
                                 </td>
-                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">{r.standardReq.toLocaleString()}</td>
-                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">₩{r.avgUnitPrice.toFixed(1)}</td>
-                                <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-700">₩{Math.round(r.standardCost).toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">{Math.round(r.totalRequired).toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-right font-mono text-slate-600">₩{r.unitPrice.toFixed(1)}</td>
+                                <td className="px-3 py-1.5 text-right font-mono font-bold text-indigo-700">₩{Math.round(r.totalCost).toLocaleString()}</td>
+                                <td className="px-3 py-1.5 text-center text-slate-400 text-[10px]">{r.parentProducts.length > 0 ? `${r.parentProducts.length}개 제품` : '-'}</td>
                               </tr>
                             ))}
                           </tbody>
