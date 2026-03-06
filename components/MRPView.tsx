@@ -405,8 +405,9 @@ const MRPView: React.FC = () => {
       // 자재명 기반 RESIN/PAINT 추론 (matCodeMap에 없을 때 fallback)
       const inferTypeFromName = (name: string): 'RESIN' | 'PAINT' | null => {
         if (!name) return null;
-        // ★ underscore를 공백으로 치환: \b가 _를 단어문자로 취급하여 "ABS_XR440" 에서 \bABS\b 매칭 실패 방지
         const n = name.toUpperCase().replace(/_/g, ' ');
+        // ★ 제품/부품 키워드가 포함되면 원재료가 아님 → 추론 중단
+        if (/ASSY|SWITCH|KNOB|DAMPER|INDICATOR|COVER|BUTTON|REFLECTOR|GUIDE|PLATE|CHASIS|CHASSIS|FELT|FILM|GASKET|SHEET|PROTECTION|PROTECTOR|BEZEL|GEAR|LEVER|APRON|CAMERA/.test(n)) return null;
         if (/\b(PC|ABS|PP|PE|PA|POM|PBT|TPU|TPE|NYLON|LEXAN|NORYL|CYCOLOY|BAYBLEND|ASA|SAN|PMMA|PVC|PS)\b/.test(n)) return 'RESIN';
         if (/수지|레진|RESIN/i.test(n)) return 'RESIN';
         if (/도료|PAINT|페인트|프라이머|PRIMER|클리어|CLEAR\s*COAT|THINNER|신나|경화제|HARDENER/i.test(n)) return 'PAINT';
