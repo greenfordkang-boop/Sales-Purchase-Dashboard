@@ -57,6 +57,10 @@ const formatCompact = (v: number): string => {
   return Math.round(v).toLocaleString();
 };
 
+/** 소요량 포맷: KG → 정수, EA → 소수점 유지 */
+const fmtQty = (qty: number, unit: string) =>
+  /kg/i.test(unit) ? Math.round(qty).toLocaleString() : qty.toLocaleString();
+
 /** 총소요량 셀 + 호버 팝업 */
 const MrpQtyCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
   const [show, setShow] = useState(false);
@@ -73,7 +77,7 @@ const MrpQtyCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
       onMouseLeave={() => setShow(false)}
     >
       <span className="border-b border-dashed border-gray-400">
-        {m.requiredQty.toLocaleString()}
+        {fmtQty(m.requiredQty, m.unit)}
       </span>
       {m.unit && <span className="text-[10px] text-gray-400 ml-0.5">{m.unit}</span>}
       {show && (
@@ -117,7 +121,7 @@ const MrpQtyCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
           {/* 합계 */}
           <div className="border-t border-slate-600 mt-2 pt-2 flex items-center justify-between text-xs">
             <span className="text-slate-400">Σ(제품 계획수량 × BOM 누적소요량)</span>
-            <span className="text-amber-300 font-black">{m.requiredQty.toLocaleString()} {m.unit}</span>
+            <span className="text-amber-300 font-black">{fmtQty(m.requiredQty, m.unit)} {m.unit}</span>
           </div>
         </div>
       )}
@@ -147,7 +151,7 @@ const MrpCostCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
           <div className="space-y-1.5 text-[11px]">
             <div className="flex justify-between">
               <span className="text-slate-400">총소요량</span>
-              <span className="text-white font-mono">{m.requiredQty.toLocaleString()} {m.unit}</span>
+              <span className="text-white font-mono">{fmtQty(m.requiredQty, m.unit)} {m.unit}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-amber-400 font-bold">×</span>
@@ -156,7 +160,7 @@ const MrpCostCell: React.FC<{ m: MRPMaterialRow }> = ({ m }) => {
             </div>
           </div>
           <div className="border-t border-slate-600 mt-2 pt-2 flex items-center justify-between text-xs">
-            <span className="text-slate-400">= {m.requiredQty.toLocaleString()} × ₩{Math.round(m.unitPrice).toLocaleString()}</span>
+            <span className="text-slate-400">= {fmtQty(m.requiredQty, m.unit)} × ₩{Math.round(m.unitPrice).toLocaleString()}</span>
             <span className="text-amber-300 font-black">₩{formatCompact(m.totalCost)}</span>
           </div>
           {m.totalCost > 1e8 && (
