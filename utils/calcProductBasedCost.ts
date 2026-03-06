@@ -194,6 +194,26 @@ export function calcProductBasedMaterialCost(params: CalcProductBasedParams): Un
     }
   }
 
+  // ★ DB 로딩 진단: 고비율 후보 항목 출력
+  {
+    const highCostEntries: string[] = [];
+    for (const [key, entry] of stdCostMap) {
+      if (/LJGXCT/i.test(key) || (entry.eaCost >= 5000 && entry.eaCost <= 8000)) {
+        highCostEntries.push(`  ${key}: ₩${entry.eaCost} (${entry.supplyType}/${entry.processType})`);
+      }
+    }
+    if (highCostEntries.length > 0) {
+      console.log(`[stdCostMap 진단] LJGXCT 또는 eaCost 5000~8000 항목:\n${highCostEntries.slice(0, 20).join('\n')}`);
+    }
+    // LJGXCT P/N bridge 확인
+    const ljgKey = 'LJGXCT200ZM1';
+    const c2i = custToInternal.get(ljgKey);
+    const i2c = internalToCust.get(ljgKey);
+    if (c2i || i2c) {
+      console.log(`[P/N bridge] ${ljgKey}: custToInternal→${c2i || 'N/A'}, internalToCust→${i2c || 'N/A'}`);
+    }
+  }
+
   // item_standard_cost P/N으로 refInfoMap 보강
   for (const sc of itemStandardCosts) {
     if (sc.customer_pn && sc.item_code) {
@@ -423,6 +443,18 @@ export function calcProductBasedMaterialCost(params: CalcProductBasedParams): Un
       || stdCostMap.get(custToInternal.get(forecastPn) || '')
       || stdCostMap.get(internalToCust.get(forecastPn) || '');
     const stdMaterialCost = stdEntry?.eaCost || 0;
+
+    // ★ 고비율 항목 진단: 재료비 > 판매단가 × 2 인 경우 출처 추적
+    if (stdMaterialCost > 0 && revenue > 0 && qty > 0) {
+      const unitRevenue = revenue / qty;
+      if (stdMaterialCost > unitRevenue * 2) {
+        const resolvedKey = stdCostMap.has(forecastPn) ? forecastPn
+          : stdCostMap.has(custToInternal.get(forecastPn) || '') ? `bridge→${custToInternal.get(forecastPn)}`
+          : stdCostMap.has(internalToCust.get(forecastPn) || '') ? `reverse→${internalToCust.get(forecastPn)}`
+          : 'unknown';
+        console.warn(`[고비율진단] ${forecastPn} (${f.partName || ''}) | 판매단가: ₩${Math.round(unitRevenue).toLocaleString()} | 표준재료비: ₩${Math.round(stdMaterialCost).toLocaleString()} (${(stdMaterialCost/unitRevenue*100).toFixed(1)}%) | 조회키: ${resolvedKey} | resinPerEa: ${stdEntry?.resinPerEa} paintPerEa: ${stdEntry?.paintPerEa} supplyType: ${stdEntry?.supplyType} processType: ${stdEntry?.processType}`);
+      }
+    }
 
     // ---- 4. 기준정보 직접산출 (stdCost/BOM 모두 없을 때) ----
     let refInfoCost = 0;

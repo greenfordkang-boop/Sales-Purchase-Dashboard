@@ -216,8 +216,8 @@ const StandardMaterialCostView: React.FC = () => {
   const updateClosingCost = (year: number, monthIdx: number, value: number) => {
     const key = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
     setClosingCosts(prev => {
-      const next = { ...prev, [key]: value };
-      try { localStorage.setItem('dashboard_closingMaterialCost', JSON.stringify(next)); } catch { /* */ }
+      const next = value > 0 ? { ...prev, [key]: value } : (() => { const n = { ...prev }; delete n[key]; return n; })();
+      safeSetItem('dashboard_closingMaterialCost', JSON.stringify(next));
       return next;
     });
   };

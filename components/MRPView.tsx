@@ -279,28 +279,24 @@ const MRPView: React.FC = () => {
         return;
       }
 
-      // 재질코드 데이터 보강: 서비스 데이터 + 내장 재질단가 병합
-      const pricedFromService = materialCodes.filter(m => m.currentPrice > 0).length;
-      let mergedMaterialCodes = materialCodes;
-      if (pricedFromService === 0 && fallbackMaterialCodes.length > 0) {
-        // 서비스에 단가가 없으면 내장 재질단가를 사용
-        const existingCodes = new Set(materialCodes.map(m => m.materialCode.trim().toUpperCase()));
-        const merged = [...materialCodes];
-        for (const fb of fallbackMaterialCodes) {
-          const key = fb.materialCode.trim().toUpperCase();
-          if (!existingCodes.has(key)) {
-            merged.push(fb as MaterialCodeRecord);
-            existingCodes.add(key);
-          } else if (fb.currentPrice > 0) {
-            // 기존 항목에 단가만 업데이트
-            const idx = merged.findIndex(m => m.materialCode.trim().toUpperCase() === key);
-            if (idx >= 0 && merged[idx].currentPrice <= 0) {
-              merged[idx] = { ...merged[idx], currentPrice: fb.currentPrice };
-            }
+      // 재질코드 데이터 보강: 서비스 데이터 + 내장 재질단가 항상 병합
+      // (서비스에 일부 데이터가 있더라도 누락 코드는 fallback에서 추가)
+      const existingCodes = new Set(materialCodes.map(m => m.materialCode.trim().toUpperCase()));
+      const merged = [...materialCodes];
+      for (const fb of fallbackMaterialCodes) {
+        const key = fb.materialCode.trim().toUpperCase();
+        if (!existingCodes.has(key)) {
+          merged.push(fb as MaterialCodeRecord);
+          existingCodes.add(key);
+        } else if (fb.currentPrice > 0) {
+          // 기존 항목에 단가만 업데이트 (단가 없는 경우)
+          const idx = merged.findIndex(m => m.materialCode.trim().toUpperCase() === key);
+          if (idx >= 0 && merged[idx].currentPrice <= 0) {
+            merged[idx] = { ...merged[idx], currentPrice: fb.currentPrice };
           }
         }
-        mergedMaterialCodes = merged;
       }
+      const mergedMaterialCodes = merged;
 
       // 구매단가 보강: 내장 구매단가를 purchaseData에 병합
       const existingPartNos = new Set(purchaseData.map(p => p.partNo.trim().toUpperCase().replace(/[\s\-_\.]+/g, '')));
@@ -405,7 +401,8 @@ const MRPView: React.FC = () => {
       // 자재명 기반 RESIN/PAINT 추론 (matCodeMap에 없을 때 fallback)
       const inferTypeFromName = (name: string): 'RESIN' | 'PAINT' | null => {
         if (!name) return null;
-        const n = name.toUpperCase();
+        // ★ underscore를 공백으로 치환: \b가 _를 단어문자로 취급하여 "ABS_XR440" 에서 \bABS\b 매칭 실패 방지
+        const n = name.toUpperCase().replace(/_/g, ' ');
         if (/\b(PC|ABS|PP|PE|PA|POM|PBT|TPU|TPE|NYLON|LEXAN|NORYL|CYCOLOY|BAYBLEND|ASA|SAN|PMMA|PVC|PS)\b/.test(n)) return 'RESIN';
         if (/수지|레진|RESIN/i.test(n)) return 'RESIN';
         if (/도료|PAINT|페인트|프라이머|PRIMER|클리어|CLEAR\s*COAT|THINNER|신나|경화제|HARDENER/i.test(n)) return 'PAINT';
@@ -443,6 +440,12 @@ const MRPView: React.FC = () => {
         const k = normalizePn(pp.itemCode);
         if (pp.currentPrice > 0) purchasePriceMap.set(k, pp.currentPrice);
       }
+
+      // ★ 첨가제 비율 파싱: "확산제 5g/kg" → 0.005, "안정제 3g/kg" → 0.003 등
+      const getAdditiveRatio = (matName: string): number | null => {
+        const m = matName.match(/(?:확산제|첨가제|안정제|활제|안료)\s*(\d+(?:\.\d+)?)\s*g\s*\/\s*kg/i);
+        return m ? parseFloat(m[1]) / 1000 : null;
+      };
 
       // 원재료 집계 구조
       type RawMatAgg = {
@@ -490,7 +493,10 @@ const MRPView: React.FC = () => {
             // 1) matCodeMap 최우선: RESIN/PAINT 원재료는 어떤 경로든 정확히 분류
             if (mc && /RESIN|수지/i.test(mc.materialType || '')) {
               const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
-              addToRawAgg(ck, mc.materialName || leaf.childName || ck, unitStr, 'RESIN', leaf.totalRequired, m, bomKey);
+              // ★ 첨가제 보정: BOM leaf.totalRequired가 이미 "메인수지 소요량"이므로 비율 적용
+              const addRatio = getAdditiveRatio(mc.materialName || '');
+              const adjustedQty = addRatio !== null ? leaf.totalRequired * addRatio : leaf.totalRequired;
+              addToRawAgg(ck, mc.materialName || leaf.childName || ck, unitStr, 'RESIN', adjustedQty, m, bomKey);
             } else if (mc && /PAINT|도료/i.test(mc.materialType || mc.paintCategory || '')) {
               const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
               addToRawAgg(ck, mc.materialName || leaf.childName || ck, unitStr, 'PAINT', leaf.totalRequired, m, bomKey);
@@ -514,7 +520,10 @@ const MRPView: React.FC = () => {
                 if (rcMc && /PAINT|도료/i.test(rcMc.materialType || '')) continue;
                 if (nw > 0) {
                   const wPerEa = (nw + rw / cavity) * lossM / 1000;
-                  const totalKg = leaf.totalRequired * wPerEa;
+                  // ★ 첨가제 보정: "확산제 5g/kg" → 메인수지 무게의 0.005배만 적용
+                  const addRatio = getAdditiveRatio(rcMc?.materialName || '');
+                  const adjustedWPerEa = addRatio !== null ? wPerEa * addRatio : wPerEa;
+                  const totalKg = leaf.totalRequired * adjustedWPerEa;
                   addToRawAgg(rawNorm, rcMc?.materialName || rawCode, 'KG', 'RESIN', totalKg, m, bomKey);
                   resolved = true;
                 }
@@ -549,7 +558,10 @@ const MRPView: React.FC = () => {
               if (isJunkCode(ck)) continue; // 쓰레기 코드 skip
               const inferred = inferTypeFromName(leaf.childName || ck);
               if (inferred === 'RESIN') {
-                addToRawAgg(ck, leaf.childName || ck, 'KG', 'RESIN', leaf.totalRequired, m, bomKey);
+                // ★ 첨가제 보정 안전망: matCodeMap 없이 Path 5로 온 경우에도 적용
+                const addRatio5 = getAdditiveRatio(leaf.childName || '');
+                const adjQty5 = addRatio5 !== null ? leaf.totalRequired * addRatio5 : leaf.totalRequired;
+                addToRawAgg(ck, leaf.childName || ck, 'KG', 'RESIN', adjQty5, m, bomKey);
               } else if (inferred === 'PAINT') {
                 addToRawAgg(ck, leaf.childName || ck, 'KG', 'PAINT', leaf.totalRequired, m, bomKey);
               } else {
@@ -938,11 +950,11 @@ const MRPView: React.FC = () => {
         <MetricCard label="총 소요자재" value={`${summary.totalMaterials.toLocaleString()}종`} />
         <MetricCard
           label="BOM 매칭률"
-          value={`${(summary.bomMatchRate * 100).toFixed(1)}%`}
+          value={`${summary.bomMatchRate.toFixed(1)}%`}
         />
         <MetricCard
           label="단가 매칭률"
-          value={`${(summary.priceMatchRate * 100).toFixed(1)}%`}
+          value={`${summary.priceMatchRate.toFixed(1)}%`}
         />
         {summary.noPriceMaterials > 0 && (
           <MetricCard label="단가 미매칭" value={`${summary.noPriceMaterials}종`} />
