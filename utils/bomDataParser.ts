@@ -377,8 +377,8 @@ export const expandBomToLeaves = (
     const hasGrandChildren = grandChildren && grandChildren.length > 0;
     const isLeafType = /원재료|구매|외주/.test(child.partType || '');
     const isForcedLeaf = forceLeafPns?.has(normalizedChild) || false;
-    // 자식이 있으면 isLeafType/isForcedLeaf 무시하고 계속 전개 (실제 최하위까지 도달)
-    if (!hasGrandChildren || depth + 1 >= maxDepth) {
+    // forceLeafPns에 포함된 노드는 자식이 있어도 리프 처리 (사출/도장 부품 → Path 3/4에서 무게 계산)
+    if (!hasGrandChildren || depth + 1 >= maxDepth || isForcedLeaf) {
       // leaf 노드 또는 최대 깊이 도달
       results.push({
         childPn: child.childPn,

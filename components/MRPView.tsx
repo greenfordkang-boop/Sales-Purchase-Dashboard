@@ -467,6 +467,16 @@ const MRPView: React.FC = () => {
         }
       };
 
+      // ★ 사출/도장 부품은 강제 리프로 처리 (BOM 하위 원재료까지 전개 방지)
+      // → Path 3(사출)·Path 4(도장)에서 refInfo의 netWeight/paintQty로 정확한 KG 산출
+      const mrpForceLeaf = new Set<string>();
+      for (const ri of refInfo) {
+        if (/사출|도장/.test(ri.processType || '')) {
+          mrpForceLeaf.add(normalizePn(ri.itemCode));
+          if (ri.customerPn) mrpForceLeaf.add(normalizePn(ri.customerPn));
+        }
+      }
+
       // 12개월 BOM 전개 → 원재료 집계
       for (let m = 0; m < 12; m++) {
         const forecastByPn = new Map<string, number>();
@@ -481,7 +491,7 @@ const MRPView: React.FC = () => {
 
         for (const [bomKey, productQty] of forecastByPn) {
           if (!normBomRel.has(bomKey)) continue;
-          const leaves = expandBomToLeaves(bomKey, productQty, normBomRel, undefined, 0, 10);
+          const leaves = expandBomToLeaves(bomKey, productQty, normBomRel, undefined, 0, 10, mrpForceLeaf);
           for (const leaf of leaves) {
             const ck = normalizePn(leaf.childPn);
             const ri = refInfoMap.get(ck);
