@@ -246,8 +246,16 @@ const MRPView: React.FC = () => {
       // 구매 품목은 완제/반제가 아니므로 하위 BOM을 가질 수 없음
       const purchasedPnSet = new Set<string>();
       for (const ri of refInfo) {
-        if (ri.supplyType === '구매') {
+        const st = (ri.supplyType || '').trim();
+        if (st.includes('구매')) {
           purchasedPnSet.add(normalizePn(ri.itemCode));
+          if (ri.customerPn) purchasedPnSet.add(normalizePn(ri.customerPn));
+        }
+      }
+      // BOM 자체 partType='구매'인 품목도 parent가 될 수 없음
+      for (const r of allBomRecords) {
+        if (/구매/.test(r.partType || '')) {
+          purchasedPnSet.add(normalizePn(r.childPn));
         }
       }
       let bomFilteredCount = 0;
@@ -259,7 +267,7 @@ const MRPView: React.FC = () => {
         return true;
       });
       if (bomFilteredCount > 0) {
-        console.warn(`[BOM 품질] 구매 품목이 모품번인 레코드 ${bomFilteredCount}건 제거 (전체 ${allBomRecords.length}건 중)`);
+        console.warn(`[BOM 품질] 구매 품목이 모품번인 레코드 ${bomFilteredCount}건 제거 (전체 ${allBomRecords.length}건 중, 구매품목 ${purchasedPnSet.size}개)`);
       }
 
       // BOM 트리 뷰용 데이터 구축
@@ -776,7 +784,9 @@ const MRPView: React.FC = () => {
         const childNorm = normalizePn(child.childPn);
         const childKey = `${parentKey}/${childNorm}:${ci}`;
         const grandChildren = bomRel.get(childNorm);
-        const hasChildren = !!grandChildren && grandChildren.length > 0;
+        // 구매/원재료 노드는 하위 전개 차단 (데이터 오류 방어)
+        const isPurchased = /구매|원재료/.test(child.partType || '');
+        const hasChildren = !isPurchased && !!grandChildren && grandChildren.length > 0;
         const isExpanded = expandedNodes.has(childKey);
         const totalQty = parentTotalQty * child.qty;
         const price = priceMap.get(childNorm);
