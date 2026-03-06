@@ -232,7 +232,7 @@ const MRPView: React.FC = () => {
       ]);
 
       // BomMasterRecord → BomRecord 변환
-      const bomRecords: BomRecord[] = masterRecords.map(r => ({
+      const allBomRecords: BomRecord[] = masterRecords.map(r => ({
         parentPn: r.parentPn,
         childPn: r.childPn,
         level: r.level,
@@ -241,6 +241,26 @@ const MRPView: React.FC = () => {
         supplier: r.supplier,
         partType: r.partType,
       }));
+
+      // ★ BOM 데이터 품질 필터: 구매 품목이 모품번(parent)인 레코드 제거
+      // 구매 품목은 완제/반제가 아니므로 하위 BOM을 가질 수 없음
+      const purchasedPnSet = new Set<string>();
+      for (const ri of refInfo) {
+        if (ri.supplyType === '구매') {
+          purchasedPnSet.add(normalizePn(ri.itemCode));
+        }
+      }
+      let bomFilteredCount = 0;
+      const bomRecords = allBomRecords.filter(r => {
+        if (purchasedPnSet.has(normalizePn(r.parentPn))) {
+          bomFilteredCount++;
+          return false;
+        }
+        return true;
+      });
+      if (bomFilteredCount > 0) {
+        console.warn(`[BOM 품질] 구매 품목이 모품번인 레코드 ${bomFilteredCount}건 제거 (전체 ${allBomRecords.length}건 중)`);
+      }
 
       // BOM 트리 뷰용 데이터 구축
       const bomDedupKey = new Set<string>();
