@@ -215,11 +215,14 @@ const StandardMaterialCostView: React.FC = () => {
   });
   const updateClosingCost = (year: number, monthIdx: number, value: number) => {
     const key = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
-    setClosingCosts(prev => {
-      const next = value > 0 ? { ...prev, [key]: value } : (() => { const n = { ...prev }; delete n[key]; return n; })();
-      safeSetItem('dashboard_closingMaterialCost', JSON.stringify(next));
-      return next;
-    });
+    // ★ localStorage 저장을 state updater 밖에서 즉시 실행
+    // (탭 전환 시 컴포넌트 언마운트로 state updater가 실행 안 될 수 있음)
+    const current = (() => { try { return JSON.parse(localStorage.getItem('dashboard_closingMaterialCost') || '{}'); } catch { return {}; } })();
+    const next: Record<string, number> = value > 0
+      ? { ...current, [key]: value }
+      : (() => { const n = { ...current }; delete n[key]; return n; })();
+    safeSetItem('dashboard_closingMaterialCost', JSON.stringify(next));
+    setClosingCosts(next);
   };
   const getClosingCost = (year: number, monthIdx: number): number => {
     const key = `${year}-${String(monthIdx + 1).padStart(2, '0')}`;
