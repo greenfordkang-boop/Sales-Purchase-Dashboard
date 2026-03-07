@@ -4,7 +4,8 @@ export enum DashboardTab {
   SALES = 'sales',
   PURCHASE = 'purchase',
   INVENTORY = 'inventory',
-  SUPPLIER = 'supplier'
+  SUPPLIER = 'supplier',
+  BOM_REVIEW = 'bom_review'
 }
 
 export interface Metric {

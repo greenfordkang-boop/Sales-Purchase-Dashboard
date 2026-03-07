@@ -1,5 +1,7 @@
 
 import * as XLSX from 'xlsx';
+import type { MaterialCodeRecord } from './bomMasterParser';
+import { parseMaterialCodeSheet } from './bomMasterParser';
 
 // ============================================================
 // Types
@@ -1038,6 +1040,43 @@ export function parsePaintMixLogFile(buffer: ArrayBuffer): PaintMixLog[] {
 
   console.log(`[배합일지] 파싱: ${items.length}건`);
   return items;
+}
+
+// ============================================================
+// 개별 파일 파서 (MES정보 업로드용)
+// ============================================================
+
+/** 품목정보.xlsx → ProductInfoItem[] */
+export function parseProductInfoFile(buffer: ArrayBuffer): ProductInfoItem[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  return parseProductInfoSheet(ws);
+}
+
+/** 구매단가.xlsx → PurchasePrice[] */
+export function parsePurchasePriceFile(buffer: ArrayBuffer): PurchasePrice[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  return parsePurchasePriceSheet(ws);
+}
+
+/** 외주사출판매가.xlsx → OutsourcePrice[] */
+export function parseOutsourcePriceFile(buffer: ArrayBuffer): OutsourcePrice[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  return parseOutsourcePriceSheet(ws);
+}
+
+/** 재질정보.xlsx → MaterialCodeRecord[] (bomMasterParser 재사용) */
+export function parseMaterialCodeFile(buffer: ArrayBuffer): MaterialCodeRecord[] {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return [];
+  const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+  return parseMaterialCodeSheet(rows);
 }
 
 function getEmptySummary(): Omit<StandardMaterialSummary, 'year' | 'month'> {

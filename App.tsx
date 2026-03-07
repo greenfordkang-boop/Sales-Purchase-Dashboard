@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { User } from '@supabase/supabase-js';
 import { DashboardTab } from './types';
 import Overview from './components/Overview';
@@ -10,6 +10,7 @@ import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
 import UserGuideModal from './components/UserGuideModal';
 import UploaderModal from './components/UploaderModal';
+import MesUploadModal from './components/MesUploadModal';
 import {
   BarChart,
   Bar,
@@ -37,6 +38,8 @@ import {
 } from './lib/supabase';
 import { checkAndAutoSync } from './services/supabaseService';
 
+const BomReviewView = lazy(() => import('./components/BomReviewView'));
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -55,6 +58,7 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(DashboardTab.OVERVIEW);
   const [showGuide, setShowGuide] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
+  const [showMesModal, setShowMesModal] = useState(false);
 
   // 관리자 패널 상태
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -393,6 +397,7 @@ const App: React.FC = () => {
     { id: DashboardTab.PURCHASE, label: '구매현황' },
     { id: DashboardTab.INVENTORY, label: '재고관리' },
     { id: DashboardTab.SUPPLIER, label: '협력사관리' },
+    { id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' },
   ];
 
   // User-Agent에서 브라우저 이름 추출
@@ -665,6 +670,12 @@ const App: React.FC = () => {
             >
               업로더
             </button>
+            <button
+              onClick={() => setShowMesModal(true)}
+              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-violet-400 hover:bg-slate-800 border border-violet-500/30 hover:border-violet-400/50"
+            >
+              MES정보
+            </button>
             {isAdmin(currentUser?.email) && (
               <button
                 onClick={() => setActiveTab('admin')}
@@ -714,12 +725,18 @@ const App: React.FC = () => {
           {activeTab === DashboardTab.PURCHASE && <PurchaseView />}
           {activeTab === DashboardTab.INVENTORY && <InventoryView />}
           {activeTab === DashboardTab.SUPPLIER && <SupplierView />}
+          {activeTab === DashboardTab.BOM_REVIEW && (
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+              <BomReviewView />
+            </Suspense>
+          )}
           {activeTab === 'admin' && isAdmin(currentUser?.email) && renderAdminPanel()}
         </div>
       </main>
 
       <UserGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
       <UploaderModal isOpen={showUploader} onClose={() => setShowUploader(false)} />
+      <MesUploadModal isOpen={showMesModal} onClose={() => setShowMesModal(false)} />
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
         신성오토텍 영업/구매 대시보드 v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}

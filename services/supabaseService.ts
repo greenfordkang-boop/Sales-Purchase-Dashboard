@@ -10,7 +10,7 @@ import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
 import { ForecastItem, ForecastSummary, ForecastUpload } from '../utils/salesForecastParser';
-import { BomRecord } from '../utils/bomDataParser';
+import { BomRecord, normalizePn } from '../utils/bomDataParser';
 import { CIDetailItem } from '../utils/ciDataParser';
 import {
   BomMasterRecord,
@@ -2300,6 +2300,58 @@ export const bomMasterService = {
       return false;
     }
   },
+
+  /** BOM 레코드 필드 업데이트 (childName, partType, supplier, qty 등) */
+  async updateRecord(
+    parentPn: string,
+    childPn: string,
+    updates: Partial<{ childName: string; partType: string; supplier: string; qty: number }>,
+  ): Promise<boolean> {
+    // localStorage 업데이트
+    const stored = localStorage.getItem('dashboard_bomMasterData');
+    if (stored) {
+      const records = JSON.parse(stored) as BomMasterRecord[];
+      let found = false;
+      const nParent = normalizePn(parentPn);
+      const nChild = normalizePn(childPn);
+      for (const r of records) {
+        if (normalizePn(r.parentPn) === nParent && normalizePn(r.childPn) === nChild) {
+          if (updates.childName !== undefined) r.childName = updates.childName;
+          if (updates.partType !== undefined) r.partType = updates.partType;
+          if (updates.supplier !== undefined) r.supplier = updates.supplier;
+          if (updates.qty !== undefined) r.qty = updates.qty;
+          found = true;
+        }
+      }
+      if (found) {
+        try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { /* ignore */ }
+      }
+    }
+
+    if (!isSupabaseConfigured() || isTableMissing('bom_master')) return true;
+
+    try {
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.childName !== undefined) dbUpdates.child_name = updates.childName;
+      if (updates.partType !== undefined) dbUpdates.part_type = updates.partType;
+      if (updates.supplier !== undefined) dbUpdates.supplier = updates.supplier;
+      if (updates.qty !== undefined) dbUpdates.qty = updates.qty;
+
+      const { error } = await supabase!
+        .from('bom_master')
+        .update(dbUpdates)
+        .eq('parent_pn', parentPn)
+        .eq('child_pn', childPn);
+      if (error) {
+        console.error('bomMasterService.updateRecord error:', error);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error('bomMasterService.updateRecord exception:', e);
+      return false;
+    }
+  },
 };
 
 // ============================================
@@ -3292,5 +3344,21 @@ export const itemStandardCostService = {
       }
       return true;
     } catch (err) { console.error('표준재료비(전체) 업데이트 오류:', err); return false; }
+  },
+};
+
+// ============================================
+// Product Info Service (품목정보)
+// ============================================
+
+export const productInfoService = {
+  async getAll(): Promise<import('../utils/standardMaterialParser').ProductInfoItem[]> {
+    const stored = localStorage.getItem('dashboard_productInfo');
+    return stored ? JSON.parse(stored) : [];
+  },
+
+  async saveAll(records: import('../utils/standardMaterialParser').ProductInfoItem[]): Promise<void> {
+    try { safeSetItem('dashboard_productInfo', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productInfo, skipping local cache'); }
+    console.log(`✅ productInfo saved: ${records.length} rows (localStorage)`);
   },
 };

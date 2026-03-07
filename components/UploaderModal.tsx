@@ -34,11 +34,31 @@ type UploadStatus = 'idle' | 'uploading' | 'success' | 'error';
 interface UploaderState {
   status: UploadStatus;
   message: string;
+  completedAt?: string;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - 2 + i); // e.g. 2024~2028
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
+
+const STORAGE_KEY = 'uploader-states-sales-purchase';
+const loadPersistedStates = (): Record<string, UploaderState> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      for (const key of Object.keys(parsed)) {
+        if (parsed[key].status === 'uploading') parsed[key] = { status: 'idle', message: '' };
+      }
+      return parsed;
+    }
+  } catch {}
+  return {};
+};
+const formatTime = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+};
 
 const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
   // 파라미터 상태
@@ -49,8 +69,8 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [materialMonth, setMaterialMonth] = useState(`${new Date().getMonth() + 1}월`);
   const [materialYear, setMaterialYear] = useState(CURRENT_YEAR);
 
-  // 업로드 상태 (16개)
-  const [states, setStates] = useState<Record<string, UploaderState>>({});
+  // 업로드 상태 (16개) — localStorage에서 복원
+  const [states, setStates] = useState<Record<string, UploaderState>>(loadPersistedStates);
 
   // file input refs
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -68,7 +88,14 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
   }, []);
 
   const updateState = (id: string, state: UploaderState) => {
-    setStates(prev => ({ ...prev, [id]: state }));
+    const finalState = (state.status === 'success' || state.status === 'error')
+      ? { ...state, completedAt: new Date().toISOString() }
+      : state;
+    setStates(prev => {
+      const next = { ...prev, [id]: finalState };
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   };
 
   const handleUpload = async (
@@ -118,9 +145,21 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
       );
     }
     if (s.status === 'success') {
-      return <span className="text-emerald-600 text-[11px] font-medium" data-upload-status="success">{s.message}</span>;
+      return (
+        <span className="flex items-center gap-1 text-emerald-600 text-[11px] font-medium" data-upload-status="success">
+          <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+          {s.message}
+          {s.completedAt && <span className="text-gray-400 font-normal ml-0.5">{formatTime(s.completedAt)}</span>}
+        </span>
+      );
     }
-    return <span className="text-rose-500 text-[11px] font-medium" data-upload-status="error" title={s.message}>{s.message}</span>;
+    return (
+      <span className="flex items-center gap-1 text-rose-500 text-[11px] font-medium" data-upload-status="error" title={s.message}>
+        <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+        {s.message}
+        {s.completedAt && <span className="text-rose-300 font-normal ml-0.5">{formatTime(s.completedAt)}</span>}
+      </span>
+    );
   };
 
   const FormatBadge = ({ format }: { format: 'CSV' | 'XLS' }) => (
@@ -172,7 +211,7 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
     </button>
   );
 
-  // 업로더 행 렌더
+  // 업로더 행 렌더 — 고정 너비로 파일선택 버튼 정렬
   const Row = ({ id, label, format, accept, handler, params }: {
     id: string;
     label: string;
@@ -181,11 +220,13 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
     handler: (file: File) => Promise<UploadResult>;
     params?: React.ReactNode;
   }) => (
-    <div className="flex items-center gap-2 h-7" data-uploader-row={id}>
-      <span className="text-[12px] font-medium text-slate-700 w-[72px] truncate" title={label}>{label}</span>
-      {params}
+    <div className="flex items-center h-7 gap-2" data-uploader-row={id}>
+      <span className="text-[12px] font-medium text-slate-700 w-[72px] shrink-0 truncate" title={label}>{label}</span>
+      <span className="flex items-center gap-1 w-[110px] shrink-0">{params}</span>
       <FormatBadge format={format} />
-      <FileBtn id={id} accept={accept} />
+      <span className="shrink-0">
+        <FileBtn id={id} accept={accept} />
+      </span>
       <input
         ref={setRef(id)}
         type="file"
@@ -194,7 +235,7 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
         onChange={onFileChange(id, handler)}
         data-uploader-input={id}
       />
-      <span className="flex-1 min-w-0 truncate">
+      <span className="flex-1 min-w-0 truncate text-right">
         <StatusBadge id={id} />
       </span>
     </div>
@@ -208,7 +249,7 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-[780px] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-[880px] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
           <h2 className="text-base font-bold text-slate-800">데이터 업로더</h2>

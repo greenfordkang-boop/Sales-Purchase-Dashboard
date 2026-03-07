@@ -10,8 +10,9 @@ import { parseCRCSV } from './crDataParser';
 import { parsePartsCSV, parseMaterialCSV } from './purchaseDataParser';
 import { parseBomMasterExcel } from './bomMasterParser';
 import { parseMaterialMasterExcel, parsePnMappingFromExcel } from './bomDataParser';
-import { parseStandardMixFile, parseMaterialPriceFile, parsePaintMixLogFile } from './standardMaterialParser';
+import { parseStandardMixFile, parseMaterialPriceFile, parsePaintMixLogFile, parseProductInfoFile, parsePurchasePriceFile, parseOutsourcePriceFile, parseMaterialCodeFile } from './standardMaterialParser';
 import { parseSupplierCSV } from './supplierDataParser';
+import { parseManufacturingCostExcel } from './manufacturingCostParser';
 import { safeSetItem } from './safeStorage';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -31,6 +32,9 @@ import {
   paintMixLogService,
   inventoryService,
   supplierService,
+  outsourceInjPriceService,
+  purchasePriceService,
+  productInfoService,
 } from '../services/supabaseService';
 
 export interface UploadResult {
@@ -457,7 +461,43 @@ export async function uploadPartsInventory(file: File): Promise<UploadResult> {
   return uploadInventoryByType(file, 'parts');
 }
 
-// ─── 16. 협력사 CSV ───
+// ─── 16. 제조원가 일괄업로드 ───
+export async function uploadManufacturingCost(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseManufacturingCostExcel(buffer);
+    const totalCount = data.bomRecords.length + data.refInfo.length +
+      data.purchasePrices.length + data.materialCodes.length + data.paintMixRatios.length;
+    if (totalCount === 0) return { success: false, count: 0, message: '파싱 결과 없음 — 시트명 확인 필요' };
+
+    // Supabase 저장
+    if (isSupabaseConfigured()) {
+      const saves: Promise<void>[] = [];
+      if (data.bomRecords.length > 0) saves.push(bomMasterService.saveAll(data.bomRecords));
+      if (data.refInfo.length > 0) saves.push(referenceInfoService.saveAll(data.refInfo));
+      if (data.materialCodes.length > 0) saves.push(materialCodeService.saveAll(data.materialCodes));
+      if (data.paintMixRatios.length > 0) saves.push(paintMixRatioService.saveAll(data.paintMixRatios));
+      await Promise.all(saves);
+    }
+
+    // localStorage 캐시 갱신
+    safeSetItem('dashboard_bomData', JSON.stringify(data.bomRecords));
+    safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(data.refInfo));
+    safeSetItem('dashboard_materialCodeMaster', JSON.stringify(data.materialCodes));
+    safeSetItem('dashboard_paintMixRatios', JSON.stringify(data.paintMixRatios));
+    if (data.purchasePrices.length > 0) {
+      safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(data.purchasePrices));
+    }
+
+    dispatchUpdate({ type: 'manufacturing-cost' });
+    const msg = `BOM ${data.bomRecords.length}건, 기준정보 ${data.refInfo.length}건, 단가 ${data.purchasePrices.length}건, 재질코드 ${data.materialCodes.length}건, 배합 ${data.paintMixRatios.length}건`;
+    return { success: true, count: totalCount, message: msg };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── 17. 협력사 CSV ───
 export async function uploadSupplier(file: File): Promise<UploadResult> {
   try {
     const csvText = await readCsvWithEncoding(file);
@@ -466,6 +506,102 @@ export async function uploadSupplier(file: File): Promise<UploadResult> {
     safeSetItem('dashboard_supplierData', JSON.stringify(data));
     if (isSupabaseConfigured()) await supplierService.saveAll(data);
     dispatchUpdate({ type: 'supplier' });
+    return { success: true, count: data.length, message: `${data.length}건 저장` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ============================================================
+// MES 마스터 데이터 개별 업로드 (MES정보 모달용)
+// ============================================================
+
+// ─── MES-1. 품목정보 ───
+export async function uploadMesProductInfo(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseProductInfoFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    await productInfoService.saveAll(data);
+    dispatchUpdate({ type: 'mesProductInfo' });
+    return { success: true, count: data.length, message: `${data.length}건 저장` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── MES-2. 재질정보 ───
+export async function uploadMesMaterialCode(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseMaterialCodeFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    if (isSupabaseConfigured()) await materialCodeService.saveAll(data);
+    else safeSetItem('dashboard_materialCodeMaster', JSON.stringify(data));
+    dispatchUpdate({ type: 'mesMaterialCode' });
+    return { success: true, count: data.length, message: `${data.length}건 저장` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── MES-3. 구매단가 ───
+export async function uploadMesPurchasePrice(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parsePurchasePriceFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    if (isSupabaseConfigured()) await purchasePriceService.saveAll(data);
+    else safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(data));
+    dispatchUpdate({ type: 'mesPurchasePrice' });
+    return { success: true, count: data.length, message: `${data.length}건 저장` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── MES-4. 재질단가 ───
+export async function uploadMesMaterialPrice(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseMaterialPriceFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    if (isSupabaseConfigured()) {
+      const result = await materialCodeService.updatePrices(data);
+      dispatchUpdate({ type: 'mesMaterialPrice' });
+      return { success: true, count: data.length, message: `${result.updated}건 갱신, ${result.inserted}건 추가` };
+    }
+    dispatchUpdate({ type: 'mesMaterialPrice' });
+    return { success: true, count: data.length, message: `${data.length}건 파싱 (로컬)` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── MES-5. 도료배합비율 ───
+export async function uploadMesPaintMixRatio(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseStandardMixFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    if (isSupabaseConfigured()) await paintMixRatioService.saveAll(data);
+    else safeSetItem('dashboard_paintMixRatioMaster', JSON.stringify(data));
+    dispatchUpdate({ type: 'mesPaintMixRatio' });
+    return { success: true, count: data.length, message: `${data.length}건 저장` };
+  } catch (e: any) {
+    return { success: false, count: 0, message: e.message || '업로드 실패' };
+  }
+}
+
+// ─── MES-6. 외주사출판매가 ───
+export async function uploadMesOutsourcePrice(file: File): Promise<UploadResult> {
+  try {
+    const buffer = await readFileAsArrayBuffer(file);
+    const data = parseOutsourcePriceFile(buffer);
+    if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
+    if (isSupabaseConfigured()) await outsourceInjPriceService.saveAll(data);
+    else safeSetItem('dashboard_outsourceInjPrice', JSON.stringify(data));
+    dispatchUpdate({ type: 'mesOutsourcePrice' });
     return { success: true, count: data.length, message: `${data.length}건 저장` };
   } catch (e: any) {
     return { success: false, count: 0, message: e.message || '업로드 실패' };

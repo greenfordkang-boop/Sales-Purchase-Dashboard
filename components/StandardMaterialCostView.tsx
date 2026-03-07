@@ -40,6 +40,8 @@ import fallbackPurchasePrices from '../data/purchasePrices.json';
 import fallbackStandardCosts from '../data/standardMaterialCost.json';
 import paintConsumptionData from '../data/paintConsumptionByProduct.json';
 import { purchasePriceService, paintMixRatioService, outsourceInjPriceService, itemStandardCostService, materialCodeService, paintMixLogService } from '../services/supabaseService';
+import { uploadManufacturingCost } from '../utils/centralUploadHandlers';
+import { expandForecastToLeafMaterials, buildLeafMaterialRows } from '../utils/leafMaterialExpander';
 import { useStandardMaterialCost } from '../hooks/useStandardMaterialCost';
 import { useColumnResize } from '../hooks/useColumnResize';
 import type { MaterialCostRow, AutoCalcResult, MonthlySummaryRow, ComparisonRow, DiagnosticRow, DataMode, ViewMode } from '../types/standardMaterialCost';
@@ -359,6 +361,31 @@ const StandardMaterialCostView: React.FC = () => {
     e.target.value = '';
   }, []);
 
+  // --- 제조원가 일괄업로드 핸들러 ---
+  const [mfgCostUploadStatus, setMfgCostUploadStatus] = useState<string>('');
+  const handleManufacturingCostUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setMfgCostUploadStatus('제조원가 파싱 중...');
+      const result = await uploadManufacturingCost(file);
+      if (result.success) {
+        setMfgCostUploadStatus(`제조원가 업로드 완료: ${result.message}`);
+        alert(`제조원가 업로드 완료!\n${result.message}`);
+        // 데이터 새로고침
+        loadAllData();
+      } else {
+        setMfgCostUploadStatus('');
+        alert(`제조원가 업로드 실패: ${result.message}`);
+      }
+    } catch (err) {
+      console.error('제조원가 파싱 오류:', err);
+      alert('파일 파싱 중 오류가 발생했습니다.');
+      setMfgCostUploadStatus('');
+    }
+    e.target.value = '';
+  }, [loadAllData]);
+
   // --- Filters ---
   const [searchText, setSearchText] = useState('');
   const [filterType, setFilterType] = useState('All');
@@ -500,75 +527,129 @@ const StandardMaterialCostView: React.FC = () => {
       return classifyBySupplyType(st, injectionCost, paintCostPerEa, purchaseUnitPrice);
     };
 
-    // ===== 제품별재료비 기준 통합 모드: forecastData 기준으로 모든 품목 산출 (ProductMaterialCostView 동일 로직) =====
-    // master + auto 모두 forecastData 있으면 통합 함수 사용 → 3개 탭 100% 일치
+    // ===== 제조원가 BOM 기반 leaf 전개 모드 =====
+    // Forecast × BOM expand → leaf 원재료별 소요량 + 단가 → 표준재료비
     if ((dataMode === 'master' || dataMode === 'auto') && forecastData.length > 0) {
-      const monthIdx = selectedMonth === 'All' ? -1 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
-      const currentMonth = new Date().getMonth(); // 0-based
+      // 1) BOM leaf 전개
+      const rawAgg = expandForecastToLeafMaterials(
+        forecastData, bomData, pnMapping, masterRefInfo, enrichedMaterialCodes, selectedMonth,
+      );
 
-      const result = calcProductBasedMaterialCost({
-        forecastData,
-        itemStandardCosts: masterItemStandardCosts,
-        bomRecords: bomData,
-        refInfo: masterRefInfo,
-        materialCodes: enrichedMaterialCodes,
-        purchasePrices: enrichedPurchasePrices,
-        outsourcePrices: masterOutsourcePrices,
-        paintMixRatios: masterPaintMixRatios,
-        productCodes: masterProductCodes,
-        paintConsumptionData: paintConsumptionData as { itemCode: string; custPN?: string; paintGPerEa: number; paintCostPerEa: number }[],
-        fallbackStandardCosts: (fallbackStandardCosts as { productCode: string; customerPn?: string; eaCost: number; processType?: string; productName?: string }[]),
-        fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
-        actualRevenue: itemRevenueData,
-        monthIndex: monthIdx,
-        currentMonth,
+      if (rawAgg.size === 0) {
+        // BOM 전개 실패 시 기존 calcProductBasedMaterialCost fallback
+        const monthIdx = selectedMonth === 'All' ? -1 : parseInt(selectedMonth.replace('월', ''), 10) - 1;
+        const currentMonth = new Date().getMonth();
+        const result = calcProductBasedMaterialCost({
+          forecastData, itemStandardCosts: masterItemStandardCosts, bomRecords: bomData,
+          refInfo: masterRefInfo, materialCodes: enrichedMaterialCodes, purchasePrices: enrichedPurchasePrices,
+          outsourcePrices: masterOutsourcePrices, paintMixRatios: masterPaintMixRatios,
+          productCodes: masterProductCodes,
+          paintConsumptionData: paintConsumptionData as { itemCode: string; custPN?: string; paintGPerEa: number; paintCostPerEa: number }[],
+          fallbackStandardCosts: (fallbackStandardCosts as { productCode: string; customerPn?: string; eaCost: number; processType?: string; productName?: string }[]),
+          fallbackMaterialCodes: fallbackMaterialCodes as MaterialCodeRecord[],
+          actualRevenue: itemRevenueData, monthIndex: monthIdx, currentMonth,
+        });
+        const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
+          id: `isc-${ir.itemCode}-${idx}`, childPn: ir.itemCode, childName: ir.itemName,
+          supplier: lookupSupplier(ir.itemCode, ir.customerPn),
+          materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseCostPerEa, ir.itemCode, ir.customerPn),
+          parentProducts: [], standardReq: ir.production, avgUnitPrice: ir.totalCostPerEa,
+          standardCost: ir.totalAmount, actualQty: 0, actualCost: 0, diff: ir.totalAmount, diffRate: 0,
+        }));
+        rows.sort((a, b) => b.standardCost - a.standardCost);
+        const costByPn = new Map<string, number>();
+        for (const ir of result.itemRows) {
+          if (ir.totalCostPerEa > 0) {
+            costByPn.set(normalizePn(ir.itemCode), ir.totalCostPerEa);
+            costByPn.set(normalizePn(ir.customerPn), ir.totalCostPerEa);
+          }
+        }
+        return {
+          rows, totalStandard: result.totalStandard, totalActual: 0,
+          byType: result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 })),
+          forecastRevenue: result.revenue, standardRatio: result.standardRatio, actualRatio: 0,
+          matchRate: result.stats.totalItems > 0 ? 100 : 0,
+          debug: { forecastItems: forecastData.length, bomProducts: result.stats.bomItems,
+            bomMissing: forecastData.length - result.stats.totalItems,
+            materials: result.stats.totalItems, purchaseMatched: 0,
+            calcSource: 'ProductBased-Fallback' },
+          costByPn,
+        };
+      }
+
+      // 2) LeafMaterialRow 빌드 (가격 + 업체명 매핑)
+      const leafRows = buildLeafMaterialRows(
+        rawAgg, enrichedMaterialCodes, enrichedPurchasePrices, masterRefInfo, purchaseData,
+      );
+
+      // 3) 입고현황 매칭 (purchaseData → actualQty/actualCost)
+      const purchaseAgg = new Map<string, { qty: number; amount: number }>();
+      purchaseData.forEach(p => {
+        const k = normalizePn(p.itemCode);
+        const ex = purchaseAgg.get(k) || { qty: 0, amount: 0 };
+        ex.qty += p.qty;
+        ex.amount += p.amount;
+        purchaseAgg.set(k, ex);
       });
 
-      const rows: MaterialCostRow[] = result.itemRows.map((ir, idx) => ({
-        id: `isc-${ir.itemCode}-${idx}`,
-        childPn: ir.itemCode,
-        childName: ir.itemName,
-        supplier: lookupSupplier(ir.itemCode, ir.customerPn),
-        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn),
-        parentProducts: [],
-        standardReq: ir.production,
-        avgUnitPrice: ir.totalCostPerEa,
-        standardCost: ir.totalAmount,
-        actualQty: 0,
-        actualCost: 0,
-        diff: ir.totalAmount,
-        diffRate: 0,
-      }));
-      rows.sort((a, b) => b.standardCost - a.standardCost);
-      const byType = result.summaryByType.map(t => ({ name: t.name, standard: t.standard, actual: 0 }));
+      // 4) MaterialCostRow 변환
+      let purchaseMatchedCount = 0;
+      const rows: MaterialCostRow[] = leafRows.map(lr => {
+        const act = purchaseAgg.get(normalizePn(lr.childPn));
+        const actualQty = act?.qty || 0;
+        const actualCost = act?.amount || 0;
+        if (act) purchaseMatchedCount++;
+        const diff = lr.totalCost - actualCost;
+        return {
+          id: lr.id, childPn: lr.childPn, childName: lr.childName,
+          supplier: lr.supplier, materialType: lr.materialType,
+          parentProducts: lr.parentProducts,
+          standardReq: lr.totalRequired, avgUnitPrice: lr.unitPrice,
+          standardCost: lr.totalCost, actualQty, actualCost,
+          diff, diffRate: actualCost > 0 ? diff / actualCost : 0,
+        };
+      });
 
-      // BOM진단 연동: 제품 P/N별 EA단가 맵 (customerPn + itemCode 양쪽 등록)
-      const costByPn = new Map<string, number>();
-      for (const ir of result.itemRows) {
-        if (ir.totalCostPerEa > 0) {
-          costByPn.set(normalizePn(ir.itemCode), ir.totalCostPerEa);
-          costByPn.set(normalizePn(ir.customerPn), ir.totalCostPerEa);
+      // 5) 유형별 집계
+      const typeAgg = new Map<string, { standard: number; actual: number }>();
+      rows.forEach(r => {
+        const ex = typeAgg.get(r.materialType) || { standard: 0, actual: 0 };
+        ex.standard += r.standardCost;
+        ex.actual += r.actualCost;
+        typeAgg.set(r.materialType, ex);
+      });
+      const byType = [...typeAgg.entries()].map(([name, v]) => ({ name, standard: v.standard, actual: v.actual }));
+
+      const totalStandard = rows.reduce((s, r) => s + r.standardCost, 0);
+      const totalActual = rows.reduce((s, r) => s + r.actualCost, 0);
+
+      // 매출 계획 금액
+      let forecastRevenue = 0;
+      forecastData.forEach(item => {
+        if (selectedMonth === 'All') forecastRevenue += item.totalRevenue || 0;
+        else {
+          const mi = parseInt(selectedMonth.replace('월', ''), 10) - 1;
+          forecastRevenue += (mi >= 0 && mi < 12) ? (item.monthlyRevenue?.[mi] || 0) : 0;
         }
-      }
+      });
 
       return {
         rows,
-        totalStandard: result.totalStandard,
-        totalActual: 0,
+        totalStandard,
+        totalActual,
         byType,
-        forecastRevenue: result.revenue,
-        standardRatio: result.standardRatio,
-        actualRatio: 0,
-        matchRate: result.stats.totalItems > 0 ? 100 : 0,
+        forecastRevenue,
+        standardRatio: forecastRevenue > 0 ? totalStandard / forecastRevenue : 0,
+        actualRatio: forecastRevenue > 0 ? totalActual / forecastRevenue : 0,
+        matchRate: forecastData.length > 0 ? Math.min(100, (rawAgg.size / forecastData.length) * 100) : 0,
         debug: {
           forecastItems: forecastData.length,
-          bomProducts: result.stats.bomItems,
-          bomMissing: forecastData.length - result.stats.totalItems,
-          materials: result.stats.totalItems,
-          purchaseMatched: 0,
-          calcSource: dataMode === 'auto' ? 'AutoProductBased' : 'ProductBased',
+          bomProducts: rawAgg.size,
+          bomMissing: 0,
+          materials: rows.length,
+          purchaseMatched: purchaseMatchedCount,
+          calcSource: 'LeafBOM',
         },
-        costByPn,
       };
     }
 
@@ -644,7 +725,7 @@ const StandardMaterialCostView: React.FC = () => {
         childPn: ir.itemCode,
         childName: ir.itemName,
         supplier: lookupSupplier(ir.itemCode, ir.customerPn),
-        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn),
+        materialType: classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseCostPerEa, ir.itemCode, ir.customerPn),
         parentProducts: [],
         standardReq: ir.production,
         avgUnitPrice: ir.totalCostPerEa,
@@ -1391,7 +1472,7 @@ const StandardMaterialCostView: React.FC = () => {
         rows.length = 0; // BOM rows 제거
         let ufIdx = 0;
         for (const ir of unifiedResult.itemRows) {
-          const materialType = classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseUnitPrice, ir.itemCode, ir.customerPn);
+          const materialType = classifyWithFallback(ir.supplyType, ir.injectionCost, ir.paintCostPerEa, ir.purchaseCostPerEa, ir.itemCode, ir.customerPn);
 
           rows.push({
             id: `uf-${ir.itemCode}-${ufIdx++}`,
@@ -3769,201 +3850,12 @@ const StandardMaterialCostView: React.FC = () => {
   const leafOrderRows = useMemo<LeafOrderRow[]>(() => {
     if (bomData.length === 0 || forecastData.length === 0) return [];
 
-    // BOM relations
-    const rawRel = buildBomRelations(bomData);
-    const bomRel = new Map<string, BomRecord[]>();
-    for (const [k, v] of rawRel) bomRel.set(normalizePn(k), v);
+    const rawAgg = expandForecastToLeafMaterials(
+      forecastData, bomData, pnMapping, masterRefInfo, enrichedMaterialCodes, selectedMonth,
+    );
+    if (rawAgg.size === 0) return [];
 
-    // P/N bridge
-    const c2i = new Map<string, string>();
-    pnMapping.forEach(m => {
-      if (m.customerPn && m.internalCode) c2i.set(normalizePn(m.customerPn), normalizePn(m.internalCode));
-    });
-    masterRefInfo.forEach(ri => {
-      if (ri.customerPn && ri.itemCode) {
-        const k = normalizePn(ri.customerPn);
-        if (!c2i.has(k)) c2i.set(k, normalizePn(ri.itemCode));
-      }
-    });
-
-    const findKey = (pn: string): string | null => {
-      if (bomRel.has(pn)) return pn;
-      const asInt = c2i.get(pn);
-      if (asInt && bomRel.has(asInt)) return asInt;
-      return null;
-    };
-
-    // refInfo 맵
-    const refMap = new Map<string, typeof masterRefInfo[0]>();
-    masterRefInfo.forEach(ri => {
-      refMap.set(normalizePn(ri.itemCode), ri);
-      if (ri.customerPn) refMap.set(normalizePn(ri.customerPn), ri);
-    });
-
-    // 쓰레기 코드 필터 + 자재명 기반 타입 추론
-    const isJunkCode = (code: string) => /^MATRCOD\d/i.test(code) || /ROW\d{3,}$/i.test(code) || /^MATR_COD/i.test(code);
-    const inferTypeFromName = (name: string): 'RESIN' | 'PAINT' | null => {
-      if (!name) return null;
-      const n = name.toUpperCase();
-      if (/\b(PC|ABS|PP|PE|PA|POM|PBT|TPU|TPE|NYLON|LEXAN|NORYL|CYCOLOY|BAYBLEND|ASA|SAN|PMMA|PVC|PS)\b/.test(n)) return 'RESIN';
-      if (/수지|레진|RESIN/i.test(n)) return 'RESIN';
-      if (/도료|PAINT|페인트|프라이머|PRIMER|클리어|CLEAR\s*COAT|THINNER|신나|경화제|HARDENER/i.test(n)) return 'PAINT';
-      return null;
-    };
-
-    // 재질코드 맵 — 쓰레기 코드 제외
-    const matCodeMap = new Map<string, typeof enrichedMaterialCodes[0]>();
-    enrichedMaterialCodes.forEach(mc => { if (!isJunkCode(mc.materialCode)) matCodeMap.set(normalizePn(mc.materialCode), mc); });
-
-    // supplier 맵
-    const isValidSupp = (s: string) => s && !/^VEND_NAME\b/i.test(s) && !/^Row\s*\d/i.test(s);
-    const sMap = new Map<string, string>();
-    const setS = (k: string, s: string) => { if (k && isValidSupp(s)) sMap.set(normalizePn(k), s); };
-    enrichedPurchasePrices.forEach(pp => { setS(pp.itemCode, pp.supplier); setS(pp.customerPn, pp.supplier); });
-    masterRefInfo.forEach(ri => { setS(ri.itemCode, ri.supplier); setS(ri.customerPn, ri.supplier); });
-    purchaseData.forEach(p => { setS(p.itemCode, p.supplier); if (p.customerPn) setS(p.customerPn, p.supplier); });
-    // 원재료코드 → 구입처 역매핑
-    for (const ri of masterRefInfo) {
-      const riSupp = sMap.get(normalizePn(ri.itemCode)) || ri.supplier;
-      if (!riSupp || !isValidSupp(riSupp)) continue;
-      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
-      for (const rc of rawCodes) {
-        const rk = normalizePn(rc);
-        if (!sMap.has(rk)) sMap.set(rk, riSupp);
-      }
-    }
-
-    // 구매단가 맵
-    const ppMap = new Map<string, number>();
-    enrichedPurchasePrices.forEach(pp => {
-      const k = normalizePn(pp.itemCode);
-      if (pp.currentPrice > 0) ppMap.set(k, pp.currentPrice);
-    });
-
-    // Forecast quantities
-    const forecastByPn = new Map<string, number>();
-    forecastData.forEach(item => {
-      if (!item.partNo) return;
-      const raw = normalizePn(item.partNo);
-      let qty = 0;
-      if (selectedMonth === 'All') qty = item.totalQty || 0;
-      else {
-        const mi = parseInt(selectedMonth.replace('월', ''), 10) - 1;
-        qty = (mi >= 0 && mi < 12) ? (item.monthlyQty?.[mi] || 0) : 0;
-      }
-      if (qty <= 0) return;
-      const key = findKey(raw) || raw;
-      forecastByPn.set(key, (forecastByPn.get(key) || 0) + qty);
-    });
-
-    // 원재료 집계
-    type RawAgg = { name: string; unit: string; matType: string; totalReq: number; parents: Set<string> };
-    const rawAgg = new Map<string, RawAgg>();
-    const addRaw = (code: string, name: string, unit: string, matType: string, qty: number, parent: string) => {
-      const ex = rawAgg.get(code);
-      if (ex) { ex.totalReq += qty; ex.parents.add(parent); }
-      else rawAgg.set(code, { name, unit, matType, totalReq: qty, parents: new Set([parent]) });
-    };
-
-    // BOM 전개 → 원재료 집계
-    for (const [bomKey, productQty] of forecastByPn) {
-      if (!bomRel.has(bomKey)) continue;
-      const leaves = expandBomToLeaves(bomKey, productQty, bomRel, undefined, 0, 10);
-      for (const leaf of leaves) {
-        const ck = normalizePn(leaf.childPn);
-        const ri = refMap.get(ck);
-        const mc = matCodeMap.get(ck);
-        const supplyType = ri?.supplyType || '';
-        const isOutsourced = /외주/.test(supplyType);
-        const isSelfMade = !supplyType || /자작/.test(supplyType);
-
-        // 1) matCodeMap 최우선: RESIN/PAINT 원재료는 어떤 경로든 정확히 분류
-        if (mc && /RESIN|수지/i.test(mc.materialType || '')) {
-          const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
-          addRaw(ck, mc.materialName || leaf.childName || ck, unitStr, 'RESIN', leaf.totalRequired, bomKey);
-        } else if (mc && /PAINT|도료/i.test(mc.materialType || mc.paintCategory || '')) {
-          const unitStr = mc.unit && /kg/i.test(mc.unit) ? 'KG' : (mc.unit || 'EA');
-          addRaw(ck, mc.materialName || leaf.childName || ck, unitStr, 'PAINT', leaf.totalRequired, bomKey);
-        }
-        // 2) 외주품: 외주/EA
-        else if (isOutsourced) {
-          addRaw(ck, leaf.childName || ck, 'EA', '외주', leaf.totalRequired, bomKey);
-        }
-        // 3) 자작 사출품: rawMaterialCode → RESIN KG 전개
-        else if (isSelfMade && ri && /사출/.test(ri.processType || '')) {
-          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2].filter(Boolean) as string[];
-          const nw = ri.netWeight || 0;
-          const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
-          const rw = ri.runnerWeight || 0;
-          const lossM = 1 + ((ri.lossRate || 0) / 100);
-          let resolved = false;
-          for (const rawCode of rawCodes) {
-            if (isJunkCode(rawCode)) continue;
-            const rawNorm = normalizePn(rawCode);
-            const rcMc = matCodeMap.get(rawNorm);
-            if (rcMc && /PAINT|도료/i.test(rcMc.materialType || '')) continue;
-            if (nw > 0) {
-              const wPerEa = (nw + rw / cavity) * lossM / 1000;
-              addRaw(rawNorm, rcMc?.materialName || rawCode, 'KG', 'RESIN', leaf.totalRequired * wPerEa, bomKey);
-              resolved = true;
-            }
-          }
-          if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'RESIN', leaf.totalRequired, bomKey);
-        }
-        // 4) 자작 도장품: paintQty × rawMaterialCode → PAINT KG 전개
-        else if (isSelfMade && ri && /도장/.test(ri.processType || '')) {
-          const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4 || ''].filter(Boolean) as string[];
-          const paintQtys = [ri.paintQty1, ri.paintQty2, ri.paintQty3, ri.paintQty4 || 0];
-          const lossM = 1 + ((ri.lossRate || 0) / 100);
-          const lotDiv = (ri.lotQty && ri.lotQty > 0) ? ri.lotQty : 1;
-          let resolved = false;
-          for (let pi = 0; pi < rawCodes.length; pi++) {
-            const pq = paintQtys[pi] || 0;
-            if (pq <= 0 || isJunkCode(rawCodes[pi])) continue;
-            const rawNorm = normalizePn(rawCodes[pi]);
-            const rcMc = matCodeMap.get(rawNorm);
-            const kgPerEa = (pq / 1000) * lossM / lotDiv;
-            addRaw(rawNorm, rcMc?.materialName || rawCodes[pi], 'KG', 'PAINT', leaf.totalRequired * kgPerEa, bomKey);
-            resolved = true;
-          }
-          if (!resolved) addRaw(ck, leaf.childName || ck, 'EA', 'PAINT', leaf.totalRequired, bomKey);
-        }
-        // 5) 기타: 자재명 패턴으로 RESIN/PAINT 추론, 쓰레기 코드 제외
-        else {
-          if (isJunkCode(ck)) continue;
-          const inferred = inferTypeFromName(leaf.childName || ck);
-          if (inferred === 'RESIN') {
-            addRaw(ck, leaf.childName || ck, 'KG', 'RESIN', leaf.totalRequired, bomKey);
-          } else if (inferred === 'PAINT') {
-            addRaw(ck, leaf.childName || ck, 'KG', 'PAINT', leaf.totalRequired, bomKey);
-          } else {
-            addRaw(ck, leaf.childName || ck, 'EA', '구매', leaf.totalRequired, bomKey);
-          }
-        }
-      }
-    }
-
-    // Build final rows
-    const rows: LeafOrderRow[] = [];
-    for (const [code, data] of rawAgg) {
-      const supplier = sMap.get(code) || '';
-      const mc = matCodeMap.get(code);
-      const unitPrice = mc?.currentPrice || ppMap.get(code) || 0;
-      rows.push({
-        id: `raw-${code}`,
-        childPn: code,
-        childName: data.name,
-        supplier,
-        materialType: data.matType,
-        unit: data.unit,
-        totalRequired: data.totalReq,
-        unitPrice,
-        totalCost: data.totalReq * unitPrice,
-        parentProducts: [...data.parents],
-      });
-    }
-    rows.sort((a, b) => b.totalCost - a.totalCost);
-    return rows;
+    return buildLeafMaterialRows(rawAgg, enrichedMaterialCodes, enrichedPurchasePrices, masterRefInfo, purchaseData);
   }, [bomData, forecastData, selectedMonth, pnMapping, masterRefInfo, enrichedPurchasePrices, enrichedMaterialCodes, purchaseData]);
 
   return (
@@ -4065,6 +3957,27 @@ const StandardMaterialCostView: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* 제조원가 일괄업로드 섹션 */}
+        <div className="mb-4 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                제조원가 일괄업로드 (BOM + 기준정보 + 단가 + 재질코드 + 배합기준)
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">「제조원가_YYYYMMDD.xlsx」파일 하나로 모든 참조데이터를 일괄 로드합니다</div>
+            </div>
+            <label className="flex items-center gap-1 px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 cursor-pointer transition-colors">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+              제조원가 업로드
+              <input type="file" accept=".xlsx,.xls" className="hidden" onChange={handleManufacturingCostUpload} />
+            </label>
+          </div>
+          {mfgCostUploadStatus && (
+            <div className="text-xs text-emerald-600 font-medium mt-2">{mfgCostUploadStatus}</div>
+          )}
+        </div>
 
         {/* 도장 데이터 업로드 섹션 */}
         <details className="mb-4">

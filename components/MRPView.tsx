@@ -242,32 +242,27 @@ const MRPView: React.FC = () => {
         partType: r.partType,
       }));
 
-      // ★ BOM 데이터 품질 필터: 구매 품목이 모품번(parent)인 레코드 제거
-      // 구매 품목은 완제/반제가 아니므로 하위 BOM을 가질 수 없음
+      // ★ BOM 품질 가드: 구매 품목이 parent인 무효 레코드 제거
+      // 제조원가 BOM 사용 시 이 필터는 0건 제거 (깨끗한 계층구조)
+      // BOM마스터_통합 등 레거시 데이터 사용 시에만 안전장치 역할
       const purchasedPnSet = new Set<string>();
-      for (const ri of refInfo) {
-        const st = (ri.supplyType || '').trim();
-        if (st.includes('구매')) {
-          purchasedPnSet.add(normalizePn(ri.itemCode));
-          if (ri.customerPn) purchasedPnSet.add(normalizePn(ri.customerPn));
-        }
-      }
-      // BOM 자체 partType='구매'인 품목도 parent가 될 수 없음
       for (const r of allBomRecords) {
         if (/구매/.test(r.partType || '')) {
           purchasedPnSet.add(normalizePn(r.childPn));
         }
       }
       let bomFilteredCount = 0;
-      const bomRecords = allBomRecords.filter(r => {
-        if (purchasedPnSet.has(normalizePn(r.parentPn))) {
-          bomFilteredCount++;
-          return false;
-        }
-        return true;
-      });
+      const bomRecords = purchasedPnSet.size > 0
+        ? allBomRecords.filter(r => {
+            if (purchasedPnSet.has(normalizePn(r.parentPn))) {
+              bomFilteredCount++;
+              return false;
+            }
+            return true;
+          })
+        : allBomRecords;
       if (bomFilteredCount > 0) {
-        console.warn(`[BOM 품질] 구매 품목이 모품번인 레코드 ${bomFilteredCount}건 제거 (전체 ${allBomRecords.length}건 중, 구매품목 ${purchasedPnSet.size}개)`);
+        console.warn(`[BOM 품질 가드] 구매 품목이 모품번인 레코드 ${bomFilteredCount}건 제거 (전체 ${allBomRecords.length}건)`);
       }
 
       // BOM 트리 뷰용 데이터 구축
