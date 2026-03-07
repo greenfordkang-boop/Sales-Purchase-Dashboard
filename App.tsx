@@ -40,6 +40,8 @@ import { checkAndAutoSync } from './services/supabaseService';
 
 const BomReviewView = lazy(() => import('./components/BomReviewView'));
 
+const isBomReviewMode = import.meta.env.VITE_APP_MODE === 'bom_review';
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -55,7 +57,7 @@ const App: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
 
   // 대시보드 상태
-  const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(DashboardTab.OVERVIEW);
+  const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(isBomReviewMode ? DashboardTab.BOM_REVIEW : DashboardTab.OVERVIEW);
   const [showGuide, setShowGuide] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
   const [showMesModal, setShowMesModal] = useState(false);
@@ -326,8 +328,8 @@ const App: React.FC = () => {
         <div className="w-full max-w-md bg-white/5 backdrop-blur-xl p-10 rounded-3xl border border-white/10 shadow-2xl">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-white mb-2">신성오토텍</h1>
-            <p className="text-emerald-400 text-sm font-medium tracking-wide">
-              {isSignUpMode ? '계정 등록' : '영업/구매 대시보드'}
+            <p className={`${isBomReviewMode ? 'text-violet-400' : 'text-emerald-400'} text-sm font-medium tracking-wide`}>
+              {isSignUpMode ? '계정 등록' : isBomReviewMode ? 'BOM 검토 시스템' : '영업/구매 대시보드'}
             </p>
           </div>
 
@@ -391,14 +393,16 @@ const App: React.FC = () => {
     );
   }
 
-  const TABS = [
-    { id: DashboardTab.OVERVIEW, label: '종합현황' },
-    { id: DashboardTab.SALES, label: '영업현황' },
-    { id: DashboardTab.PURCHASE, label: '구매현황' },
-    { id: DashboardTab.INVENTORY, label: '재고관리' },
-    { id: DashboardTab.SUPPLIER, label: '협력사관리' },
-    { id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' },
-  ];
+  const TABS = isBomReviewMode
+    ? [{ id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' }]
+    : [
+        { id: DashboardTab.OVERVIEW, label: '종합현황' },
+        { id: DashboardTab.SALES, label: '영업현황' },
+        { id: DashboardTab.PURCHASE, label: '구매현황' },
+        { id: DashboardTab.INVENTORY, label: '재고관리' },
+        { id: DashboardTab.SUPPLIER, label: '협력사관리' },
+        { id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' },
+      ];
 
   // User-Agent에서 브라우저 이름 추출
   const parseBrowser = (ua: string): string => {
@@ -647,7 +651,9 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white tracking-tight leading-none">신성오토텍</h1>
-              <p className="text-[10px] text-emerald-400 font-medium tracking-wider">SALES & PURCHASE</p>
+              <p className={`text-[10px] ${isBomReviewMode ? 'text-violet-400' : 'text-emerald-400'} font-medium tracking-wider`}>
+                {isBomReviewMode ? 'BOM REVIEW' : 'SALES & PURCHASE'}
+              </p>
             </div>
           </div>
           <div className="flex gap-1">
@@ -739,7 +745,7 @@ const App: React.FC = () => {
       <MesUploadModal isOpen={showMesModal} onClose={() => setShowMesModal(false)} />
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
-        신성오토텍 영업/구매 대시보드 v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}
+        신성오토텍 {isBomReviewMode ? 'BOM 검토 시스템' : '영업/구매 대시보드'} v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}
       </footer>
     </div>
   );
