@@ -19,6 +19,14 @@ import {
   outsourceInjPriceService,
   productInfoService,
 } from '../services/supabaseService';
+import {
+  downloadProductInfo,
+  downloadMaterialCode,
+  downloadPurchasePrice,
+  downloadMaterialPrice,
+  downloadPaintMixRatio,
+  downloadOutsourcePrice,
+} from '../utils/excelExporter';
 
 interface Props {
   isOpen: boolean;
@@ -33,6 +41,7 @@ interface MesItemConfig {
   color: string;
   handler: (file: File) => Promise<UploadResult>;
   loadCount: () => Promise<number>;
+  customDownload: () => Promise<void>;
 }
 
 const MES_ITEMS: MesItemConfig[] = [
@@ -40,31 +49,37 @@ const MES_ITEMS: MesItemConfig[] = [
     key: 'productInfo', label: '품목정보', color: 'emerald',
     handler: uploadMesProductInfo,
     loadCount: async () => (await productInfoService.getAll()).length,
+    customDownload: async () => downloadProductInfo(await productInfoService.getAll()),
   },
   {
     key: 'materialCode', label: '재질정보', color: 'amber',
     handler: uploadMesMaterialCode,
     loadCount: async () => (await materialCodeService.getAll()).length,
+    customDownload: async () => downloadMaterialCode(await materialCodeService.getAll()),
   },
   {
     key: 'purchasePrice', label: '구매단가', color: 'blue',
     handler: uploadMesPurchasePrice,
     loadCount: async () => (await purchasePriceService.getAll()).length,
+    customDownload: async () => downloadPurchasePrice(await purchasePriceService.getAll()),
   },
   {
     key: 'materialPrice', label: '재질단가', color: 'orange',
     handler: uploadMesMaterialPrice,
     loadCount: async () => (await materialCodeService.getAll()).filter(m => m.currentPrice > 0).length,
+    customDownload: async () => downloadMaterialPrice((await materialCodeService.getAll()).filter(m => m.currentPrice > 0)),
   },
   {
     key: 'paintMix', label: '도료배합비율', color: 'pink',
     handler: uploadMesPaintMixRatio,
     loadCount: async () => (await paintMixRatioService.getAll()).length,
+    customDownload: async () => downloadPaintMixRatio(await paintMixRatioService.getAll()),
   },
   {
     key: 'outsource', label: '외주사출판매가', color: 'teal',
     handler: uploadMesOutsourcePrice,
     loadCount: async () => (await outsourceInjPriceService.getAll()).length,
+    customDownload: async () => downloadOutsourcePrice(await outsourceInjPriceService.getAll()),
   },
 ];
 
@@ -173,11 +188,21 @@ const MesUploadModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   {count.toLocaleString()}건
                 </span>
 
+                {/* 다운로드 버튼 */}
+                <button
+                  onClick={() => item.customDownload()}
+                  disabled={count === 0}
+                  className="ml-auto h-7 px-2.5 text-[11px] font-semibold bg-white border border-slate-300 text-slate-600 rounded-lg hover:bg-slate-100 disabled:opacity-40 transition-colors whitespace-nowrap"
+                  title="현재 데이터를 엑셀로 다운로드"
+                >
+                  <svg className="w-3.5 h-3.5 inline -mt-0.5 mr-0.5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </button>
+
                 {/* 업로드 버튼 */}
                 <button
                   onClick={() => inputRefs.current[item.key]?.click()}
                   disabled={st?.status === 'uploading'}
-                  className="ml-auto h-7 px-3 text-[11px] font-semibold bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap"
+                  className="h-7 px-3 text-[11px] font-semibold bg-slate-800 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors whitespace-nowrap"
                 >
                   {st?.status === 'uploading' ? '처리중...' : '파일 선택'}
                 </button>
