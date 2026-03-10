@@ -5,7 +5,11 @@ export enum DashboardTab {
   PURCHASE = 'purchase',
   INVENTORY = 'inventory',
   SUPPLIER = 'supplier',
-  BOM_REVIEW = 'bom_review'
+  BOM_REVIEW = 'bom_review',
+  MRP = 'mrp',
+  STANDARD_MATERIAL_COST = 'standard_material_cost',
+  MATERIAL_YIELD = 'material_yield',
+  PRODUCT_MATERIAL_COST = 'product_material_cost',
 }
 
 export interface Metric {

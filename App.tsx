@@ -39,8 +39,12 @@ import {
 import { checkAndAutoSync } from './services/supabaseService';
 
 const BomReviewView = lazy(() => import('./components/BomReviewView'));
+const MRPView = lazy(() => import('./components/MRPView'));
+const StandardMaterialCostView = lazy(() => import('./components/StandardMaterialCostView'));
+const MaterialYieldView = lazy(() => import('./components/MaterialYieldView'));
+const ProductMaterialCostView = lazy(() => import('./components/ProductMaterialCostView'));
 
-const isBomReviewMode = import.meta.env.VITE_APP_MODE === 'bom_review';
+const isBomReviewMode = (import.meta.env.VITE_APP_MODE || '').trim() === 'bom_review';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -401,7 +405,11 @@ const App: React.FC = () => {
         { id: DashboardTab.PURCHASE, label: '구매현황' },
         { id: DashboardTab.INVENTORY, label: '재고관리' },
         { id: DashboardTab.SUPPLIER, label: '협력사관리' },
-        { id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' },
+        { id: DashboardTab.BOM_REVIEW, label: 'BOM 관리' },
+        { id: DashboardTab.MRP, label: 'MRP' },
+        { id: DashboardTab.STANDARD_MATERIAL_COST, label: '표준재료비' },
+        { id: DashboardTab.MATERIAL_YIELD, label: '자재수율' },
+        { id: DashboardTab.PRODUCT_MATERIAL_COST, label: '제품별재료비' },
       ];
 
   // User-Agent에서 브라우저 이름 추출
@@ -734,6 +742,26 @@ const App: React.FC = () => {
           {activeTab === DashboardTab.BOM_REVIEW && (
             <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
               <BomReviewView />
+            </Suspense>
+          )}
+          {activeTab === DashboardTab.MRP && (
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+              <MRPView />
+            </Suspense>
+          )}
+          {activeTab === DashboardTab.STANDARD_MATERIAL_COST && (
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+              <StandardMaterialCostView />
+            </Suspense>
+          )}
+          {activeTab === DashboardTab.MATERIAL_YIELD && (
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+              <MaterialYieldView />
+            </Suspense>
+          )}
+          {activeTab === DashboardTab.PRODUCT_MATERIAL_COST && (
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+              <ProductMaterialCostView />
             </Suspense>
           )}
           {activeTab === 'admin' && isAdmin(currentUser?.email) && renderAdminPanel()}
