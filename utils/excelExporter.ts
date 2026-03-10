@@ -5,8 +5,73 @@
  */
 import * as XLSX from 'xlsx';
 import type { ProductInfoItem, PurchasePrice, OutsourcePrice, PaintMixRatio, MaterialPrice } from './standardMaterialParser';
-import type { MaterialCodeRecord } from './bomMasterParser';
+import type { BomMasterRecord, ReferenceInfoRecord, MaterialCodeRecord } from './bomMasterParser';
 import type { ItemRevenueRow } from './revenueDataParser';
+
+/**
+ * BOM 마스터 데이터를 MES 양식(mes_bom양식.xlsx) 형태로 다운로드
+ */
+export function downloadBomAsTemplate(
+  bomRecords: BomMasterRecord[],
+  refInfo: ReferenceInfoRecord[],
+  fileName = 'mes_bom양식',
+): void {
+  if (bomRecords.length === 0) return;
+
+  const refMap = new Map<string, ReferenceInfoRecord>();
+  for (const ri of refInfo) {
+    const key = ri.itemCode.trim().toUpperCase();
+    if (key) refMap.set(key, ri);
+    if (ri.customerPn) refMap.set(ri.customerPn.trim().toUpperCase(), ri);
+  }
+
+  const productGroups: Map<string, BomMasterRecord[]> = new Map();
+  const productOrder: string[] = [];
+
+  for (const rec of bomRecords) {
+    const productPn = rec.level === 1 ? rec.parentPn : '';
+    if (rec.level === 1 && productPn && !productGroups.has(productPn)) {
+      productGroups.set(productPn, []);
+      productOrder.push(productPn);
+    }
+  }
+
+  let currentProduct = '';
+  for (const rec of bomRecords) {
+    if (rec.level === 1) currentProduct = rec.parentPn;
+    const group = productGroups.get(currentProduct);
+    if (group) group.push(rec);
+  }
+
+  const rows: Record<string, unknown>[] = [];
+  for (const productPn of productOrder) {
+    const group = productGroups.get(productPn) || [];
+    let rowNum = 0;
+    for (const rec of group) {
+      rowNum++;
+      const ref = refMap.get(rec.childPn.trim().toUpperCase());
+      rows.push({
+        '': rowNum,
+        '제품번호': rowNum === 1 ? productPn : '',
+        '레벨': rec.level,
+        '모품번': rec.parentPn,
+        '자품번': rec.childPn,
+        '고객사 P/N': ref?.customerPn || '',
+        '자품명': rec.childName,
+        '규격': ref?.spec || '',
+        '부품유형': rec.partType,
+        '단위': 'EA',
+        '소요량': rec.qty,
+        '협력업체': rec.supplier,
+      });
+    }
+  }
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'bom');
+  XLSX.writeFile(wb, `${fileName}.xlsx`);
+}
 
 function saveWorkbook(wb: XLSX.WorkBook, filename: string) {
   const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
