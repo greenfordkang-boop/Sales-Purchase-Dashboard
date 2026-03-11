@@ -18,6 +18,18 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
+      },
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              'vendor-recharts': ['recharts'],
+              'vendor-xlsx': ['xlsx'],
+              'vendor-supabase': ['@supabase/supabase-js'],
+              'vendor-pdf': ['pdfjs-dist'],
+            }
+          }
+        }
       }
     };
 });

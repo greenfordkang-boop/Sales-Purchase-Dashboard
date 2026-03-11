@@ -2462,6 +2462,7 @@ export const referenceInfoService = {
         productSizeType: row.product_size_type || '',
         glossType: row.gloss_type || '',
         useYn: row.use_yn || 'Y',
+        paintIntake: Number(row.paint_intake) || 0,
       }));
     } catch {
       const stored = localStorage.getItem('dashboard_referenceInfoMaster');
@@ -2525,6 +2526,7 @@ export const referenceInfoService = {
       product_size_type: r.productSizeType,
       gloss_type: r.glossType,
       use_yn: r.useYn,
+      paint_intake: r.paintIntake,
     }));
 
     await insertInBatches('reference_info_master', rows);
@@ -2534,7 +2536,7 @@ export const referenceInfoService = {
   /** 개별 레코드의 중량/캐비티/Loss 등 부분 업데이트 */
   async updateFields(itemCode: string, fields: Partial<{
     netWeight: number; runnerWeight: number; cavity: number; lossRate: number;
-    netWeight2: number; runnerWeight2: number;
+    netWeight2: number; runnerWeight2: number; paintIntake: number;
   }>): Promise<boolean> {
     const normCode = itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
     // localStorage 업데이트
@@ -2559,6 +2561,7 @@ export const referenceInfoService = {
     if (fields.lossRate !== undefined) dbFields.loss_rate = fields.lossRate;
     if (fields.netWeight2 !== undefined) dbFields.net_weight_2 = fields.netWeight2;
     if (fields.runnerWeight2 !== undefined) dbFields.runner_weight_2 = fields.runnerWeight2;
+    if (fields.paintIntake !== undefined) dbFields.paint_intake = fields.paintIntake;
 
     try {
       // exact match 시도

@@ -33,6 +33,7 @@ import {
   forecastService,
 } from '../services/supabaseService';
 import PaintAnalysisPanel from './PaintAnalysisPanel';
+import MesUploadModal from './MesUploadModal';
 
 // ============================================
 // Types
@@ -228,6 +229,7 @@ const BomReviewView: React.FC = () => {
 
   // --- Paint Analysis Panel ---
   const [showPaintAnalysis, setShowPaintAnalysis] = useState(false);
+  const [showMesModal, setShowMesModal] = useState(false);
 
   // --- Sort State ---
   type SortKey = 'pn' | 'name' | 'customer' | 'model' | 'sellingPrice' | 'planQty' | 'expectedRevenue' | 'materialCost' | 'materialRatio';
@@ -1458,6 +1460,12 @@ const BomReviewView: React.FC = () => {
               BOM: {bomRecords.length.toLocaleString()}행 | Level-0: {rootProducts.length}개
             </span>
             <button
+              onClick={() => setShowMesModal(true)}
+              className="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors"
+            >
+              MES정보
+            </button>
+            <button
               onClick={() => setShowPaintAnalysis(true)}
               className="px-3 py-1.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-lg hover:bg-purple-200 transition-colors"
             >
@@ -2356,6 +2364,9 @@ const BomReviewView: React.FC = () => {
           onClose={() => setShowPaintAnalysis(false)}
         />
       )}
+
+      {/* MES Upload Modal */}
+      <MesUploadModal isOpen={showMesModal} onClose={() => setShowMesModal(false)} />
     </div>
   );
 };

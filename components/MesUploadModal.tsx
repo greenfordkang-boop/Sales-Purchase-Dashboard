@@ -11,6 +11,7 @@ import {
   uploadMesMaterialPrice,
   uploadMesPaintMixRatio,
   uploadMesOutsourcePrice,
+  uploadBomMaster,
 } from '../utils/centralUploadHandlers';
 import {
   materialCodeService,
@@ -18,6 +19,8 @@ import {
   paintMixRatioService,
   outsourceInjPriceService,
   productInfoService,
+  bomMasterService,
+  referenceInfoService,
 } from '../services/supabaseService';
 import {
   downloadProductInfo,
@@ -26,6 +29,7 @@ import {
   downloadMaterialPrice,
   downloadPaintMixRatio,
   downloadOutsourcePrice,
+  downloadBomAsTemplate,
 } from '../utils/excelExporter';
 
 interface Props {
@@ -81,6 +85,15 @@ const MES_ITEMS: MesItemConfig[] = [
     loadCount: async () => (await outsourceInjPriceService.getAll()).length,
     customDownload: async () => downloadOutsourcePrice(await outsourceInjPriceService.getAll()),
   },
+  {
+    key: 'bomMaster', label: 'BOM 마스터', color: 'purple',
+    handler: uploadBomMaster,
+    loadCount: async () => (await bomMasterService.getAll()).length,
+    customDownload: async () => {
+      const [bom, ref] = await Promise.all([bomMasterService.getAll(), referenceInfoService.getAll()]);
+      downloadBomAsTemplate(bom, ref);
+    },
+  },
 ];
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; badge: string }> = {
@@ -90,6 +103,7 @@ const COLOR_MAP: Record<string, { bg: string; text: string; border: string; badg
   orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700' },
   pink: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', badge: 'bg-pink-100 text-pink-700' },
   teal: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', badge: 'bg-teal-100 text-teal-700' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700' },
 };
 
 const MesUploadModal: React.FC<Props> = ({ isOpen, onClose }) => {

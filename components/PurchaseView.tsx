@@ -1,16 +1,12 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
 import PurchaseSummaryView from './PurchaseSummaryView';
-import MaterialYieldView from './MaterialYieldView';
-import StandardMaterialCostView from './StandardMaterialCostView';
-import BomMasterUploadView from './BomMasterUploadView';
-import BomExplosionView from './BomExplosionView';
-import MRPView from './MRPView';
-import ProductMaterialCostView from './ProductMaterialCostView';
-import DataQualityGuide from './DataQualityGuide';
-import CRView from './CRView';
+
+const DataQualityGuide = lazy(() => import('./DataQualityGuide'));
+const CRView = lazy(() => import('./CRView'));
+const CostAnalysisView = lazy(() => import('./CostAnalysisView'));
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parsePartsCSV, parseMaterialCSV, PurchaseItem } from '../utils/purchaseDataParser';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
@@ -57,7 +53,7 @@ const PurchaseView: React.FC = () => {
 
   // --- State ---
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>(getInitialPurchaseData);
-  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'bomMaster' | 'bomExplosion' | 'mrp' | 'yield' | 'price' | 'cr' | 'supplier' | 'standard' | 'dataGuide'>('inbound');
+  const [activeSubTab, setActiveSubTab] = useState<'inbound' | 'summary' | 'price' | 'cr' | 'supplier' | 'dataGuide' | 'costAnalysis'>('costAnalysis');
   
   const [availableYears, setAvailableYears] = useState<number[]>([2026]);
   const [selectedYears, setSelectedYears] = useState<number[]>([2026]);
@@ -530,17 +526,12 @@ const PurchaseView: React.FC = () => {
   const PIE_COLORS = ['#6366f1', '#f43f5e']; 
 
   const SUB_TABS = [
+    { id: 'costAnalysis', label: '원가분석', highlight: true },
     { id: 'inbound', label: '입고현황' },
     { id: 'summary', label: '매입종합집계' },
-    { id: 'bomMaster', label: 'BOM 마스터' },
-    { id: 'bomExplosion', label: 'BOM 전개' },
-    { id: 'mrp', label: '소요량(MRP)' },
-    { id: 'productCost', label: '제품별 재료비' },
-    { id: 'yield', label: '자재수율' },
     { id: 'price', label: '단가현황' },
     { id: 'cr', label: 'CR현황' },
     { id: 'supplier', label: '협력사현황' },
-    { id: 'standard', label: '표준재료비' },
     { id: 'dataGuide', label: '데이터 품질 가이드' },
   ];
 
@@ -579,18 +570,27 @@ const PurchaseView: React.FC = () => {
                 key={tab.id}
                 onClick={() => setActiveSubTab(tab.id as any)}
                 className={`px-5 py-3 text-sm font-bold transition-all relative whitespace-nowrap ${
-                    activeSubTab === tab.id 
-                    ? 'text-indigo-600' 
-                    : 'text-slate-400 hover:text-slate-600'
+                    activeSubTab === tab.id
+                    ? ((tab as any).highlight ? 'text-violet-600' : 'text-indigo-600')
+                    : ((tab as any).highlight ? 'text-violet-400 hover:text-violet-600' : 'text-slate-400 hover:text-slate-600')
                 }`}
             >
                 {tab.label}
                 {activeSubTab === tab.id && (
-                    <span className="absolute bottom-[-5px] left-0 w-full h-1 bg-indigo-600 rounded-t-full"></span>
+                    <span className={`absolute bottom-[-5px] left-0 w-full h-1 rounded-t-full ${(tab as any).highlight ? 'bg-violet-600' : 'bg-indigo-600'}`}></span>
                 )}
             </button>
         ))}
       </div>
+
+      {/* =================================================================================
+          0. COST ANALYSIS TAB (원가분석 통합 워크벤치)
+         ================================================================================= */}
+      {activeSubTab === 'costAnalysis' && (
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+          <CostAnalysisView />
+        </Suspense>
+      )}
 
       {/* =================================================================================
           1. INBOUND TAB (Existing View)
@@ -869,30 +869,6 @@ const PurchaseView: React.FC = () => {
          ================================================================================= */}
       {activeSubTab === 'summary' && <PurchaseSummaryView />}
 
-      {/* =================================================================================
-          2.5. BOM MASTER TAB (BOM 마스터 업로드)
-         ================================================================================= */}
-      {activeSubTab === 'bomMaster' && <BomMasterUploadView />}
-
-      {/* =================================================================================
-          2.55. BOM EXPLOSION TAB (BOM 전개)
-         ================================================================================= */}
-      {activeSubTab === 'bomExplosion' && <BomExplosionView />}
-
-      {/* =================================================================================
-          2.6. MRP TAB (소요량 계획)
-         ================================================================================= */}
-      {activeSubTab === 'mrp' && <MRPView />}
-
-      {/* =================================================================================
-          2.7. PRODUCT MATERIAL COST TAB (제품별 재료비)
-         ================================================================================= */}
-      {activeSubTab === 'productCost' && <ProductMaterialCostView />}
-
-      {/* =================================================================================
-          3. MATERIAL YIELD TAB (자재수율)
-         ================================================================================= */}
-      {activeSubTab === 'yield' && <MaterialYieldView />}
 
       {/* =================================================================================
           3. PRICE TAB (Derived Data)
@@ -962,7 +938,11 @@ const PurchaseView: React.FC = () => {
       {/* =================================================================================
           4. CR TAB
          ================================================================================= */}
-      {activeSubTab === 'cr' && <CRView />}
+      {activeSubTab === 'cr' && (
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+          <CRView />
+        </Suspense>
+      )}
 
       {/* =================================================================================
           5. SUPPLIER TAB (Derived Data)
@@ -1029,15 +1009,15 @@ const PurchaseView: React.FC = () => {
           </div>
       )}
 
-      {/* =================================================================================
-          7. STANDARD MATERIAL COST TAB (표준재료비)
-         ================================================================================= */}
-      {activeSubTab === 'standard' && <StandardMaterialCostView />}
 
       {/* =================================================================================
           8. DATA QUALITY GUIDE (데이터 품질 가이드)
          ================================================================================= */}
-      {activeSubTab === 'dataGuide' && <DataQualityGuide />}
+      {activeSubTab === 'dataGuide' && (
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+          <DataQualityGuide />
+        </Suspense>
+      )}
     </div>
   );
 };

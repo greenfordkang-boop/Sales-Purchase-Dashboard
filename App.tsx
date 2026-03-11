@@ -2,15 +2,15 @@
 import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { User } from '@supabase/supabase-js';
 import { DashboardTab } from './types';
-import Overview from './components/Overview';
-import SalesView from './components/SalesView';
-import PurchaseView from './components/PurchaseView';
-import InventoryView from './components/InventoryView';
-import SupplierView from './components/SupplierView';
 import SyncStatus from './components/SyncStatus';
 import UserGuideModal from './components/UserGuideModal';
-import UploaderModal from './components/UploaderModal';
-import MesUploadModal from './components/MesUploadModal';
+
+const Overview = lazy(() => import('./components/Overview'));
+const SalesView = lazy(() => import('./components/SalesView'));
+const PurchaseView = lazy(() => import('./components/PurchaseView'));
+const InventoryView = lazy(() => import('./components/InventoryView'));
+const SupplierView = lazy(() => import('./components/SupplierView'));
+const UploaderModal = lazy(() => import('./components/UploaderModal'));
 import {
   BarChart,
   Bar,
@@ -39,10 +39,6 @@ import {
 import { checkAndAutoSync } from './services/supabaseService';
 
 const BomReviewView = lazy(() => import('./components/BomReviewView'));
-const MRPView = lazy(() => import('./components/MRPView'));
-const StandardMaterialCostView = lazy(() => import('./components/StandardMaterialCostView'));
-const MaterialYieldView = lazy(() => import('./components/MaterialYieldView'));
-const ProductMaterialCostView = lazy(() => import('./components/ProductMaterialCostView'));
 
 const isBomReviewMode = (import.meta.env.VITE_APP_MODE || '').trim() === 'bom_review';
 
@@ -64,7 +60,6 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<DashboardTab | 'admin'>(isBomReviewMode ? DashboardTab.BOM_REVIEW : DashboardTab.OVERVIEW);
   const [showGuide, setShowGuide] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
-  const [showMesModal, setShowMesModal] = useState(false);
 
   // 관리자 패널 상태
   const [users, setUsers] = useState<UserProfile[]>([]);
@@ -397,7 +392,7 @@ const App: React.FC = () => {
     );
   }
 
-  const TABS = isBomReviewMode
+  const MAIN_TABS = isBomReviewMode
     ? [{ id: DashboardTab.BOM_REVIEW, label: 'BOM 검토' }]
     : [
         { id: DashboardTab.OVERVIEW, label: '종합현황' },
@@ -406,10 +401,6 @@ const App: React.FC = () => {
         { id: DashboardTab.INVENTORY, label: '재고관리' },
         { id: DashboardTab.SUPPLIER, label: '협력사관리' },
         { id: DashboardTab.BOM_REVIEW, label: 'BOM 관리' },
-        { id: DashboardTab.MRP, label: 'MRP' },
-        { id: DashboardTab.STANDARD_MATERIAL_COST, label: '표준재료비' },
-        { id: DashboardTab.MATERIAL_YIELD, label: '자재수율' },
-        { id: DashboardTab.PRODUCT_MATERIAL_COST, label: '제품별재료비' },
       ];
 
   // User-Agent에서 브라우저 이름 추출
@@ -664,8 +655,8 @@ const App: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex gap-1">
-            {TABS.map(tab => (
+          <div className="flex gap-1 items-center">
+            {MAIN_TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -678,18 +669,14 @@ const App: React.FC = () => {
                 {tab.label}
               </button>
             ))}
-            <button
-              onClick={() => setShowUploader(true)}
-              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-emerald-400 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-400/50"
-            >
-              업로더
-            </button>
-            <button
-              onClick={() => setShowMesModal(true)}
-              className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-violet-400 hover:bg-slate-800 border border-violet-500/30 hover:border-violet-400/50"
-            >
-              MES정보
-            </button>
+            {!isBomReviewMode && (
+              <button
+                onClick={() => setShowUploader(true)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-emerald-400 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-400/50"
+              >
+                업로더
+              </button>
+            )}
             {isAdmin(currentUser?.email) && (
               <button
                 onClick={() => setActiveTab('admin')}
@@ -734,34 +721,16 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 p-6 max-w-[1600px] mx-auto w-full">
         <div className="space-y-6">
-          {activeTab === DashboardTab.OVERVIEW && <Overview />}
-          {activeTab === DashboardTab.SALES && <SalesView />}
-          {activeTab === DashboardTab.PURCHASE && <PurchaseView />}
-          {activeTab === DashboardTab.INVENTORY && <InventoryView />}
-          {activeTab === DashboardTab.SUPPLIER && <SupplierView />}
+          <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+            {activeTab === DashboardTab.OVERVIEW && <Overview />}
+            {activeTab === DashboardTab.SALES && <SalesView />}
+            {activeTab === DashboardTab.PURCHASE && <PurchaseView />}
+            {activeTab === DashboardTab.INVENTORY && <InventoryView />}
+            {activeTab === DashboardTab.SUPPLIER && <SupplierView />}
+          </Suspense>
           {activeTab === DashboardTab.BOM_REVIEW && (
             <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
               <BomReviewView />
-            </Suspense>
-          )}
-          {activeTab === DashboardTab.MRP && (
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
-              <MRPView />
-            </Suspense>
-          )}
-          {activeTab === DashboardTab.STANDARD_MATERIAL_COST && (
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
-              <StandardMaterialCostView />
-            </Suspense>
-          )}
-          {activeTab === DashboardTab.MATERIAL_YIELD && (
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
-              <MaterialYieldView />
-            </Suspense>
-          )}
-          {activeTab === DashboardTab.PRODUCT_MATERIAL_COST && (
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
-              <ProductMaterialCostView />
             </Suspense>
           )}
           {activeTab === 'admin' && isAdmin(currentUser?.email) && renderAdminPanel()}
@@ -769,8 +738,9 @@ const App: React.FC = () => {
       </main>
 
       <UserGuideModal isOpen={showGuide} onClose={() => setShowGuide(false)} />
-      <UploaderModal isOpen={showUploader} onClose={() => setShowUploader(false)} />
-      <MesUploadModal isOpen={showMesModal} onClose={() => setShowMesModal(false)} />
+      <Suspense fallback={null}>
+        <UploaderModal isOpen={showUploader} onClose={() => setShowUploader(false)} />
+      </Suspense>
 
       <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
         신성오토텍 {isBomReviewMode ? 'BOM 검토 시스템' : '영업/구매 대시보드'} v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}

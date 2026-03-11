@@ -69,6 +69,7 @@ export interface ReferenceInfoRecord {
   productSizeType: string;   // 제품크기종류
   glossType: string;         // 광택종류
   useYn: string;             // 사용여부
+  paintIntake: number;       // 개취수량 (EA/kg) — 도장비 산출용
   extraData?: Record<string, unknown>;
 }
 
@@ -210,6 +211,7 @@ const REFERENCE_INFO_HEADERS: Record<string, RegExp> = {
   productSizeType: /제품크기종류|product.*size/i,
   glossType: /광택종류|gloss/i,
   useYn: /사용여부|use.*yn|사용유무/i,
+  paintIntake: /개취수량|paint.*intake|ea.*per.*kg/i,
 };
 
 const EQUIPMENT_HEADERS: Record<string, RegExp> = {
@@ -398,6 +400,7 @@ export function parseReferenceInfoSheet(rows: unknown[][]): ReferenceInfoRecord[
       productSizeType: s('productSizeType'),
       glossType: s('glossType'),
       useYn: s('useYn'),
+      paintIntake: n('paintIntake'),
     });
   }
   return results;
