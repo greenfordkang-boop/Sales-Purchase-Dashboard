@@ -264,9 +264,10 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
               <th className="px-2 py-1.5 text-left">품번</th>
               <th className="px-2 py-1.5 text-left">품명</th>
               <th className="px-2 py-1.5 text-right">수량</th>
-              <th className="px-2 py-1.5 text-right">EA단가</th>
+              <th className="px-2 py-1.5 text-right">단가</th>
+              <th className="px-2 py-1.5 text-right">매출액</th>
               <th className="px-2 py-1.5 text-right">재료비합계</th>
-              <th className="px-2 py-1.5 text-right">비율</th>
+              <th className="px-2 py-1.5 text-right">재료비율</th>
             </tr></thead>
             <tbody>
               {top10.map(row => (
@@ -275,6 +276,7 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                   <td className="px-2 py-1.5 truncate max-w-[150px]">{row.name}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{row.planQty.toLocaleString()}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{Math.round(row.materialCost).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-right font-mono text-slate-500">{row.expectedRevenue > 0 ? fmt(row.expectedRevenue) : '-'}</td>
                   <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(row.materialTotal)}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{row.materialRatio.toFixed(1)}%</td>
                 </tr>
@@ -353,13 +355,14 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             <th className="px-3 py-2 text-left">거래선</th>
             <th className="px-3 py-2 text-right">수량</th>
             <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialCost')}>
-              EA단가 {sortKey === 'materialCost' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
+              단가 {sortKey === 'materialCost' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
             </th>
+            <th className="px-3 py-2 text-right">매출액</th>
             <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialTotal')}>
               재료비합계 {sortKey === 'materialTotal' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
             </th>
             <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialRatio')}>
-              비율 {sortKey === 'materialRatio' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
+              재료비율 {sortKey === 'materialRatio' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
             </th>
             <th className="px-3 py-2 text-center">출처</th>
           </tr></thead>
@@ -371,6 +374,7 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                 <td className="px-3 py-2 text-slate-500">{row.customer}</td>
                 <td className="px-3 py-2 text-right font-mono">{row.planQty.toLocaleString()}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">{Math.round(row.materialCost).toLocaleString()}</td>
+                <td className="px-3 py-2 text-right font-mono text-slate-500">{row.expectedRevenue > 0 ? fmt(row.expectedRevenue) : '-'}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">{fmt(row.materialTotal)}</td>
                 <td className="px-3 py-2 text-right font-mono">{row.materialRatio > 0 ? `${row.materialRatio.toFixed(1)}%` : '-'}</td>
                 <td className="px-3 py-2 text-center">
@@ -390,6 +394,7 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             <td className="px-3 py-2" colSpan={3}>합계 ({filtered.length}건)</td>
             <td className="px-3 py-2 text-right font-mono">{filtered.reduce((s, r) => s + r.planQty, 0).toLocaleString()}</td>
             <td className="px-3 py-2 text-right">-</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(filtered.reduce((s, r) => s + r.expectedRevenue, 0))}</td>
             <td className="px-3 py-2 text-right font-mono">{fmt(filtered.reduce((s, r) => s + r.materialTotal, 0))}</td>
             <td className="px-3 py-2 text-right font-mono">{ratio.toFixed(1)}%</td>
             <td className="px-3 py-2"></td>
