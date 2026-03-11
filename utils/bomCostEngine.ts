@@ -20,6 +20,7 @@ export interface PriceData {
   purchaseMap: Map<string, number>;       // 품번 → 구매단가
   outsourceMap: Map<string, number>;      // 품번 → 외주가공비
   stdMap: Map<string, number>;            // 품번 → 표준재료비
+  supplierMap: Map<string, string>;       // 품번 → 업체명 (구매/외주 데이터 기반)
 }
 
 export interface PaintDetail {
@@ -124,7 +125,26 @@ export function buildPriceData(
     }
   }
 
-  return { matPriceMap, materialTypeMap, matNameMap, purchaseMap, outsourceMap, stdMap };
+  // 업체명 맵 (구매단가 + 외주단가 데이터에서 추출)
+  const supplierMap = new Map<string, string>();
+  for (const pp of purchasePrices) {
+    if (pp.supplier) {
+      supplierMap.set(normalizePn(pp.itemCode), pp.supplier);
+      if (pp.customerPn) supplierMap.set(normalizePn(pp.customerPn), pp.supplier);
+    }
+  }
+  for (const op of outsourcePrices) {
+    if (op.supplier) {
+      const code = normalizePn(op.itemCode);
+      if (!supplierMap.has(code)) supplierMap.set(code, op.supplier);
+      if (op.customerPn) {
+        const custCode = normalizePn(op.customerPn);
+        if (!supplierMap.has(custCode)) supplierMap.set(custCode, op.supplier);
+      }
+    }
+  }
+
+  return { matPriceMap, materialTypeMap, matNameMap, purchaseMap, outsourceMap, stdMap, supplierMap };
 }
 
 // ============================================================
@@ -408,6 +428,15 @@ function collectLeafMaterials(
       else if (/paint|도장|도료/i.test(mt)) matType = 'PAINT';
     }
 
+    // 업체명 결정: 기준정보 → 구매/외주 데이터 → 자작 자동지정
+    let supplier = ri?.supplier || '';
+    if (!supplier) {
+      supplier = priceData.supplierMap.get(code) || '';
+    }
+    if (!supplier && (source === '사출' || source === '도장')) {
+      supplier = '신성오토텍(자작)';
+    }
+
     const existing = materialAgg.get(code);
     if (existing) {
       for (let m = 0; m < 12; m++) {
@@ -425,7 +454,7 @@ function collectLeafMaterials(
         monthlyQty: mq,
         unitPrice: price,
         parents: new Set([normalizePn(rootPn)]),
-        supplier: ri?.supplier || '',
+        supplier,
       });
     }
   }
