@@ -433,7 +433,9 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="총 자재 종류" value={`${leafMaterials.length}건`} color="indigo" />
-        <KPICard label="총 소요금액" value={fmt(totalCost)} color="violet" />
+        <KPICard label="총 소요금액 (조달기준)" value={fmt(totalCost)}
+          sub={totalCost !== summary.totalMaterial ? `매출매칭 ${fmt(summary.totalMaterial)}` : undefined}
+          color="violet" />
         <KPICard label="BOM매칭 제품" value={`${summary.matchedCount}건`} color="emerald" />
         <KPICard label="재료비율" value={`${(summary.materialRatio * 100).toFixed(1)}%`} color={summary.materialRatio > 0.5 ? 'red' : 'emerald'} />
       </div>
@@ -559,7 +561,9 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="자재 종류" value={`${filtered.length}건`} color="indigo" />
-        <KPICard label="총 소요금액" value={fmt(totalCost)} color="violet" />
+        <KPICard label="총 소요금액 (조달기준)" value={fmt(totalCost)}
+          sub={totalCost !== summary.totalMaterial ? `매출매칭 ${fmt(summary.totalMaterial)}` : undefined}
+          color="violet" />
         <KPICard label="BOM매칭 제품" value={`${summary.matchedCount}건`} color="emerald" />
         <KPICard label="업체 수" value={`${supplierData.length}곳`} color="slate" />
       </div>
