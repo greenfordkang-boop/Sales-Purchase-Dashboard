@@ -492,6 +492,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { costResult } = data;
   const [viewMode, setViewMode] = useState<'material' | 'supplier'>('material');
   const [typeFilter, setTypeFilter] = useState<string>('전체');
+  const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
 
   if (!costResult || costResult.leafMaterials.length === 0) {
     return <EmptyState message="BOM 전개 데이터가 필요합니다." />;
@@ -504,14 +505,15 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];
   const filtered = typeFilter === '전체' ? leafMaterials : leafMaterials.filter(m => m.materialType === typeFilter);
 
-  // 업체별 집계
+  // 업체별 집계 (상세 자재 목록 포함)
   const supplierData = useMemo(() => {
-    const map = new Map<string, { totalCost: number; materialCount: number; monthlyQty: number[] }>();
+    const map = new Map<string, { totalCost: number; materialCount: number; monthlyQty: number[]; materials: typeof filtered }>();
     for (const m of filtered) {
       const supplier = m.supplier || '(미지정)';
-      const existing = map.get(supplier) || { totalCost: 0, materialCount: 0, monthlyQty: new Array(12).fill(0) };
+      const existing = map.get(supplier) || { totalCost: 0, materialCount: 0, monthlyQty: new Array(12).fill(0), materials: [] as typeof filtered };
       existing.totalCost += m.totalCost;
       existing.materialCount++;
+      existing.materials.push(m);
       for (let i = 0; i < 12; i++) existing.monthlyQty[i] += m.monthlyQty[i] || 0;
       map.set(supplier, existing);
     }
@@ -519,6 +521,14 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       .map(([name, v]) => ({ name, ...v }))
       .sort((a, b) => b.totalCost - a.totalCost);
   }, [filtered]);
+
+  const toggleSupplier = (name: string) => {
+    setExpandedSuppliers(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -595,7 +605,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         </div>
       )}
 
-      {/* 업체별 테이블 */}
+      {/* 업체별 테이블 (펼침 가능) */}
       {viewMode === 'supplier' && (
         <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
           <table className="w-full text-xs">
@@ -608,16 +618,50 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
               <th className="px-3 py-2 text-right font-bold">총금액</th>
             </tr></thead>
             <tbody>
-              {supplierData.map(s => (
-                <tr key={s.name} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-3 py-2 font-bold text-slate-700 sticky left-0 bg-white">{s.name}</td>
-                  <td className="px-3 py-2 text-right text-slate-500">{s.materialCount}</td>
-                  {s.monthlyQty.map((q, i) => (
-                    <td key={i} className="px-1.5 py-2 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
-                  ))}
-                  <td className="px-3 py-2 text-right font-mono font-bold">{fmt(s.totalCost)}</td>
-                </tr>
-              ))}
+              {supplierData.map(s => {
+                const isExpanded = expandedSuppliers.has(s.name);
+                return (
+                  <React.Fragment key={s.name}>
+                    {/* 업체 요약 행 */}
+                    <tr
+                      className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                      onClick={() => toggleSupplier(s.name)}
+                    >
+                      <td className="px-3 py-2 font-bold text-slate-700 sticky left-0 bg-white">
+                        <span className={`inline-block w-4 text-indigo-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                        {s.name}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-500">{s.materialCount}</td>
+                      {s.monthlyQty.map((q, i) => (
+                        <td key={i} className="px-1.5 py-2 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                      ))}
+                      <td className="px-3 py-2 text-right font-mono font-bold">{fmt(s.totalCost)}</td>
+                    </tr>
+                    {/* 상세 자재 행 */}
+                    {isExpanded && s.materials
+                      .sort((a, b) => b.totalCost - a.totalCost)
+                      .map(m => (
+                      <tr key={m.materialCode} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-100/50">
+                        <td className="pl-9 pr-2 py-1.5 sticky left-0 bg-slate-50/50">
+                          <span className="font-mono text-indigo-600 text-[10px]">{m.materialCode}</span>
+                          <span className="ml-1.5 text-slate-500 truncate">{m.materialName}</span>
+                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${
+                            m.materialType === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
+                            m.materialType === 'PAINT' ? 'bg-amber-100 text-amber-700' :
+                            m.materialType === '외주' ? 'bg-blue-100 text-blue-700' :
+                            'bg-emerald-100 text-emerald-700'
+                          }`}>{m.materialType}</span>
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono text-slate-400 text-[10px]">@{Math.round(m.unitPrice).toLocaleString()}</td>
+                        {m.monthlyQty.map((q, i) => (
+                          <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px] text-slate-500">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                        ))}
+                        <td className="px-3 py-1.5 text-right font-mono text-[10px] font-bold text-slate-600">{fmt(m.totalCost)}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
