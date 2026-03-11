@@ -2537,6 +2537,8 @@ export const referenceInfoService = {
   async updateFields(itemCode: string, fields: Partial<{
     netWeight: number; runnerWeight: number; cavity: number; lossRate: number;
     netWeight2: number; runnerWeight2: number; paintIntake: number;
+    paintQty1: number; paintQty2: number; paintQty3: number; paintQty4: number;
+    supplyType: string; supplier: string;
   }>): Promise<boolean> {
     const normCode = itemCode.trim().toUpperCase().replace(/[\s\-_\.]+/g, '');
     // localStorage 업데이트
@@ -2554,7 +2556,7 @@ export const referenceInfoService = {
 
     if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return true;
 
-    const dbFields: Record<string, number> = {};
+    const dbFields: Record<string, number | string> = {};
     if (fields.netWeight !== undefined) dbFields.net_weight = fields.netWeight;
     if (fields.runnerWeight !== undefined) dbFields.runner_weight = fields.runnerWeight;
     if (fields.cavity !== undefined) dbFields.cavity = fields.cavity;
@@ -2562,6 +2564,12 @@ export const referenceInfoService = {
     if (fields.netWeight2 !== undefined) dbFields.net_weight_2 = fields.netWeight2;
     if (fields.runnerWeight2 !== undefined) dbFields.runner_weight_2 = fields.runnerWeight2;
     if (fields.paintIntake !== undefined) dbFields.paint_intake = fields.paintIntake;
+    if (fields.paintQty1 !== undefined) dbFields.paint_qty_1 = fields.paintQty1;
+    if (fields.paintQty2 !== undefined) dbFields.paint_qty_2 = fields.paintQty2;
+    if (fields.paintQty3 !== undefined) dbFields.paint_qty_3 = fields.paintQty3;
+    if (fields.paintQty4 !== undefined) dbFields.paint_qty_4 = fields.paintQty4;
+    if (fields.supplyType !== undefined) dbFields.supply_type = fields.supplyType;
+    if (fields.supplier !== undefined) dbFields.supplier = fields.supplier;
 
     try {
       // exact match 시도
