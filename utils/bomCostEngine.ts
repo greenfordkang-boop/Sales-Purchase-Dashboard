@@ -399,8 +399,8 @@ function collectLeafMaterials(
   function addToAgg(code: string, pn: string, qtyPerRoot: number, price: number, source: string) {
     const ri = refInfoMap.get(code);
     let matType = '구매';
-    if (source === '사출') matType = 'RESIN';
-    else if (source === '도장') matType = 'PAINT';
+    if (source === '사출') matType = '사출';
+    else if (source === '도장') matType = '도장';
     else if (source === '외주') matType = '외주';
     else if (source === '재질') {
       const mt = materialTypeMap.get(code) || '';
@@ -664,7 +664,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       materialCode: code,
       materialName: agg.name,
       materialType: agg.type,
-      unit: agg.type === 'RESIN' ? 'kg' : agg.type === 'PAINT' ? 'L' : 'EA',
+      unit: agg.type === 'RESIN' ? 'kg' : agg.type === 'PAINT' || agg.type === '도장' ? 'L' : 'EA',
       monthlyQty: agg.monthlyQty,
       unitPrice: agg.unitPrice,
       totalCost: totalQty * agg.unitPrice,

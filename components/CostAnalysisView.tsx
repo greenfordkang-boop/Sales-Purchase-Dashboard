@@ -21,7 +21,15 @@ const fmt = (n: number) => {
   return Math.round(n).toLocaleString();
 };
 
-const TYPE_COLORS: Record<string, string> = { RESIN: '#6366f1', PAINT: '#f59e0b', '구매': '#10b981', '외주': '#ef4444' };
+const TYPE_COLORS: Record<string, string> = { RESIN: '#6366f1', PAINT: '#f59e0b', '구매': '#10b981', '외주': '#ef4444', '사출': '#8b5cf6', '도장': '#f97316' };
+
+const typeBadgeClass = (t: string) =>
+  t === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
+  t === '사출' ? 'bg-violet-100 text-violet-700' :
+  t === 'PAINT' ? 'bg-amber-100 text-amber-700' :
+  t === '도장' ? 'bg-orange-100 text-orange-700' :
+  t === '외주' ? 'bg-blue-100 text-blue-700' :
+  'bg-emerald-100 text-emerald-700';
 
 // ============================================================
 // KPICard
@@ -463,12 +471,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                 <td className="px-3 py-1.5 font-mono text-indigo-600">{m.materialCode}</td>
                 <td className="px-3 py-1.5 truncate max-w-[200px]">{m.materialName}</td>
                 <td className="px-3 py-1.5 text-center">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    m.materialType === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
-                    m.materialType === 'PAINT' ? 'bg-amber-100 text-amber-700' :
-                    m.materialType === '외주' ? 'bg-blue-100 text-blue-700' :
-                    'bg-emerald-100 text-emerald-700'
-                  }`}>{m.materialType}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
                 </td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.monthlyQty.reduce((s, q) => s + q, 0)).toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.unitPrice).toLocaleString()}</td>
@@ -645,12 +648,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                         <td className="pl-9 pr-2 py-1.5 sticky left-0 bg-slate-50/50">
                           <span className="font-mono text-indigo-600 text-[10px]">{m.materialCode}</span>
                           <span className="ml-1.5 text-slate-500 truncate">{m.materialName}</span>
-                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${
-                            m.materialType === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
-                            m.materialType === 'PAINT' ? 'bg-amber-100 text-amber-700' :
-                            m.materialType === '외주' ? 'bg-blue-100 text-blue-700' :
-                            'bg-emerald-100 text-emerald-700'
-                          }`}>{m.materialType}</span>
+                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
                         </td>
                         <td className="px-3 py-1.5 text-right font-mono text-slate-400 text-[10px]">@{Math.round(m.unitPrice).toLocaleString()}</td>
                         {m.monthlyQty.map((q, i) => (
