@@ -58,15 +58,15 @@ const shouldRetryBatch = (error: any) => {
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
+const insertInBatches = async (table: string, rows: any[], batchSize = 500, onConflict?: string) => {
   if (rows.length === 0 || isTableMissing(table)) return;
   for (let i = 0; i < rows.length; i += batchSize) {
     const batch = rows.slice(i, i + batchSize);
     let lastError: any = null;
     for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
-      const { error } = await supabase!
-        .from(table)
-        .insert(batch);
+      const { error } = onConflict
+        ? await supabase!.from(table).upsert(batch, { onConflict })
+        : await supabase!.from(table).insert(batch);
       if (!error) {
         lastError = null;
         break;
@@ -83,9 +83,9 @@ const insertInBatches = async (table: string, rows: any[], batchSize = 500) => {
       for (const row of batch) {
         let rowError: any = null;
         for (let attempt = 1; attempt <= MAX_BATCH_RETRIES; attempt += 1) {
-          const { error } = await supabase!
-            .from(table)
-            .insert(row);
+          const { error } = onConflict
+            ? await supabase!.from(table).upsert(row, { onConflict })
+            : await supabase!.from(table).insert(row);
           if (!error) {
             rowError = null;
             break;
@@ -206,14 +206,6 @@ export const salesService = {
       return;
     }
 
-    // Clear existing data and insert new
-    const { error: deleteError } = await supabase!
-      .from('sales_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all
-
-    if (deleteError) handleError(deleteError, 'sales delete');
-
     const rows = data.flatMap(customer =>
       customer.items.map(item => ({
         customer: item.customer,
@@ -227,7 +219,7 @@ export const salesService = {
       }))
     );
 
-    await insertInBatches('sales_data', rows);
+    await insertInBatches('sales_data', rows, 500, 'customer,part_no');
 
     // Also save to localStorage as backup
     safeSetItem('dashboard_salesData', JSON.stringify(data));
@@ -264,13 +256,6 @@ export const revenueService = {
       return;
     }
 
-    const { error: deleteError } = await supabase!
-      .from('revenue_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) handleError(deleteError, 'revenue delete');
-
     // localStorage에 먼저 저장 (데이터 손실 방지)
     safeSetItem('dashboard_revenueData', JSON.stringify(data));
 
@@ -283,7 +268,7 @@ export const revenueService = {
       amount: Math.round(item.amount || 0)  // 소수점 값 방지
     }));
 
-    await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
+    await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE, 'year,month,customer,model');
   },
 
   async saveByYear(data: RevenueItem[], year: number): Promise<void> {
@@ -298,18 +283,6 @@ export const revenueService = {
     }
 
     try {
-      // Delete data for the specific year only
-      const { error: deleteError } = await supabase!
-        .from('revenue_data')
-        .delete()
-        .eq('year', year);
-
-      if (deleteError) {
-        console.error('Error deleting revenue data for year', year, deleteError);
-        // Don't throw - continue to insert
-      }
-
-      // Insert new data for the year
       const rows = data.map(item => ({
         year: item.year,
         month: item.month,
@@ -319,7 +292,7 @@ export const revenueService = {
         amount: Math.round(item.amount || 0)
       }));
 
-      await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE);
+      await insertInBatches('revenue_data', rows, REVENUE_BATCH_SIZE, 'year,month,customer,model');
 
       // ⚠️ DO NOT reload from Supabase - prevents data loss
       // localStorage는 SalesView.tsx에서 이미 올바르게 업데이트됨
@@ -363,13 +336,6 @@ export const itemRevenueService = {
       return;
     }
 
-    const { error: deleteError } = await supabase!
-      .from('item_revenue_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) handleError(deleteError, 'itemRevenue delete');
-
     // localStorage에 먼저 저장 (데이터 손실 방지)
     safeSetItem('dashboard_itemRevenueData', JSON.stringify(data));
 
@@ -384,7 +350,7 @@ export const itemRevenueService = {
       amount: Math.round(item.amount || 0)
     }));
 
-    await insertInBatches('item_revenue_data', rows, REVENUE_BATCH_SIZE);
+    await insertInBatches('item_revenue_data', rows, REVENUE_BATCH_SIZE, 'period,part_no,customer');
   }
 };
 
@@ -628,13 +594,6 @@ export const inventoryService = {
       return;
     }
 
-    const { error: deleteError } = await supabase!
-      .from('inventory_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) handleError(deleteError, 'inventory delete');
-
     const allItems = [
       ...data.warehouse,
       ...data.material,
@@ -670,7 +629,7 @@ export const inventoryService = {
       console.warn(`Inventory upload skipped ${invalidRows} rows without code or name.`);
     }
 
-    await insertInBatches('inventory_data', rows);
+    await insertInBatches('inventory_data', rows, 500, 'type,code');
 
     safeSetItem('dashboard_inventoryData', JSON.stringify(data));
   },
@@ -756,16 +715,6 @@ export const inventoryService = {
     }
 
     try {
-      // Delete existing data
-      const { error: deleteError } = await supabase!
-        .from('inventory_v2')
-        .delete()
-        .neq('id', '00000000-0000-0000-0000-000000000000');
-
-      if (deleteError) {
-        console.error('inventory_v2 delete error:', deleteError);
-      }
-
       // Prepare rows
       const rows: any[] = [];
 
@@ -819,11 +768,11 @@ export const inventoryService = {
         }
       });
 
-      await insertInBatches('inventory_v2', rows);
+      await insertInBatches('inventory_v2', rows, 500, 'type,code');
 
       // Also save to localStorage
       safeSetItem('dashboard_inventory_v2', JSON.stringify(data));
-      console.log(`✅ inventory_v2 saved: ${rows.length} rows`);
+      console.log(`✅ inventory_v2 upserted: ${rows.length} rows`);
     } catch (err) {
       console.error('Failed to save inventory_v2 to Supabase:', err);
       // Still save to localStorage
@@ -866,13 +815,6 @@ export const crService = {
       return;
     }
 
-    const { error: deleteError } = await supabase!
-      .from('cr_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) handleError(deleteError, 'cr delete');
-
     const rows = data.map(item => ({
       year: item.year,
       month: item.month,
@@ -885,7 +827,7 @@ export const crService = {
       mtx_defense: item.mtxDefense
     }));
 
-    await insertInBatches('cr_data', rows);
+    await insertInBatches('cr_data', rows, 500, 'year,month');
 
     safeSetItem('dashboard_crData', JSON.stringify(data));
   },
@@ -901,15 +843,6 @@ export const crService = {
     }
 
     try {
-      const { error: deleteError } = await supabase!
-        .from('cr_data')
-        .delete()
-        .eq('year', year);
-
-      if (deleteError) {
-        console.error('Error deleting CR data for year', year, deleteError);
-      }
-
       const rows = data.map(item => ({
         year: item.year,
         month: item.month,
@@ -922,7 +855,7 @@ export const crService = {
         mtx_defense: item.mtxDefense
       }));
 
-      await insertInBatches('cr_data', rows);
+      await insertInBatches('cr_data', rows, 500, 'year,month');
 
       // Update localStorage with merged data
       const stored = localStorage.getItem('dashboard_crData');
@@ -1117,13 +1050,6 @@ export const supplierService = {
       return;
     }
 
-    const { error: deleteError } = await supabase!
-      .from('supplier_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) handleError(deleteError, 'supplier delete');
-
     // localStorage에 먼저 저장 (데이터 손실 방지)
     safeSetItem('dashboard_supplierData', JSON.stringify(data));
 
@@ -1137,7 +1063,7 @@ export const supplierService = {
       purchase_amount_2023: Math.round(item.purchaseAmount2023 || 0),
     }));
 
-    await insertInBatches('supplier_data', rows);
+    await insertInBatches('supplier_data', rows, 500, 'company_name');
   }
 };
 
@@ -1198,16 +1124,6 @@ export const purchaseItemMasterService = {
     safeSetItem('dashboard_purchaseItemMaster', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('purchase_item_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('purchase_item_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) {
-      if (checkTableError(deleteError, 'purchase_item_master')) return;
-      handleError(deleteError, 'purchaseItemMaster delete');
-    }
-
     const rows = data.map(item => ({
       part_no: item.partNo,
       cost_type: item.costType,
@@ -1217,7 +1133,7 @@ export const purchaseItemMasterService = {
       customer: item.customer,
     }));
 
-    await insertInBatches('purchase_item_master', rows);
+    await insertInBatches('purchase_item_master', rows, 500, 'part_no');
   },
 
   async upsertBatch(data: PurchaseItemMaster[]): Promise<void> {
@@ -1327,18 +1243,6 @@ export const purchaseSummaryService = {
 
     if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
-    // 해당 년월 데이터 삭제
-    const { error: deleteError } = await supabase!
-      .from('purchase_monthly_summary')
-      .delete()
-      .eq('year', year)
-      .eq('month', month);
-
-    if (deleteError) {
-      _missingTables.add('purchase_monthly_summary');
-      return;
-    }
-
     const rows = data.map(item => ({
       year: item.year,
       month: item.month,
@@ -1361,7 +1265,7 @@ export const purchaseSummaryService = {
       closing_month: item.closingMonth,
     }));
 
-    await insertInBatches('purchase_monthly_summary', rows);
+    await insertInBatches('purchase_monthly_summary', rows, 500, 'year,month,supplier,part_no');
   },
 
   async saveAll(data: PurchaseMonthlySummary[]): Promise<void> {
@@ -1369,16 +1273,6 @@ export const purchaseSummaryService = {
 
     if (!isSupabaseConfigured() || isTableMissing('purchase_monthly_summary')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('purchase_monthly_summary')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) {
-      _missingTables.add('purchase_monthly_summary');
-      return;
-    }
-
     const rows = data.map(item => ({
       year: item.year,
       month: item.month,
@@ -1401,7 +1295,7 @@ export const purchaseSummaryService = {
       closing_month: item.closingMonth,
     }));
 
-    await insertInBatches('purchase_monthly_summary', rows);
+    await insertInBatches('purchase_monthly_summary', rows, 500, 'year,month,supplier,part_no');
   }
 };
 
@@ -1437,16 +1331,6 @@ export const bomService = {
     safeSetItem('dashboard_bomData', JSON.stringify(data));
     if (!isSupabaseConfigured() || isTableMissing('bom_data')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('bom_data')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (deleteError) {
-      if (checkTableError(deleteError, 'bom_data')) return;
-      handleError(deleteError, 'bom delete');
-    }
-
     const rows = data.map(item => ({
       parent_pn: item.parentPn,
       child_pn: item.childPn,
@@ -1457,7 +1341,7 @@ export const bomService = {
       part_type: item.partType,
     }));
 
-    await insertInBatches('bom_data', rows);
+    await insertInBatches('bom_data', rows, 500, 'parent_pn,child_pn');
   },
 };
 
@@ -2233,12 +2117,6 @@ export const bomMasterService = {
     try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('bom_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('bom_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'bom_master')) return;
-
     const rows = records.map(r => ({
       parent_pn: r.parentPn,
       child_pn: r.childPn,
@@ -2249,7 +2127,7 @@ export const bomMasterService = {
       supplier: r.supplier,
     }));
 
-    await insertInBatches('bom_master', rows);
+    await insertInBatches('bom_master', rows, 500, 'parent_pn,child_pn');
     console.log(`✅ bom_master saved: ${rows.length} rows`);
   },
 
@@ -2384,12 +2262,6 @@ export const productCodeService = {
     try { safeSetItem('dashboard_productCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for productCode, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('product_code_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('product_code_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'product_code_master')) return;
-
     const rows = records.map(r => ({
       product_code: r.productCode,
       customer_pn: r.customerPn,
@@ -2398,7 +2270,7 @@ export const productCodeService = {
       model: r.model,
     }));
 
-    await insertInBatches('product_code_master', rows);
+    await insertInBatches('product_code_master', rows, 500, 'product_code');
     console.log(`✅ product_code_master saved: ${rows.length} rows`);
   },
 };
@@ -2474,12 +2346,6 @@ export const referenceInfoService = {
     try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('reference_info_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'reference_info_master')) return;
-
     const rows = records.map(r => ({
       item_code: r.itemCode,
       customer_pn: r.customerPn,
@@ -2529,7 +2395,7 @@ export const referenceInfoService = {
       paint_intake: r.paintIntake,
     }));
 
-    await insertInBatches('reference_info_master', rows);
+    await insertInBatches('reference_info_master', rows, 500, 'item_code');
     console.log(`✅ reference_info_master saved: ${rows.length} rows`);
   },
 
@@ -2642,12 +2508,6 @@ export const equipmentService = {
     try { safeSetItem('dashboard_equipmentMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for equipment, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('equipment_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('equipment_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'equipment_master')) return;
-
     const rows = records.map(r => ({
       equipment_code: r.equipmentCode,
       equipment_name: r.equipmentName,
@@ -2665,7 +2525,7 @@ export const equipmentService = {
       use_yn: r.useYn,
     }));
 
-    await insertInBatches('equipment_master', rows);
+    await insertInBatches('equipment_master', rows, 500, 'equipment_code');
     console.log(`✅ equipment_master saved: ${rows.length} rows`);
   },
 };
@@ -2711,12 +2571,6 @@ export const materialCodeService = {
     try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('material_code_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('material_code_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'material_code_master')) return;
-
     const rows = records.map(r => ({
       industry_code: r.industryCode,
       material_type: r.materialType,
@@ -2736,7 +2590,7 @@ export const materialCodeService = {
       current_price: r.currentPrice,
     }));
 
-    await insertInBatches('material_code_master', rows);
+    await insertInBatches('material_code_master', rows, 500, 'material_code');
     console.log(`✅ material_code_master saved: ${rows.length} rows`);
   },
 
@@ -2933,12 +2787,6 @@ export const purchasePriceService = {
     try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for purchasePrice, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('purchase_price_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'purchase_price_master')) return;
-
     const rows = records.map(r => ({
       item_code: r.itemCode,
       customer_pn: r.customerPn,
@@ -2948,7 +2796,7 @@ export const purchasePriceService = {
       previous_price: r.previousPrice,
     }));
 
-    await insertInBatches('purchase_price_master', rows);
+    await insertInBatches('purchase_price_master', rows, 500, 'item_code,supplier');
     console.log(`✅ purchase_price_master saved: ${rows.length} rows`);
   },
 
@@ -3022,12 +2870,6 @@ export const paintMixRatioService = {
     try { safeSetItem('dashboard_paintMixRatioMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for paintMixRatio, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('paint_mix_ratio_master')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('paint_mix_ratio_master')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'paint_mix_ratio_master')) return;
-
     const rows = records.map(r => ({
       paint_code: r.paintCode,
       paint_name: r.paintName,
@@ -3042,7 +2884,7 @@ export const paintMixRatioService = {
       thinner_price: r.thinnerPrice,
     }));
 
-    await insertInBatches('paint_mix_ratio_master', rows);
+    await insertInBatches('paint_mix_ratio_master', rows, 500, 'paint_code');
     console.log(`✅ paint_mix_ratio_master saved: ${rows.length} rows`);
   },
 };
@@ -3077,12 +2919,6 @@ export const outsourceInjPriceService = {
     try { safeSetItem('dashboard_outsourceInjPrice', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for outsourceInjPrice, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('outsource_injection_price')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('outsource_injection_price')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'outsource_injection_price')) return;
-
     const rows = records.map(r => ({
       item_code: r.itemCode,
       customer_pn: r.customerPn,
@@ -3091,7 +2927,7 @@ export const outsourceInjPriceService = {
       injection_price: r.injectionPrice,
     }));
 
-    await insertInBatches('outsource_injection_price', rows);
+    await insertInBatches('outsource_injection_price', rows, 500, 'item_code,supplier');
     console.log(`✅ outsource_injection_price saved: ${rows.length} rows`);
   },
 };
@@ -3130,12 +2966,6 @@ export const paintMixLogService = {
     try { safeSetItem('dashboard_paintMixLog', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for paintMixLog, skipping local cache'); }
     if (!isSupabaseConfigured() || isTableMissing('paint_mix_log')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('paint_mix_log')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'paint_mix_log')) return;
-
     const rows = records.map(r => ({
       mix_no: r.mixNo,
       mix_date: r.mixDate,
@@ -3151,7 +2981,7 @@ export const paintMixLogService = {
       waste_qty: r.wasteQty,
     }));
 
-    await insertInBatches('paint_mix_log', rows);
+    await insertInBatches('paint_mix_log', rows, 500, 'mix_no');
     console.log(`✅ paint_mix_log saved: ${rows.length} rows`);
   },
 };
@@ -3177,13 +3007,7 @@ export const itemStandardCostService = {
     // Skip localStorage for large datasets
     if (!isSupabaseConfigured() || isTableMissing('item_standard_cost')) return;
 
-    const { error: deleteError } = await supabase!
-      .from('item_standard_cost')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (deleteError && checkTableError(deleteError, 'item_standard_cost')) return;
-
-    await insertInBatches('item_standard_cost', records);
+    await insertInBatches('item_standard_cost', records, 500, 'item_code');
     console.log(`✅ item_standard_cost saved: ${records.length} rows`);
   },
 
