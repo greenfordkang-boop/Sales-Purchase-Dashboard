@@ -2579,6 +2579,40 @@ export const referenceInfoService = {
     } catch (err) { console.error('기준정보 업데이트 오류:', err); return false; }
   },
 
+  /** 품목정보 업로드 데이터 → reference_info_master 중량 필드 벌크 동기화 */
+  async syncWeightFromProductInfo(items: import('../utils/standardMaterialParser').ProductInfoItem[]): Promise<number> {
+    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return 0;
+    let count = 0;
+    const batchSize = 50;
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const promises = batch.map(async (item) => {
+        if (!item.itemCode) return false;
+        const fields: Record<string, number | string> = {};
+        if (item.netWeight > 0) fields.net_weight = item.netWeight;
+        if (item.runnerWeight > 0) fields.runner_weight = item.runnerWeight;
+        if (item.cavity > 0) fields.cavity = item.cavity;
+        if (item.lossRate > 0) fields.loss_rate = item.lossRate;
+        if (item.paintQty1 > 0) fields.paint_qty_1 = item.paintQty1;
+        if (item.paintQty2 > 0) fields.paint_qty_2 = item.paintQty2;
+        if (item.paintQty3 > 0) fields.paint_qty_3 = item.paintQty3;
+        if (item.paintQty4 > 0) fields.paint_qty_4 = item.paintQty4;
+        if (item.processType) fields.process_type = item.processType;
+        if (item.supplyType) fields.supply_type = item.supplyType;
+        if (Object.keys(fields).length === 0) return false;
+        const { error } = await supabase!
+          .from('reference_info_master')
+          .update(fields)
+          .eq('item_code', item.itemCode);
+        return !error;
+      });
+      const results = await Promise.all(promises);
+      count += results.filter(Boolean).length;
+    }
+    console.log(`✅ reference_info_master 중량 동기화: ${count}/${items.length}건`);
+    return count;
+  },
+
   /** localStorage에 저장된 개취수량(paintIntake) 값을 Supabase로 복구 */
   async recoverPaintIntakeFromLocal(): Promise<number> {
     if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return 0;

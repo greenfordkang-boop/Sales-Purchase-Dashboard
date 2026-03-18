@@ -523,8 +523,13 @@ export async function uploadMesProductInfo(file: File): Promise<UploadResult> {
     const data = parseProductInfoFile(buffer);
     if (data.length === 0) return { success: false, count: 0, message: '파싱 결과 없음' };
     await productInfoService.saveAll(data);
+    // Supabase reference_info_master에 중량/캐비티/Loss 동기화
+    let syncCount = 0;
+    if (isSupabaseConfigured()) {
+      syncCount = await referenceInfoService.syncWeightFromProductInfo(data);
+    }
     dispatchUpdate({ type: 'mesProductInfo' });
-    return { success: true, count: data.length, message: `${data.length}건 저장` };
+    return { success: true, count: data.length, message: `${data.length}건 저장` + (syncCount > 0 ? ` (${syncCount}건 중량정보 동기화)` : '') };
   } catch (e: any) {
     return { success: false, count: 0, message: e.message || '업로드 실패' };
   }
