@@ -511,14 +511,18 @@ const BomReviewView: React.FC = () => {
     const { matPriceMap, materialTypeMap, purchaseMap, outsourceMap, stdMap } = priceData;
     const ri = refInfoMap.get(code);
 
-    // 1) 구매단가
+    // 1) 구매단가 (도장/자작은 스킵 → 도장공식 사용하여 자식과 합산)
     const pp = purchaseMap.get(code);
     if (pp && pp > 0) {
-      if (ri && /외주/.test(ri.supplyType || '')) {
+      const isPaintSelf = ri && /도장/.test(ri.processType || '') && !/외주/.test(ri.supplyType || '');
+      if (isPaintSelf) {
+        // 도장/자작: 구매단가 무시 → 도장공식(2.5)으로 fall-through
+      } else if (ri && /외주/.test(ri.supplyType || '')) {
         const op = outsourceMap.get(code) || 0;
         return { price: Math.max(0, pp - op), source: op > 0 ? '외주' : '구매' };
+      } else {
+        return { price: pp, source: '구매' };
       }
-      return { price: pp, source: '구매' };
     }
     // 2) 사출공식
     if (ri) {
