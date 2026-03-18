@@ -123,9 +123,12 @@ export interface ProductInfoItem {
   itemType: string;        // 품목구분
   processType: string;     // 품목유형 (사출/도장/조립)
   supplyType: string;      // 조달구분 (자작/외주)
-  netWeight: number;       // NET중량 (g)
-  runnerWeight: number;    // Runner중량 (g)
-  cavity: number;          // Cavity
+  netWeight: number;       // NET중량1 (g)
+  runnerWeight: number;    // Runner중량1 (g)
+  netWeight2: number;      // NET중량2 (g)
+  runnerWeight2: number;   // Runner중량2 (g)
+  cavity: number;          // 금형Cavity
+  useCavity: number;       // 사용Cavity
   paintQty1: number;       // 1도 Paint량 (g)
   paintQty2: number;       // 2도 Paint량 (g)
   paintQty3: number;       // 3도 Paint량 (g)
@@ -476,8 +479,11 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
   const cProcessType = findCol(colMap, '품목유형');
   const cSupplyType = findCol(colMap, '조달구분');
   const cNetWeight = findCol(colMap, 'NET중량');
+  const cNetWeight2 = findCol(colMap, 'NET중량2');
   const cRunner = findCol(colMap, 'Runner중량');
+  const cRunner2 = findCol(colMap, 'Runner중량2');
   const cCavity = findCol(colMap, '금형Cavity', 'Cavity');
+  const cUseCavity = findCol(colMap, '사용Cavity');
   const cPaint1 = findCol(colMap, '1도 표준 Paint량', '1도');
   const cPaint2 = findCol(colMap, '2도 표준 Paint량', '2도');
   const cPaint3 = findCol(colMap, '3도 표준 Paint량', '3도');
@@ -503,7 +509,10 @@ function parseProductInfoSheet(ws: XLSX.WorkSheet): ProductInfoItem[] {
       supplyType: cSupplyType >= 0 ? str(row[cSupplyType]) : '',
       netWeight: cNetWeight >= 0 ? num(row[cNetWeight]) : 0,
       runnerWeight: cRunner >= 0 ? num(row[cRunner]) : 0,
+      netWeight2: cNetWeight2 >= 0 ? num(row[cNetWeight2]) : 0,
+      runnerWeight2: cRunner2 >= 0 ? num(row[cRunner2]) : 0,
       cavity: cCavity >= 0 ? num(row[cCavity]) : 1,
+      useCavity: cUseCavity >= 0 ? num(row[cUseCavity]) : 0,
       paintQty1: cPaint1 >= 0 ? num(row[cPaint1]) : 0,
       paintQty2: cPaint2 >= 0 ? num(row[cPaint2]) : 0,
       paintQty3: cPaint3 >= 0 ? num(row[cPaint3]) : 0,

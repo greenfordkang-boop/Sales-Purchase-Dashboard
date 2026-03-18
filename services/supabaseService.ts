@@ -2588,18 +2588,21 @@ export const referenceInfoService = {
       const batch = items.slice(i, i + batchSize);
       const promises = batch.map(async (item) => {
         if (!item.itemCode) return false;
-        const fields: Record<string, number | string> = {};
-        if (item.netWeight > 0) fields.net_weight = item.netWeight;
-        if (item.runnerWeight > 0) fields.runner_weight = item.runnerWeight;
-        if (item.cavity > 0) fields.cavity = item.cavity;
-        if (item.lossRate > 0) fields.loss_rate = item.lossRate;
-        if (item.paintQty1 > 0) fields.paint_qty_1 = item.paintQty1;
-        if (item.paintQty2 > 0) fields.paint_qty_2 = item.paintQty2;
-        if (item.paintQty3 > 0) fields.paint_qty_3 = item.paintQty3;
-        if (item.paintQty4 > 0) fields.paint_qty_4 = item.paintQty4;
+        const fields: Record<string, number | string> = {
+          net_weight: item.netWeight,
+          runner_weight: item.runnerWeight,
+          net_weight_2: item.netWeight2 ?? 0,
+          runner_weight_2: item.runnerWeight2 ?? 0,
+          cavity: item.cavity || 1,
+          use_cavity: item.useCavity ?? 0,
+          loss_rate: item.lossRate,
+          paint_qty_1: item.paintQty1,
+          paint_qty_2: item.paintQty2,
+          paint_qty_3: item.paintQty3,
+          paint_qty_4: item.paintQty4,
+        };
         if (item.processType) fields.process_type = item.processType;
         if (item.supplyType) fields.supply_type = item.supplyType;
-        if (Object.keys(fields).length === 0) return false;
         const { error } = await supabase!
           .from('reference_info_master')
           .update(fields)
