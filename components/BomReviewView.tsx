@@ -437,28 +437,37 @@ const BomReviewView: React.FC = () => {
     const code = normalizePn(pn);
     const ri = refInfoMap.get(code);
     if (!ri) return undefined;
-    const { materialTypeMap } = priceData;
+    const { materialTypeMap, matPriceMap } = priceData;
     const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
     const isPaintPart = /도장/.test(ri.processType || '');
 
-    // 1차: materialTypeMap에서 PAINT/도료 타입인 코드로 매칭
+    // 배합비 가격 조회 헬퍼: paint_mix_ratio 가격 우선, 없으면 material_code_master 폴백
+    const resolveMixPrices = (mix: PaintMixRatio) => {
+      const mPrice = mix.mainPrice || matPriceMap.get(normalizePn(mix.mainCode)) || 0;
+      const hPrice = mix.hardenerPrice || matPriceMap.get(normalizePn(mix.hardenerCode)) || 0;
+      const tPrice = mix.thinnerPrice || matPriceMap.get(normalizePn(mix.thinnerCode)) || 0;
+      return { mPrice, hPrice, tPrice };
+    };
+
+    // 1차: materialTypeMap에서 PAINT/도료/도장 타입인 코드로 매칭
     for (const raw of rawCodes) {
       const rawNorm = normalizePn(raw);
       const matType = materialTypeMap.get(rawNorm) || '';
-      if (!/PAINT|도료/i.test(matType)) continue;
+      if (!/PAINT|도료|도장/i.test(matType)) continue;
       const mix = paintMixMap.get(rawNorm);
       if (!mix) continue;
+      const { mPrice, hPrice, tPrice } = resolveMixPrices(mix);
       const mixCostPerKg =
-        (mix.mainRatio / 100) * mix.mainPrice +
-        (mix.hardenerRatio / 100) * mix.hardenerPrice +
-        (mix.thinnerRatio / 100) * mix.thinnerPrice;
+        (mix.mainRatio / 100) * mPrice +
+        (mix.hardenerRatio / 100) * hPrice +
+        (mix.thinnerRatio / 100) * tPrice;
       const paintIntake = ri.paintIntake || 0;
       const costPerEa = paintIntake > 0 ? mixCostPerKg / paintIntake : 0;
       return {
         paintCode: raw,
         paintName: mix.paintName || raw,
         mainRatio: mix.mainRatio, hardenerRatio: mix.hardenerRatio, thinnerRatio: mix.thinnerRatio,
-        mainPrice: mix.mainPrice, hardenerPrice: mix.hardenerPrice, thinnerPrice: mix.thinnerPrice,
+        mainPrice: mPrice, hardenerPrice: hPrice, thinnerPrice: tPrice,
         mixCostPerKg, paintIntake, costPerEa,
       };
     }
@@ -474,17 +483,18 @@ const BomReviewView: React.FC = () => {
           mix = paintMixMap.get(sCode);
         }
         if (!mix) continue;
+        const { mPrice, hPrice, tPrice } = resolveMixPrices(mix);
         const mixCostPerKg =
-          (mix.mainRatio / 100) * mix.mainPrice +
-          (mix.hardenerRatio / 100) * mix.hardenerPrice +
-          (mix.thinnerRatio / 100) * mix.thinnerPrice;
+          (mix.mainRatio / 100) * mPrice +
+          (mix.hardenerRatio / 100) * hPrice +
+          (mix.thinnerRatio / 100) * tPrice;
         const paintIntake = ri.paintIntake || 0;
         const costPerEa = paintIntake > 0 ? mixCostPerKg / paintIntake : 0;
         return {
           paintCode: raw,
           paintName: mix.paintName || raw,
           mainRatio: mix.mainRatio, hardenerRatio: mix.hardenerRatio, thinnerRatio: mix.thinnerRatio,
-          mainPrice: mix.mainPrice, hardenerPrice: mix.hardenerPrice, thinnerPrice: mix.thinnerPrice,
+          mainPrice: mPrice, hardenerPrice: hPrice, thinnerPrice: tPrice,
           mixCostPerKg, paintIntake, costPerEa,
         };
       }
