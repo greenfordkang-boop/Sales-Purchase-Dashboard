@@ -154,7 +154,7 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 // StandardCostPanel — 표준재료비 요약
 // ============================================================
 const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
-  const { costResult, forecastSummary } = data;
+  const { costResult, forecastSummary, selectedMonth, setSelectedMonth } = data;
 
   if (!costResult) return <EmptyState message="매출계획 + BOM 데이터를 업로드하면 표준재료비가 자동 산출됩니다." />;
 
@@ -197,6 +197,20 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 
   return (
     <div className="space-y-4">
+      {/* 월별 선택 */}
+      <div className="flex items-center gap-1 flex-wrap">
+        <button onClick={() => setSelectedMonth(-1)}
+          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+          전체
+        </button>
+        {Array.from({ length: 12 }, (_, i) => (
+          <button key={i} onClick={() => setSelectedMonth(i)}
+            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+            {i + 1}월
+          </button>
+        ))}
+      </div>
+
       {/* KPI 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="총 표준재료비" value={fmt(summary.totalMaterial)} sub={`재료비율 ${ratio.toFixed(1)}%`} color="indigo" />
