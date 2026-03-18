@@ -552,7 +552,8 @@ const BomReviewView: React.FC = () => {
   }, [priceData, refInfoMap, getPaintInfo]);
 
   // --- calcRootMaterialCost: Level-0 제품의 재료비를 BOM 트리 walk 방식으로 합산 ---
-  // 주의: non-leaf 노드에서 '표준' 단가는 가공비/경비 포함 전체원가이므로 사용 금지
+  // 주의: non-leaf 노드에서 '표준' 단가는 가공비/경비 포함이므로 사용 금지 → 자식 재귀
+  // 도장: 도료비는 부가적 재료비 → 자식 재료비(사출 레진 등)와 합산
   const calcRootMaterialCost = useCallback((rootPn: string): number => {
     const visited = new Set<string>();
     function walk(pn: string, qty: number): number {
@@ -566,12 +567,23 @@ const BomReviewView: React.FC = () => {
         visited.delete(code);
         return qty * price;
       }
-      // Non-leaf: 구매/사출/도장/재질 단가만 사용, '표준'은 제외 → 자식 재귀
+      // Non-leaf: 구매/사출/재질 단가 → 해당 노드에서 확정 (자식 미방문)
+      // 도장: 도료비 + 자식 재료비 합산 (도료와 하위 소재는 별개 비용)
+      // 표준: 가공비/경비 포함이므로 제외 → 자식 재귀
       const { price, source } = getNodePrice(pn);
-      if (price > 0 && source !== '표준') {
+      if (price > 0 && source !== '표준' && source !== '도장') {
         visited.delete(code);
         return qty * price;
       }
+      if (price > 0 && source === '도장') {
+        let childSum = 0;
+        for (const child of children) {
+          childSum += walk(child.childPn, qty * child.qty);
+        }
+        visited.delete(code);
+        return qty * price + childSum;
+      }
+      // 표준 or 단가없음 → 자식 재귀만 (표준 fallback 없음)
       let sum = 0;
       for (const child of children) {
         sum += walk(child.childPn, qty * child.qty);
@@ -770,10 +782,11 @@ const BomReviewView: React.FC = () => {
         }
       } else {
         // Non-leaf (level > 0):
-        // 트리 분개는 renderTreeRows에서 항상 유지 (원재료 소요량 확인 가능)
-        // 재료비 집계만: 자체 단가 있으면 해당 노드에서만 집계 (자식은 집계 제외 → 중복 방지)
-        const { price } = getNodePrice(node.pn);
-        if (price > 0) {
+        // calcRootMaterialCost와 동일 로직:
+        // 구매/사출/재질/외주: 해당 노드에서 집계 (자식 재귀 X → 중복 방지)
+        // 도장/표준/단가없음: 자식 재귀 (PAINT_ 가상노드가 도장비 담당)
+        const { price, source } = getNodePrice(node.pn);
+        if (price > 0 && source !== '표준' && source !== '도장') {
           total += node.qty * price;
           const s = stdMap.get(normalizePn(node.pn)) || 0;
           stdSum += node.qty * s;
