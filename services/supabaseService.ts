@@ -2114,21 +2114,66 @@ export const bomMasterService = {
   },
 
   async saveAll(records: BomMasterRecord[]): Promise<void> {
-    try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for bomMaster, skipping local cache'); }
-    if (!isSupabaseConfigured() || isTableMissing('bom_master')) return;
+    if (!isSupabaseConfigured() || isTableMissing('bom_master')) {
+      try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { /* ignore */ }
+      return;
+    }
 
-    const rows = records.map(r => ({
-      parent_pn: r.parentPn,
-      child_pn: r.childPn,
-      level: r.level,
-      qty: r.qty,
-      child_name: r.childName,
-      part_type: r.partType,
-      supplier: r.supplier,
-    }));
+    // 1) Backup user-edited fields (supplier, child_name, part_type, qty)
+    interface BomBackup { supplier: string; childName: string; partType: string; qty: number; }
+    const backupMap = new Map<string, BomBackup>();
+    try {
+      const { data: existing } = await supabase!
+        .from('bom_master')
+        .select('parent_pn, child_pn, supplier, child_name, part_type, qty');
+      if (existing) {
+        for (const row of existing) {
+          const key = `${(row.parent_pn || '').trim().toUpperCase()}|${(row.child_pn || '').trim().toUpperCase()}`;
+          backupMap.set(key, {
+            supplier: row.supplier || '',
+            childName: row.child_name || '',
+            partType: row.part_type || '',
+            qty: Number(row.qty) || 1,
+          });
+        }
+      }
+    } catch (e) { console.warn('bom_master backup failed, proceeding without:', e); }
 
+    // 2) Merge: 엑셀 파서가 빈 값이면 백업 복원
+    const mergeStr = (uploaded: string, backed: string) => uploaded && uploaded.trim() ? uploaded : backed;
+    const rows = records.map(r => {
+      const key = `${r.parentPn.trim().toUpperCase()}|${r.childPn.trim().toUpperCase()}`;
+      const bk = backupMap.get(key);
+      return {
+        parent_pn: r.parentPn,
+        child_pn: r.childPn,
+        level: r.level,
+        qty: r.qty > 0 ? r.qty : (bk?.qty || 1),
+        child_name: mergeStr(r.childName, bk?.childName || ''),
+        part_type: mergeStr(r.partType, bk?.partType || ''),
+        supplier: mergeStr(r.supplier, bk?.supplier || ''),
+      };
+    });
+
+    // 3) UPSERT
     await insertInBatches('bom_master', rows, 500, 'parent_pn,child_pn');
-    console.log(`✅ bom_master saved: ${rows.length} rows`);
+
+    // 4) localStorage: 기존 + 업로드 병합
+    const localExisting: BomMasterRecord[] = (() => {
+      try { const s = localStorage.getItem('dashboard_bomMasterData'); return s ? JSON.parse(s) : []; }
+      catch { return []; }
+    })();
+    const localMap = new Map<string, BomMasterRecord>();
+    for (const r of localExisting) {
+      const k = `${(r.parentPn || '').trim().toUpperCase()}|${(r.childPn || '').trim().toUpperCase()}`;
+      localMap.set(k, r);
+    }
+    for (const row of rows) {
+      const k = `${row.parent_pn.trim().toUpperCase()}|${row.child_pn.trim().toUpperCase()}`;
+      localMap.set(k, { parentPn: row.parent_pn, childPn: row.child_pn, level: row.level, qty: row.qty, childName: row.child_name, partType: row.part_type, supplier: row.supplier });
+    }
+    try { safeSetItem('dashboard_bomMasterData', JSON.stringify([...localMap.values()])); } catch { /* ignore */ }
+    console.log(`✅ bom_master upserted: ${rows.length} rows (${backupMap.size} backups)`);
   },
 
   /** BOM 소요량(qty) 업데이트 */
@@ -2343,60 +2388,126 @@ export const referenceInfoService = {
   },
 
   async saveAll(records: ReferenceInfoRecord[]): Promise<void> {
-    try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for referenceInfo, skipping local cache'); }
-    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return;
+    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) {
+      try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify(records)); } catch {}
+      return;
+    }
 
-    const rows = records.map(r => ({
-      item_code: r.itemCode,
-      customer_pn: r.customerPn,
-      item_name: r.itemName,
-      spec: r.spec,
-      customer_name: r.customerName,
-      variety: r.variety,
-      item_status: r.itemStatus,
-      item_category: r.itemCategory,
-      process_type: r.processType,
-      inspection_type: r.inspectionType,
-      product_group: r.productGroup,
-      supply_type: r.supplyType,
-      supplier: r.supplier,
-      priority_line_1: r.priorityLine1,
-      priority_line_2: r.priorityLine2,
-      priority_line_3: r.priorityLine3,
-      priority_line_4: r.priorityLine4,
-      safety_stock: r.safetyStock,
-      safety_stock_days: r.safetyStockDays,
-      lot_qty: r.lotQty,
-      production_per_hour: r.productionPerHour,
-      defect_allowance: r.defectAllowance,
-      workers: r.workers,
-      processing_time: r.processingTime,
-      standard_ct: r.standardCT,
-      standard_man_hours: r.standardManHours,
-      qty_per_box: r.qtyPerBox,
-      raw_material_code_1: r.rawMaterialCode1,
-      raw_material_code_2: r.rawMaterialCode2,
-      raw_material_code_3: r.rawMaterialCode3,
-      raw_material_code_4: r.rawMaterialCode4,
-      net_weight: r.netWeight,
-      runner_weight: r.runnerWeight,
-      net_weight_2: r.netWeight2,
-      runner_weight_2: r.runnerWeight2,
-      paint_qty_1: r.paintQty1,
-      paint_qty_2: r.paintQty2,
-      paint_qty_3: r.paintQty3,
-      paint_qty_4: r.paintQty4,
-      loss_rate: r.lossRate,
-      cavity: r.cavity,
-      use_cavity: r.useCavity,
-      product_size_type: r.productSizeType,
-      gloss_type: r.glossType,
-      use_yn: r.useYn,
-      paint_intake: r.paintIntake,
-    }));
+    // 1) 수동 입력값 백업 (개취수량·사출근거·공급유형·외주처 등)
+    interface RefBackup { paint_intake: number; net_weight: number; runner_weight: number; net_weight_2: number; runner_weight_2: number; cavity: number; loss_rate: number; supply_type: string; supplier: string; paint_qty_1: number; paint_qty_2: number; paint_qty_3: number; paint_qty_4: number; }
+    const backupMap = new Map<string, RefBackup>();
+    try {
+      const { data: allExisting } = await supabase!
+        .from('reference_info_master')
+        .select('item_code, paint_intake, net_weight, runner_weight, net_weight_2, runner_weight_2, cavity, loss_rate, supply_type, supplier, paint_qty_1, paint_qty_2, paint_qty_3, paint_qty_4');
+      for (const row of (allExisting || [])) {
+        const key = row.item_code as string;
+        if (!key) continue;
+        const b: RefBackup = {
+          paint_intake: Number(row.paint_intake) || 0,
+          net_weight: Number(row.net_weight) || 0,
+          runner_weight: Number(row.runner_weight) || 0,
+          net_weight_2: Number(row.net_weight_2) || 0,
+          runner_weight_2: Number(row.runner_weight_2) || 0,
+          cavity: Number(row.cavity) || 0,
+          loss_rate: Number(row.loss_rate) || 0,
+          supply_type: (row.supply_type as string) || '',
+          supplier: (row.supplier as string) || '',
+          paint_qty_1: Number(row.paint_qty_1) || 0,
+          paint_qty_2: Number(row.paint_qty_2) || 0,
+          paint_qty_3: Number(row.paint_qty_3) || 0,
+          paint_qty_4: Number(row.paint_qty_4) || 0,
+        };
+        if (b.paint_intake || b.net_weight || b.runner_weight || b.net_weight_2 || b.runner_weight_2 || b.cavity > 1 || b.loss_rate || b.supply_type || b.supplier) {
+          backupMap.set(key, b);
+        }
+      }
+      if (backupMap.size > 0) console.log(`[refInfo] 수동입력값 백업: ${backupMap.size}건`);
+    } catch { /* 백업 실패해도 진행 */ }
 
+    // 2) 백업 병합: 업로드 데이터가 0/빈값이면 백업값 복원
+    const mergeNum = (uploaded: number, backed: number) => uploaded > 0 ? uploaded : backed;
+    const mergeStr = (uploaded: string, backed: string) => uploaded && uploaded.trim() ? uploaded : backed;
+    const rows = records.map(r => {
+      const bk = backupMap.get(r.itemCode);
+      return {
+        item_code: r.itemCode,
+        customer_pn: r.customerPn,
+        item_name: r.itemName,
+        spec: r.spec,
+        customer_name: r.customerName,
+        variety: r.variety,
+        item_status: r.itemStatus,
+        item_category: r.itemCategory,
+        process_type: r.processType,
+        inspection_type: r.inspectionType,
+        product_group: r.productGroup,
+        supply_type: bk ? mergeStr(r.supplyType, bk.supply_type) : r.supplyType,
+        supplier: bk ? mergeStr(r.supplier, bk.supplier) : r.supplier,
+        priority_line_1: r.priorityLine1,
+        priority_line_2: r.priorityLine2,
+        priority_line_3: r.priorityLine3,
+        priority_line_4: r.priorityLine4,
+        safety_stock: r.safetyStock,
+        safety_stock_days: r.safetyStockDays,
+        lot_qty: r.lotQty,
+        production_per_hour: r.productionPerHour,
+        defect_allowance: r.defectAllowance,
+        workers: r.workers,
+        processing_time: r.processingTime,
+        standard_ct: r.standardCT,
+        standard_man_hours: r.standardManHours,
+        qty_per_box: r.qtyPerBox,
+        raw_material_code_1: r.rawMaterialCode1,
+        raw_material_code_2: r.rawMaterialCode2,
+        raw_material_code_3: r.rawMaterialCode3,
+        raw_material_code_4: r.rawMaterialCode4,
+        net_weight: bk ? mergeNum(r.netWeight, bk.net_weight) : r.netWeight,
+        runner_weight: bk ? mergeNum(r.runnerWeight, bk.runner_weight) : r.runnerWeight,
+        net_weight_2: bk ? mergeNum(r.netWeight2, bk.net_weight_2) : r.netWeight2,
+        runner_weight_2: bk ? mergeNum(r.runnerWeight2, bk.runner_weight_2) : r.runnerWeight2,
+        paint_qty_1: bk ? mergeNum(0, bk.paint_qty_1) : 0,
+        paint_qty_2: bk ? mergeNum(0, bk.paint_qty_2) : 0,
+        paint_qty_3: bk ? mergeNum(0, bk.paint_qty_3) : 0,
+        paint_qty_4: bk ? mergeNum(0, bk.paint_qty_4) : 0,
+        loss_rate: bk ? mergeNum(r.lossRate, bk.loss_rate) : r.lossRate,
+        cavity: bk ? mergeNum(r.cavity, bk.cavity) : r.cavity,
+        use_cavity: r.useCavity,
+        product_size_type: r.productSizeType,
+        gloss_type: r.glossType,
+        use_yn: r.useYn,
+        paint_intake: bk ? mergeNum(r.paintIntake, bk.paint_intake) : r.paintIntake,
+      };
+    });
+
+    // 3) UPSERT
     await insertInBatches('reference_info_master', rows, 500, 'item_code');
-    console.log(`✅ reference_info_master saved: ${rows.length} rows`);
+
+    // 4) localStorage: 기존 + 업로드 병합
+    const localExisting: ReferenceInfoRecord[] = (() => {
+      try { const s = localStorage.getItem('dashboard_referenceInfoMaster'); return s ? JSON.parse(s) : []; }
+      catch { return []; }
+    })();
+    const localMap = new Map<string, ReferenceInfoRecord>();
+    for (const r of localExisting) localMap.set(r.itemCode, r);
+    const mergedRecords = records.map(r => {
+      const bk = backupMap.get(r.itemCode);
+      if (!bk) return r;
+      return {
+        ...r,
+        paintIntake: mergeNum(r.paintIntake, bk.paint_intake),
+        netWeight: mergeNum(r.netWeight, bk.net_weight),
+        runnerWeight: mergeNum(r.runnerWeight, bk.runner_weight),
+        netWeight2: mergeNum(r.netWeight2, bk.net_weight_2),
+        runnerWeight2: mergeNum(r.runnerWeight2, bk.runner_weight_2),
+        cavity: mergeNum(r.cavity, bk.cavity),
+        lossRate: mergeNum(r.lossRate, bk.loss_rate),
+      };
+    });
+    for (const r of mergedRecords) localMap.set(r.itemCode, r);
+    try { safeSetItem('dashboard_referenceInfoMaster', JSON.stringify([...localMap.values()])); } catch {}
+
+    console.log(`✅ reference_info_master upserted: ${rows.length} rows` + (backupMap.size > 0 ? ` (수동입력 ${backupMap.size}건 복원)` : ''));
   },
 
   /** 개별 레코드의 중량/캐비티/Loss 등 부분 업데이트 */
@@ -2466,6 +2577,38 @@ export const referenceInfoService = {
       console.log(`✅ 기준정보 업데이트: ${actualItemCode}`, dbFields);
       return true;
     } catch (err) { console.error('기준정보 업데이트 오류:', err); return false; }
+  },
+
+  /** localStorage에 저장된 개취수량(paintIntake) 값을 Supabase로 복구 */
+  async recoverPaintIntakeFromLocal(): Promise<number> {
+    if (!isSupabaseConfigured() || isTableMissing('reference_info_master')) return 0;
+    try {
+      const stored = localStorage.getItem('dashboard_referenceInfoMaster');
+      if (!stored) return 0;
+      const local: ReferenceInfoRecord[] = JSON.parse(stored);
+      const toRecover = local.filter(r => (r.paintIntake || 0) > 0);
+      if (toRecover.length === 0) return 0;
+
+      console.log(`[recoverPaintIntake] localStorage에서 paintIntake > 0 항목 ${toRecover.length}건 발견`);
+
+      let recovered = 0;
+      const BATCH = 50;
+      for (let i = 0; i < toRecover.length; i += BATCH) {
+        const batch = toRecover.slice(i, i + BATCH);
+        for (const r of batch) {
+          const { error } = await supabase!
+            .from('reference_info_master')
+            .update({ paint_intake: r.paintIntake })
+            .eq('item_code', r.itemCode);
+          if (!error) recovered++;
+        }
+      }
+      console.log(`✅ [recoverPaintIntake] Supabase 복구 완료: ${recovered}/${toRecover.length}건`);
+      return recovered;
+    } catch (err) {
+      console.error('[recoverPaintIntake] 복구 실패:', err);
+      return 0;
+    }
   },
 };
 
@@ -2568,30 +2711,68 @@ export const materialCodeService = {
   },
 
   async saveAll(records: MaterialCodeRecord[]): Promise<void> {
-    try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for materialCode, skipping local cache'); }
-    if (!isSupabaseConfigured() || isTableMissing('material_code_master')) return;
+    if (!isSupabaseConfigured() || isTableMissing('material_code_master')) {
+      try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify(records)); } catch {}
+      return;
+    }
 
-    const rows = records.map(r => ({
-      industry_code: r.industryCode,
-      material_type: r.materialType,
-      material_code: r.materialCode,
-      material_name: r.materialName,
-      material_category: r.materialCategory,
-      paint_category: r.paintCategory,
-      color: r.color,
-      unit: r.unit,
-      safety_stock: r.safetyStock,
-      daily_avg_usage: r.dailyAvgUsage,
-      loss_rate: r.lossRate,
-      valid_days: r.validDays,
-      order_size: r.orderSize,
-      use_yn: r.useYn,
-      protected_item: r.protectedItem,
-      current_price: r.currentPrice,
-    }));
+    // 1) 수동 입력 단가 백업
+    const priceBackup = new Map<string, number>();
+    try {
+      const { data: existing } = await supabase!
+        .from('material_code_master')
+        .select('material_code, current_price')
+        .gt('current_price', 0);
+      if (existing) {
+        for (const row of existing) {
+          if (row.material_code && row.current_price > 0) {
+            priceBackup.set(row.material_code, Number(row.current_price));
+          }
+        }
+      }
+      if (priceBackup.size > 0) console.log(`[matCode] 단가 백업: ${priceBackup.size}건`);
+    } catch { /* 백업 실패해도 진행 */ }
+
+    // 2) Merge + UPSERT
+    const rows = records.map(r => {
+      const savedPrice = priceBackup.get(r.materialCode) || 0;
+      return {
+        industry_code: r.industryCode,
+        material_type: r.materialType,
+        material_code: r.materialCode,
+        material_name: r.materialName,
+        material_category: r.materialCategory,
+        paint_category: r.paintCategory,
+        color: r.color,
+        unit: r.unit,
+        safety_stock: r.safetyStock,
+        daily_avg_usage: r.dailyAvgUsage,
+        loss_rate: r.lossRate,
+        valid_days: r.validDays,
+        order_size: r.orderSize,
+        use_yn: r.useYn,
+        protected_item: r.protectedItem,
+        current_price: r.currentPrice > 0 ? r.currentPrice : savedPrice,
+      };
+    });
 
     await insertInBatches('material_code_master', rows, 500, 'material_code');
-    console.log(`✅ material_code_master saved: ${rows.length} rows`);
+
+    // 3) localStorage: 기존 + 업로드 병합
+    const localExisting: MaterialCodeRecord[] = (() => {
+      try { const s = localStorage.getItem('dashboard_materialCodeMaster'); return s ? JSON.parse(s) : []; }
+      catch { return []; }
+    })();
+    const localMap = new Map<string, MaterialCodeRecord>();
+    for (const r of localExisting) localMap.set(r.materialCode, r);
+    const mergedRecords = records.map(r => ({
+      ...r,
+      currentPrice: r.currentPrice > 0 ? r.currentPrice : (priceBackup.get(r.materialCode) || 0),
+    }));
+    for (const r of mergedRecords) localMap.set(r.materialCode, r);
+    try { safeSetItem('dashboard_materialCodeMaster', JSON.stringify([...localMap.values()])); } catch {}
+
+    console.log(`✅ material_code_master upserted: ${rows.length} rows` + (priceBackup.size > 0 ? ` (단가 ${priceBackup.size}건 복원)` : ''));
   },
 
   /** 개별 재질코드의 current_price만 업데이트 */
@@ -2784,20 +2965,65 @@ export const purchasePriceService = {
   },
 
   async saveAll(records: PurchasePrice[]): Promise<void> {
-    try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(records)); } catch { console.warn('localStorage quota exceeded for purchasePrice, skipping local cache'); }
-    if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) return;
+    if (!isSupabaseConfigured() || isTableMissing('purchase_price_master')) {
+      try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify(records)); } catch {}
+      return;
+    }
 
-    const rows = records.map(r => ({
-      item_code: r.itemCode,
-      customer_pn: r.customerPn,
-      item_name: r.itemName,
-      supplier: r.supplier,
-      current_price: r.currentPrice,
-      previous_price: r.previousPrice,
-    }));
+    // 1) 수동 입력 단가 백업
+    const priceBackup = new Map<string, { current: number; previous: number }>();
+    try {
+      const { data: existing } = await supabase!
+        .from('purchase_price_master')
+        .select('item_code, current_price, previous_price')
+        .gt('current_price', 0);
+      if (existing) {
+        for (const row of existing) {
+          if (row.item_code) {
+            priceBackup.set(row.item_code, {
+              current: Number(row.current_price) || 0,
+              previous: Number(row.previous_price) || 0,
+            });
+          }
+        }
+      }
+      if (priceBackup.size > 0) console.log(`[purchasePrice] 단가 백업: ${priceBackup.size}건`);
+    } catch { /* 백업 실패해도 진행 */ }
+
+    // 2) Merge + UPSERT
+    const rows = records.map(r => {
+      const bk = priceBackup.get(r.itemCode);
+      return {
+        item_code: r.itemCode,
+        customer_pn: r.customerPn,
+        item_name: r.itemName,
+        supplier: r.supplier,
+        current_price: r.currentPrice > 0 ? r.currentPrice : (bk?.current || 0),
+        previous_price: r.previousPrice > 0 ? r.previousPrice : (bk?.previous || 0),
+      };
+    });
 
     await insertInBatches('purchase_price_master', rows, 500, 'item_code,supplier');
-    console.log(`✅ purchase_price_master saved: ${rows.length} rows`);
+
+    // 3) localStorage: 기존 + 업로드 병합
+    const localExisting: PurchasePrice[] = (() => {
+      try { const s = localStorage.getItem('dashboard_purchasePriceMaster'); return s ? JSON.parse(s) : []; }
+      catch { return []; }
+    })();
+    const localMap = new Map<string, PurchasePrice>();
+    for (const r of localExisting) localMap.set(`${r.itemCode}|${r.supplier}`, r);
+    const mergedRecords = records.map(r => {
+      const bk = priceBackup.get(r.itemCode);
+      return {
+        ...r,
+        currentPrice: r.currentPrice > 0 ? r.currentPrice : (bk?.current || 0),
+        previousPrice: r.previousPrice > 0 ? r.previousPrice : (bk?.previous || 0),
+      };
+    });
+    for (const r of mergedRecords) localMap.set(`${r.itemCode}|${r.supplier}`, r);
+    try { safeSetItem('dashboard_purchasePriceMaster', JSON.stringify([...localMap.values()])); } catch {}
+
+    console.log(`✅ purchase_price_master upserted: ${rows.length} rows` + (priceBackup.size > 0 ? ` (단가 ${priceBackup.size}건 복원)` : ''));
   },
 
   /** 개별 구매단가 업데이트 (item_code 기준) */
