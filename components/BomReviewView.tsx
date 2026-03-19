@@ -1008,10 +1008,11 @@ const BomReviewView: React.FC = () => {
   const handleReviewToggle = useCallback((pn: string, dept: keyof ReviewStatus) => {
     setReviewStatus(prev => {
       const current = prev[pn] || { production: false, development: false, sales: false, purchase: false };
-      const updated = { ...prev, [pn]: { ...current, [dept]: !current[dept] } };
+      const newStatus = { ...current, [dept]: !current[dept] };
+      const updated = { ...prev, [pn]: newStatus };
       saveReviewStatusLocal(updated);
-      // Supabase에 비동기 저장 (optimistic UI)
-      reviewStatusService.toggle(pn, dept, current[dept]).catch(() => {});
+      // Supabase에 전체 상태 upsert (optimistic UI)
+      reviewStatusService.upsertOne(pn, newStatus).catch(() => {});
       return updated;
     });
   }, []);

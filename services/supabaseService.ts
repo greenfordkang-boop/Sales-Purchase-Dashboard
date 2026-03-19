@@ -3503,19 +3503,26 @@ export const reviewStatusService = {
     }
   },
 
-  async toggle(itemCode: string, dept: keyof ReviewStatusRow, currentValue: boolean): Promise<void> {
+  async upsertOne(itemCode: string, status: ReviewStatusRow): Promise<void> {
     if (!isSupabaseConfigured() || isTableMissing('bom_review_status')) return;
 
     try {
       const { error } = await supabase!
         .from('bom_review_status')
         .upsert(
-          { item_code: itemCode, [dept]: !currentValue, updated_at: new Date().toISOString() },
+          {
+            item_code: itemCode,
+            production: status.production,
+            development: status.development,
+            sales: status.sales,
+            purchase: status.purchase,
+            updated_at: new Date().toISOString(),
+          },
           { onConflict: 'item_code', ignoreDuplicates: false },
         );
       if (error) checkTableError(error, 'bom_review_status');
     } catch (e) {
-      console.warn('reviewStatus toggle 실패:', e);
+      console.warn('reviewStatus upsert 실패:', e);
     }
   },
 
