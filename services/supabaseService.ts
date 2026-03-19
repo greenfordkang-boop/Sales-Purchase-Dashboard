@@ -3504,7 +3504,8 @@ export const reviewStatusService = {
   },
 
   async upsertOne(itemCode: string, status: ReviewStatusRow): Promise<void> {
-    if (!isSupabaseConfigured() || isTableMissing('bom_review_status')) return;
+    if (!isSupabaseConfigured()) { console.warn('[ReviewStatus] Supabase 미설정'); return; }
+    if (isTableMissing('bom_review_status')) { console.warn('[ReviewStatus] 테이블 missing 캐시됨'); return; }
 
     try {
       const { error } = await supabase!
@@ -3520,9 +3521,14 @@ export const reviewStatusService = {
           },
           { onConflict: 'item_code', ignoreDuplicates: false },
         );
-      if (error) checkTableError(error, 'bom_review_status');
+      if (error) {
+        console.error('[ReviewStatus] upsert 에러:', error);
+        checkTableError(error, 'bom_review_status');
+      } else {
+        console.log(`[ReviewStatus] upsert 성공: ${itemCode}`);
+      }
     } catch (e) {
-      console.warn('reviewStatus upsert 실패:', e);
+      console.error('[ReviewStatus] upsert 실패:', e);
     }
   },
 

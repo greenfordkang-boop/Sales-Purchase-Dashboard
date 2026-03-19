@@ -285,17 +285,24 @@ const BomReviewView: React.FC = () => {
     try {
       const rsMap = await safe(reviewStatusService.getAll(), {});
       const localMap = loadReviewStatusLocal();
-      const hasSupabaseData = Object.keys(rsMap).length > 0;
-      const hasLocalData = Object.keys(localMap).length > 0;
+      const sbCount = Object.keys(rsMap).length;
+      const lsCount = Object.keys(localMap).length;
+      console.log(`[ReviewStatus] Supabase: ${sbCount}건, localStorage: ${lsCount}건`);
 
-      if (hasSupabaseData) {
-        setReviewStatus(rsMap);
-      } else if (hasLocalData) {
+      if (sbCount > 0) {
+        // Supabase 데이터를 localStorage와 병합 (다른 PC 체크 반영)
+        const merged = { ...localMap, ...rsMap };
+        setReviewStatus(merged);
+        saveReviewStatusLocal(merged);
+      } else if (lsCount > 0) {
         // localStorage에만 데이터 있으면 Supabase로 마이그레이션
         setReviewStatus(localMap);
-        reviewStatusService.saveAll(localMap).catch(() => {});
+        console.log(`[ReviewStatus] localStorage → Supabase 마이그레이션 시작 (${lsCount}건)`);
+        reviewStatusService.saveAll(localMap)
+          .then(() => console.log('[ReviewStatus] 마이그레이션 완료'))
+          .catch((e: unknown) => console.error('[ReviewStatus] 마이그레이션 실패:', e));
       }
-    } catch {}
+    } catch (e) { console.error('[ReviewStatus] 로드 실패:', e); }
     setLoading(false);
   }, []);
 
