@@ -31,6 +31,7 @@ import {
   itemRevenueService,
   paintMixRatioService,
   forecastService,
+  reviewStatusService,
 } from '../services/supabaseService';
 import PaintAnalysisPanel from './PaintAnalysisPanel';
 import MesUploadModal from './MesUploadModal';
@@ -132,7 +133,7 @@ const REVIEW_STORAGE_KEY = 'dashboard_bomReviewStatus';
 // Helpers
 // ============================================
 
-function loadReviewStatus(): ReviewStatusMap {
+function loadReviewStatusLocal(): ReviewStatusMap {
   try {
     const stored = localStorage.getItem(REVIEW_STORAGE_KEY);
     return stored ? JSON.parse(stored) : {};
@@ -141,7 +142,7 @@ function loadReviewStatus(): ReviewStatusMap {
   }
 }
 
-function saveReviewStatus(map: ReviewStatusMap) {
+function saveReviewStatusLocal(map: ReviewStatusMap) {
   try {
     localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(map));
   } catch { /* ignore */ }
@@ -193,7 +194,7 @@ const BomReviewView: React.FC = () => {
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
 
   // --- Review Status ---
-  const [reviewStatus, setReviewStatus] = useState<ReviewStatusMap>(loadReviewStatus);
+  const [reviewStatus, setReviewStatus] = useState<ReviewStatusMap>(loadReviewStatusLocal);
 
   // --- BOM Tree State ---
   const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
@@ -277,6 +278,22 @@ const BomReviewView: React.FC = () => {
       } else {
         const fcStr = localStorage.getItem('dashboard_forecastData');
         if (fcStr) setForecastData(JSON.parse(fcStr));
+      }
+    } catch {}
+
+    // Review Status 로드 (Supabase → localStorage fallback + 마이그레이션)
+    try {
+      const rsMap = await safe(reviewStatusService.getAll(), {});
+      const localMap = loadReviewStatusLocal();
+      const hasSupabaseData = Object.keys(rsMap).length > 0;
+      const hasLocalData = Object.keys(localMap).length > 0;
+
+      if (hasSupabaseData) {
+        setReviewStatus(rsMap);
+      } else if (hasLocalData) {
+        // localStorage에만 데이터 있으면 Supabase로 마이그레이션
+        setReviewStatus(localMap);
+        reviewStatusService.saveAll(localMap).catch(() => {});
       }
     } catch {}
     setLoading(false);
@@ -992,7 +1009,9 @@ const BomReviewView: React.FC = () => {
     setReviewStatus(prev => {
       const current = prev[pn] || { production: false, development: false, sales: false, purchase: false };
       const updated = { ...prev, [pn]: { ...current, [dept]: !current[dept] } };
-      saveReviewStatus(updated);
+      saveReviewStatusLocal(updated);
+      // Supabase에 비동기 저장 (optimistic UI)
+      reviewStatusService.toggle(pn, dept, current[dept]).catch(() => {});
       return updated;
     });
   }, []);

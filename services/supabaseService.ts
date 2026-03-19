@@ -3460,3 +3460,78 @@ export const productInfoService = {
     console.log(`✅ productInfo saved: ${records.length} rows (localStorage)`);
   },
 };
+
+// ============================================
+// Review Status Service (BOM 검토 체크박스)
+// ============================================
+
+export interface ReviewStatusRow {
+  production: boolean;
+  development: boolean;
+  sales: boolean;
+  purchase: boolean;
+}
+
+export type ReviewStatusMap = Record<string, ReviewStatusRow>;
+
+const REVIEW_LS_KEY = 'dashboard_bomReviewStatus';
+
+export const reviewStatusService = {
+  async getAll(): Promise<ReviewStatusMap> {
+    if (!isSupabaseConfigured() || isTableMissing('bom_review_status')) {
+      const stored = localStorage.getItem(REVIEW_LS_KEY);
+      return stored ? JSON.parse(stored) : {};
+    }
+
+    try {
+      const rows = await fetchAllRows('bom_review_status', 'item_code');
+      const map: ReviewStatusMap = {};
+      for (const r of rows) {
+        map[r.item_code] = {
+          production: !!r.production,
+          development: !!r.development,
+          sales: !!r.sales,
+          purchase: !!r.purchase,
+        };
+      }
+      // localStorage에 백업
+      try { safeSetItem(REVIEW_LS_KEY, JSON.stringify(map)); } catch { /* ignore */ }
+      return map;
+    } catch {
+      const stored = localStorage.getItem(REVIEW_LS_KEY);
+      return stored ? JSON.parse(stored) : {};
+    }
+  },
+
+  async toggle(itemCode: string, dept: keyof ReviewStatusRow, currentValue: boolean): Promise<void> {
+    if (!isSupabaseConfigured() || isTableMissing('bom_review_status')) return;
+
+    try {
+      const { error } = await supabase!
+        .from('bom_review_status')
+        .upsert(
+          { item_code: itemCode, [dept]: !currentValue, updated_at: new Date().toISOString() },
+          { onConflict: 'item_code', ignoreDuplicates: false },
+        );
+      if (error) checkTableError(error, 'bom_review_status');
+    } catch (e) {
+      console.warn('reviewStatus toggle 실패:', e);
+    }
+  },
+
+  async saveAll(map: ReviewStatusMap): Promise<void> {
+    try { safeSetItem(REVIEW_LS_KEY, JSON.stringify(map)); } catch { /* ignore */ }
+
+    if (!isSupabaseConfigured() || isTableMissing('bom_review_status')) return;
+
+    const rows = Object.entries(map).map(([itemCode, s]) => ({
+      item_code: itemCode,
+      production: s.production,
+      development: s.development,
+      sales: s.sales,
+      purchase: s.purchase,
+      updated_at: new Date().toISOString(),
+    }));
+    await insertInBatches('bom_review_status', rows, 500, 'item_code');
+  },
+};
