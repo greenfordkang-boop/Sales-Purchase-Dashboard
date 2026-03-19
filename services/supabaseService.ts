@@ -206,6 +206,16 @@ export const salesService = {
       return;
     }
 
+    // 기존 데이터 전체 삭제 후 새 데이터 삽입 (이전 업로드 잔존 데이터 방지)
+    try {
+      const { error } = await supabase!.from('sales_data').delete().neq('customer', '');
+      if (error && !checkTableError(error, 'sales_data')) {
+        console.warn('sales_data 기존 데이터 삭제 실패:', error);
+      }
+    } catch (err) {
+      console.warn('sales_data 삭제 중 오류:', err);
+    }
+
     const rows = data.flatMap(customer =>
       customer.items.map(item => ({
         customer: item.customer,

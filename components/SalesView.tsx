@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import MetricCard from './MetricCard';
 import { safeSetItem } from '../utils/safeStorage';
@@ -119,6 +119,9 @@ const SalesView: React.FC = () => {
   // --- State Management ---
   const [activeSubTab, setActiveSubTab] = useState<'forecast' | 'sales' | 'unitprice' | 'cr'>('forecast');
 
+  // 업로드 직후 Supabase mount load가 덮어쓰지 않도록 보호
+  const justUploadedRef = useRef(false);
+
   // Quantity States
   const [salesData, setSalesData] = useState<CustomerSalesData[]>(getInitialSalesData);
   const [selectedQtyCustomer, setSelectedQtyCustomer] = useState<string>('All');
@@ -206,7 +209,9 @@ const SalesView: React.FC = () => {
         // 1. Sales 데이터 로드
         try {
           const supabaseSales = await salesService.getAll();
-          if (supabaseSales && supabaseSales.length > 0) {
+          if (justUploadedRef.current) {
+            console.log('ℹ️ 업로드 직후 — Supabase mount load 건너뜀');
+          } else if (supabaseSales && supabaseSales.length > 0) {
             setSalesData(supabaseSales);
             safeSetItem('dashboard_salesData', JSON.stringify(supabaseSales));
             console.log(`✅ Supabase에서 영업 데이터 로드: ${supabaseSales.length}개 고객`);
@@ -796,6 +801,7 @@ const SalesView: React.FC = () => {
       try {
         const csvText = await readFileAsCSVText(file);
         const parsed = parseSalesCSV(csvText);
+        justUploadedRef.current = true;
         setSalesData(parsed);
         if (isSupabaseConfigured()) {
           salesService.saveAll(parsed)
