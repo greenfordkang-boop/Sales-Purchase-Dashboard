@@ -499,21 +499,9 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const refInfoMap = buildRefInfoMap(refInfo);
   const forwardMap = buildForwardMap(bomRecords);
 
-  // Revenue map (판매단가): partNo 우선 → newPartNo 보조 → itemRevenue fallback
+  // Revenue map (판매단가): 실적(itemRevenue) 우선 → forecast 보조
   const revenueMap = new Map<string, number>();
-  // 1-a) Forecast partNo 단가 (자기 품번 = 최우선)
-  for (const fc of forecastData) {
-    const pn = normalizePn(fc.partNo);
-    if (pn && fc.unitPrice > 0) revenueMap.set(pn, fc.unitPrice);
-  }
-  // 1-b) Forecast newPartNo 단가 (고객품번 = partNo에 없을 때만)
-  for (const fc of forecastData) {
-    const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
-    if (custPn && fc.unitPrice > 0 && !revenueMap.has(custPn)) {
-      revenueMap.set(custPn, fc.unitPrice);
-    }
-  }
-  // 2) Forecast에 없는 품목 → itemRevenue에서 평균 단가 산출
+  // 1) itemRevenue 실적 단가 (실제 매출 = 최우선)
   if (itemRevenue.length > 0) {
     const agg = new Map<string, { amt: number; qty: number }>();
     for (const rv of itemRevenue) {
@@ -527,7 +515,19 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       }
     }
     for (const [key, val] of agg) {
-      if (val.qty > 0 && !revenueMap.has(key)) revenueMap.set(key, val.amt / val.qty);
+      if (val.qty > 0) revenueMap.set(key, val.amt / val.qty);
+    }
+  }
+  // 2-a) Forecast partNo 단가 (실적 없는 품목만)
+  for (const fc of forecastData) {
+    const pn = normalizePn(fc.partNo);
+    if (pn && fc.unitPrice > 0 && !revenueMap.has(pn)) revenueMap.set(pn, fc.unitPrice);
+  }
+  // 2-b) Forecast newPartNo 단가 (실적·partNo 모두 없을 때만)
+  for (const fc of forecastData) {
+    const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
+    if (custPn && fc.unitPrice > 0 && !revenueMap.has(custPn)) {
+      revenueMap.set(custPn, fc.unitPrice);
     }
   }
 

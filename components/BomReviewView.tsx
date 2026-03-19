@@ -345,19 +345,7 @@ const BomReviewView: React.FC = () => {
   const revenueMap = useMemo(() => {
     const map = new Map<string, number>(); // pn -> unit price
 
-    // 1-a) Forecast partNo 단가 (자기 품번 = 최우선)
-    for (const fc of forecastData) {
-      const pn = normalizePn(fc.partNo);
-      if (pn && fc.unitPrice > 0) map.set(pn, fc.unitPrice);
-    }
-    // 1-b) Forecast newPartNo 단가 (고객품번 = partNo에 없을 때만)
-    for (const fc of forecastData) {
-      const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
-      if (custPn && fc.unitPrice > 0 && !map.has(custPn)) {
-        map.set(custPn, fc.unitPrice);
-      }
-    }
-    // 2) Forecast에 없는 품목 → itemRevenue에서 평균 단가 산출
+    // 1) itemRevenue 실적 단가 (실제 매출 = 최우선)
     if (revenueData.length > 0) {
       const agg = new Map<string, { totalAmt: number; totalQty: number }>();
       for (const rv of revenueData) {
@@ -372,7 +360,19 @@ const BomReviewView: React.FC = () => {
         }
       }
       for (const [key, val] of agg) {
-        if (val.totalQty > 0 && !map.has(key)) map.set(key, val.totalAmt / val.totalQty);
+        if (val.totalQty > 0) map.set(key, val.totalAmt / val.totalQty);
+      }
+    }
+    // 2-a) Forecast partNo 단가 (실적 없는 품목만)
+    for (const fc of forecastData) {
+      const pn = normalizePn(fc.partNo);
+      if (pn && fc.unitPrice > 0 && !map.has(pn)) map.set(pn, fc.unitPrice);
+    }
+    // 2-b) Forecast newPartNo 단가 (실적·partNo 모두 없을 때만)
+    for (const fc of forecastData) {
+      const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
+      if (custPn && fc.unitPrice > 0 && !map.has(custPn)) {
+        map.set(custPn, fc.unitPrice);
       }
     }
     return map;
