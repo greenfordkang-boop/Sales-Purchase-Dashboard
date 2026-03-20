@@ -1889,6 +1889,16 @@ export const forecastService = {
         totalRevenue: Number(row.total_revenue) || 0,
       }));
 
+      // Supabase 0건이지만 localStorage에 데이터가 있으면 localStorage 우선 사용 (데이터 유실 복구)
+      if (items.length === 0) {
+        const stored = localStorage.getItem(key);
+        const local: ForecastItem[] = stored ? JSON.parse(stored) : [];
+        if (local.length > 0) {
+          console.warn(`⚠️ forecast ${version}: Supabase 0건, localStorage ${local.length}건 → localStorage 사용`);
+          return local;
+        }
+      }
+
       const total = items.reduce((s, i) => s + i.totalRevenue, 0);
       console.log(`📊 forecast ${version} loaded: ${items.length}개, 총매출: ${(total/1e8).toFixed(1)}억`);
       return items;
@@ -1904,20 +1914,16 @@ export const forecastService = {
 
     if (!isSupabaseConfigured()) return;
 
-    // Delete existing data for this version
-    const { error: deleteError } = await supabase!
-      .from('forecast_data')
-      .delete()
-      .eq('version', version);
-
-    if (deleteError) console.error('forecast_data delete error:', deleteError);
-
-    if (data.length === 0) return;
-
     // Sanitize: filter out rows with null/undefined customer (NOT NULL constraint)
     const validData = data.filter(item => item.customer != null && String(item.customer).trim() !== '');
     if (validData.length < data.length) {
       console.warn(`forecast_data: ${data.length - validData.length} rows filtered (empty customer)`);
+    }
+
+    // Safety: do NOT delete existing data if there's nothing valid to insert
+    if (validData.length === 0) {
+      console.warn(`forecast_data ${version}: 유효 데이터 0건 → Supabase 삭제 건너뜀 (데이터 보호)`);
+      return;
     }
 
     const rows = validData.map(item => ({
@@ -1937,6 +1943,17 @@ export const forecastService = {
       monthly_revenue: Array.isArray(item.monthlyRevenue) ? item.monthlyRevenue : [],
       total_revenue: Number(item.totalRevenue) || 0,
     }));
+
+    // Delete existing data for this version (only after validating insert data exists)
+    const { error: deleteError } = await supabase!
+      .from('forecast_data')
+      .delete()
+      .eq('version', version);
+
+    if (deleteError) {
+      console.error('forecast_data delete error:', deleteError);
+      // Delete failed — still try to insert (upsert pattern)
+    }
 
     const inputTotal = rows.reduce((s, r) => s + (Number(r.total_revenue) || 0), 0);
     await insertInBatches('forecast_data', rows);
