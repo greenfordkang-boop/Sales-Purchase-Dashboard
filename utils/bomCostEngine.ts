@@ -629,15 +629,19 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
     if (!customerName && ri?.customerPn) customerName = custNameByPn.get(normalizePn(ri.customerPn)) || '';
     if (!customerName && matchedPc?.customerPn) customerName = custNameByPn.get(normalizePn(matchedPc.customerPn)) || '';
 
-    // 판매가/수량/매출
+    // 판매가/수량/매출 — refInfo.customerPn도 매칭 키로 활용
+    const riCustPn = ri?.customerPn ? normalizePn(ri.customerPn) : '';
     const sellingPrice = revenueMap.get(norm)
       || (matchedPc?.customerPn ? revenueMap.get(normalizePn(matchedPc.customerPn)) : 0)
+      || (riCustPn ? revenueMap.get(riCustPn) : 0)
       || 0;
     const planQty = planQtyMap.get(norm)
       || (matchedPc?.customerPn ? planQtyMap.get(normalizePn(matchedPc.customerPn)) : 0)
+      || (riCustPn ? planQtyMap.get(riCustPn) : 0)
       || 0;
     const expectedRevenue = expectedRevenueMap.get(norm)
       || (matchedPc?.customerPn ? expectedRevenueMap.get(normalizePn(matchedPc.customerPn)) : 0)
+      || (riCustPn ? expectedRevenueMap.get(riCustPn) : 0)
       || 0;
 
     // EA당 재료비 (BOM 트리 walk)
