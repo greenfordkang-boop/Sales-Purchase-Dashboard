@@ -202,7 +202,7 @@ export function useCostAnalysis(): CostAnalysisData {
   const costResult = useMemo(() => {
     if (forecast.length === 0 || bomRecords.length === 0) return null;
     try {
-      return calcAllProductCosts({
+      const result = calcAllProductCosts({
         forecastData: forecast,
         bomRecords,
         refInfo,
@@ -215,6 +215,8 @@ export function useCostAnalysis(): CostAnalysisData {
         itemRevenue,
         selectedMonth,
       });
+      console.log(`[원가분석 결과] products=${result.summary.productCount}, matched=${result.summary.matchedCount}, totalMaterial=${result.summary.totalMaterial}, leafMaterials=${result.leafMaterials.length}`);
+      return result;
     } catch (err) {
       console.error('[원가분석] BOM 원가 계산 실패:', err);
       return null;

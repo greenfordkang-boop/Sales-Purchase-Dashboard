@@ -606,6 +606,21 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
 
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
 
+  // 디버그: 매칭 진단
+  const planKeys = [...planQtyMap.keys()].slice(0, 5);
+  const rootSample = [...rootPnSet].slice(0, 5);
+  const riMatchSample: string[] = [];
+  for (const rn of rootPnSet) {
+    const r = refInfoMap.get(rn);
+    if (r?.customerPn) {
+      const cust = normalizePn(r.customerPn);
+      const inPlan = planQtyMap.has(cust);
+      riMatchSample.push(`${rn}→ri:${cust}(${inPlan ? 'HIT' : 'miss'})`);
+      if (riMatchSample.length >= 5) break;
+    }
+  }
+  console.log(`[원가분석 매칭] rootPNs=${rootPnSet.size}, planQtyKeys=${planQtyMap.size}, forecastSample=${planKeys.join(',')}, rootSample=${rootSample.join(',')}, riMatch=[${riMatchSample.join(' | ')}]`);
+
   // Root products 산출
   const products: ProductCostRow[] = [];
   let totalRevenue = 0;
