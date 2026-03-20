@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { ForecastItem } from '../utils/salesForecastParser';
-import { BomRecord } from '../utils/bomDataParser';
+import { BomRecord, PnMapping } from '../utils/bomDataParser';
 import { ItemRevenueRow } from '../utils/revenueDataParser';
 import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from '../utils/bomMasterParser';
 import {
@@ -90,6 +90,7 @@ export function useCostAnalysis(): CostAnalysisData {
   const [productCodes, setProductCodes] = useState<ProductCodeRecord[]>([]);
   const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [pnMapping, setPnMapping] = useState<PnMapping[]>([]);
 
   // Load all data on mount
   useEffect(() => {
@@ -145,6 +146,9 @@ export function useCostAnalysis(): CostAnalysisData {
             ];
             setInventoryItems(flat);
           }
+
+          // pnMapping은 localStorage에만 저장 (자재마스터 업로드 시 저장됨)
+          setPnMapping(safeParseJson<PnMapping[]>('dashboard_pnMapping', []));
         } else {
           setForecast(safeParseJson('dashboard_forecastData', []));
           setBomRecords(safeParseJson('dashboard_bomData', []));
@@ -155,6 +159,7 @@ export function useCostAnalysis(): CostAnalysisData {
           setOutsourcePrices(safeParseJson('dashboard_outsourceInjPrice', []));
           setPaintMixRatios(safeParseJson('dashboard_paintMixRatioMaster', []));
           setPurchaseData(safeParseJson('dashboard_purchaseData', []));
+          setPnMapping(safeParseJson<PnMapping[]>('dashboard_pnMapping', []));
           const invStored = safeParseJson<any>('dashboard_inventoryData', { warehouse: [], material: [], parts: [], product: [] });
           setInventoryItems([
             ...(invStored.warehouse || []),
@@ -175,6 +180,7 @@ export function useCostAnalysis(): CostAnalysisData {
       if (detail?.key === 'dashboard_forecastData' && detail?.data) setForecast(detail.data);
       else if (detail?.key === 'dashboard_bomData' && detail?.data) setBomRecords(detail.data);
       else if (detail?.key === 'dashboard_purchaseData' && detail?.data) setPurchaseData(detail.data);
+      else if (detail?.key === 'dashboard_pnMapping' && detail?.data) setPnMapping(detail.data);
     };
     window.addEventListener('dashboard-data-updated', onDataUpdate);
     return () => window.removeEventListener('dashboard-data-updated', onDataUpdate);
@@ -211,6 +217,7 @@ export function useCostAnalysis(): CostAnalysisData {
         itemStandardCosts,
         productCodes,
         itemRevenue,
+        pnMapping,
         selectedMonth,
       });
       return result;
@@ -218,7 +225,7 @@ export function useCostAnalysis(): CostAnalysisData {
       console.error('[원가분석] BOM 원가 계산 실패:', err);
       return null;
     }
-  }, [forecast, bomRecords, refInfo, materialCodes, purchasePrices, outsourcePrices, paintMixRatios, itemStandardCosts, productCodes, itemRevenue, selectedMonth]);
+  }, [forecast, bomRecords, refInfo, materialCodes, purchasePrices, outsourcePrices, paintMixRatios, itemStandardCosts, productCodes, itemRevenue, pnMapping, selectedMonth]);
 
   return {
     loading, costResult, forecastSummary,

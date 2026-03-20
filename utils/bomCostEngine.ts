@@ -3,7 +3,7 @@
  * 단가 우선순위: 구매단가 → 사출공식 → 도장공식 → 재질코드 → 표준(leaf only)
  */
 import { normalizePn } from './bomDataParser';
-import type { BomRecord } from './bomDataParser';
+import type { BomRecord, PnMapping } from './bomDataParser';
 import type { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from './bomMasterParser';
 import type { PurchasePrice, OutsourcePrice, PaintMixRatio, ItemStandardCost } from './standardMaterialParser';
 import type { ForecastItem } from './salesForecastParser';
@@ -491,6 +491,7 @@ export interface CalcAllParams {
   itemStandardCosts: ItemStandardCost[];
   productCodes: ProductCodeRecord[];
   itemRevenue: ItemRevenueRow[];
+  pnMapping: PnMapping[];  // 고객사 P/N ↔ 내부 품목코드 매핑 (자재마스터 업로드)
   selectedMonth: number;  // -1=전체(내부0), 0~11=특정월(외부1~12 → 내부0~11)
 }
 
@@ -498,7 +499,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const {
     forecastData, bomRecords, refInfo, materialCodes,
     purchasePrices, outsourcePrices, paintMixRatios,
-    itemStandardCosts, productCodes,
+    itemStandardCosts, productCodes, pnMapping,
     selectedMonth,
   } = params;
 
@@ -537,6 +538,15 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       if (!internalToCust.has(icode)) internalToCust.set(icode, cpn);
     }
   }
+  // pnMapping에서 고객사 P/N → 내부 품목코드 매핑 추가 (핵심 브릿지)
+  for (const m of pnMapping) {
+    if (m.customerPn && m.internalCode) {
+      const cpn = normalizePn(m.customerPn);
+      const icode = normalizePn(m.internalCode);
+      if (!custToInternal.has(cpn)) custToInternal.set(cpn, icode);
+      if (!internalToCust.has(icode)) internalToCust.set(icode, cpn);
+    }
+  }
 
   // BOM prefix index (fuzzy 매칭용 — 이전 코드 동일)
   const bomPrefixIndex = new Map<string, string>();
@@ -567,22 +577,6 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
 
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
-
-  // 디버그: 매칭 진단
-  const fcSamples = forecastData.slice(0, 5).map(f => ({ pn: f.partNo, newPn: f.newPartNo, cust: f.customer }));
-  const c2iSample = [...custToInternal.entries()].slice(0, 5);
-  const fwdSample = [...forwardMap.keys()].slice(0, 5);
-  console.log(`[원가분석 매칭진단] forecast=${forecastData.length}건, custToInternal=${custToInternal.size}, forwardMap=${forwardMap.size}, bomPrefixIndex=${bomPrefixIndex.size}`);
-  console.log(`[원가분석 forecast샘플]`, JSON.stringify(fcSamples));
-  console.log(`[원가분석 custToInternal샘플]`, JSON.stringify(c2iSample));
-  console.log(`[원가분석 forwardMap샘플]`, JSON.stringify(fwdSample));
-  // 첫 3개 forecast에 대해 findBomParent 결과
-  for (const f of forecastData.slice(0, 3)) {
-    const fpn = normalizePn(f.newPartNo || f.partNo);
-    const result = findBomParent(fpn);
-    const altResult = f.newPartNo ? findBomParent(f.partNo) : null;
-    console.log(`[매칭시도] newPartNo="${f.newPartNo}" partNo="${f.partNo}" → fpn="${fpn}" → bomParent=${result}, alt=${altResult}`);
-  }
 
   // Forecast-driven product list (forecast 순회 → BOM parent 매칭)
   const products: ProductCostRow[] = [];
