@@ -123,9 +123,7 @@ export function useCostAnalysis(): CostAnalysisData {
           });
 
           setForecast(val(fcRes));
-          const bomData = val(bomRes) as BomRecord[];
-          console.log(`[원가분석] 데이터 로드: forecast=${val(fcRes).length}, bom=${bomData.length}, refInfo=${val(riRes).length}, materialCodes=${val(mcRes).length}, purchasePrices=${val(ppRes as PromiseSettledResult<PurchasePrice[]>).length}`);
-          setBomRecords(bomData);
+          setBomRecords(val(bomRes) as BomRecord[]);
           setItemRevenue(val(revRes));
           setRefInfo(val(riRes));
           setMaterialCodes(val(mcRes));
@@ -215,7 +213,6 @@ export function useCostAnalysis(): CostAnalysisData {
         itemRevenue,
         selectedMonth,
       });
-      console.log(`[원가분석 결과] products=${result.summary.productCount}, matched=${result.summary.matchedCount}, totalMaterial=${result.summary.totalMaterial}, leafMaterials=${result.leafMaterials.length}`);
       return result;
     } catch (err) {
       console.error('[원가분석] BOM 원가 계산 실패:', err);

@@ -498,7 +498,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const {
     forecastData, bomRecords, refInfo, materialCodes,
     purchasePrices, outsourcePrices, paintMixRatios,
-    itemStandardCosts, productCodes, itemRevenue,
+    itemStandardCosts, productCodes,
     selectedMonth,
   } = params;
 
@@ -507,88 +507,6 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const paintMixMap = buildPaintMixMap(paintMixRatios);
   const refInfoMap = buildRefInfoMap(refInfo);
   const forwardMap = buildForwardMap(bomRecords);
-
-  // Revenue map (판매단가): 실적(itemRevenue) 우선 → forecast 보조
-  const revenueMap = new Map<string, number>();
-  // 1) itemRevenue 실적 단가 (실제 매출 = 최우선)
-  if (itemRevenue.length > 0) {
-    const agg = new Map<string, { amt: number; qty: number }>();
-    for (const rv of itemRevenue) {
-      const pn = normalizePn(rv.partNo);
-      const custPn = rv.customerPN ? normalizePn(rv.customerPN) : '';
-      for (const key of [pn, custPn]) {
-        if (!key) continue;
-        const prev = agg.get(key) || { amt: 0, qty: 0 };
-        prev.amt += rv.amount; prev.qty += rv.qty;
-        agg.set(key, prev);
-      }
-    }
-    for (const [key, val] of agg) {
-      if (val.qty > 0) revenueMap.set(key, val.amt / val.qty);
-    }
-  }
-  // 2-a) Forecast partNo 단가 (실적 없는 품목만)
-  for (const fc of forecastData) {
-    const pn = normalizePn(fc.partNo);
-    if (pn && fc.unitPrice > 0 && !revenueMap.has(pn)) revenueMap.set(pn, fc.unitPrice);
-  }
-  // 2-b) Forecast newPartNo 단가 (실적·partNo 모두 없을 때만)
-  for (const fc of forecastData) {
-    const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
-    if (custPn && fc.unitPrice > 0 && !revenueMap.has(custPn)) {
-      revenueMap.set(custPn, fc.unitPrice);
-    }
-  }
-
-  // Plan qty & expected revenue maps (월별)
-  const planQtyMap = new Map<string, number>();
-  const expectedRevenueMap = new Map<string, number>();
-  const forecastMonthlyMap = new Map<string, number[]>(); // MRP용 월별 수량
-
-  for (const fc of forecastData) {
-    const pn = normalizePn(fc.partNo);
-    const custPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
-    // selectedMonth: -1=전체(BomReview의 0), 0~11=특정월(BomReview의 1~12)
-    const qty = selectedMonth === -1 ? fc.totalQty : (fc.monthlyQty[selectedMonth] || 0);
-    const rev = selectedMonth === -1
-      ? (fc.totalRevenue > 0 ? fc.totalRevenue : fc.unitPrice * fc.totalQty)
-      : (fc.monthlyRevenue?.[selectedMonth] || fc.unitPrice * (fc.monthlyQty[selectedMonth] || 0));
-
-    for (const key of [pn, custPn]) {
-      if (!key) continue;
-      planQtyMap.set(key, (planQtyMap.get(key) || 0) + qty);
-      expectedRevenueMap.set(key, (expectedRevenueMap.get(key) || 0) + rev);
-    }
-
-    // MRP용: 전체 12개월 수량 저장 (양쪽 키)
-    for (const key of [pn, custPn]) {
-      if (key && !forecastMonthlyMap.has(key)) {
-        forecastMonthlyMap.set(key, [...fc.monthlyQty]);
-      }
-    }
-  }
-
-  // ProductCode map
-  const pcMap = new Map<string, ProductCodeRecord>();
-  for (const pc of productCodes) {
-    pcMap.set(normalizePn(pc.productCode), pc);
-    if (pc.customerPn) pcMap.set(normalizePn(pc.customerPn), pc);
-  }
-
-  // 고객사명 map
-  const isRealName = (s: string) => !!s && !/^\d/.test(s) && !/^[A-Z0-9]{5,}/.test(s) && !/-\d{3,}/.test(s);
-  const custNameByPn = new Map<string, string>();
-  for (const pc of productCodes) {
-    if (isRealName(pc.customer) && pc.customerPn) {
-      custNameByPn.set(normalizePn(pc.customerPn), pc.customer);
-    }
-  }
-  for (const ri of refInfo) {
-    if (isRealName(ri.customerName) && ri.customerPn) {
-      const key = normalizePn(ri.customerPn);
-      if (!custNameByPn.has(key)) custNameByPn.set(key, ri.customerName);
-    }
-  }
 
   // BOM Root 판별 (BomReviewView 동일)
   const childSet = new Set<string>();
@@ -604,107 +522,103 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
     }
   }
 
-  const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
-
-  // 디버그: 매칭 진단
-  const planKeys = [...planQtyMap.keys()].slice(0, 5);
-  const rootSample = [...rootPnSet].slice(0, 5);
-  const riMatchSample: string[] = [];
-  for (const rn of rootPnSet) {
-    const r = refInfoMap.get(rn);
-    if (r?.customerPn) {
-      const cust = normalizePn(r.customerPn);
-      const inPlan = planQtyMap.has(cust);
-      riMatchSample.push(`${rn}→ri:${cust}(${inPlan ? 'HIT' : 'miss'})`);
-      if (riMatchSample.length >= 5) break;
+  // Pre-compute materialCost & metadata for ALL BOM roots
+  const rootMaterialCostMap = new Map<string, number>();
+  const rootChildCountMap = new Map<string, number>();
+  const rootSourceMap = new Map<string, string>();
+  for (const norm of rootPnSet) {
+    const original = rootPnOriginal.get(norm) || '';
+    rootMaterialCostMap.set(norm, calcRootMaterialCost(original, forwardMap, priceData, refInfoMap, paintMixMap));
+    const children = forwardMap.get(norm) || [];
+    rootChildCountMap.set(norm, children.length);
+    if (children.length > 0) {
+      const { source } = getNodePrice(children[0].childPn, priceData, refInfoMap, paintMixMap);
+      rootSourceMap.set(norm, source);
     }
   }
-  console.log(`[원가분석 매칭] rootPNs=${rootPnSet.size}, planQtyKeys=${planQtyMap.size}, forecastSample=${planKeys.join(',')}, rootSample=${rootSample.join(',')}, riMatch=[${riMatchSample.join(' | ')}]`);
 
-  // Root products 산출
+  // Build custPN → BOM root mapping (for forecast→BOM matching)
+  const custToRoot = new Map<string, string>();
+  for (const pc of productCodes) {
+    const rootNorm = normalizePn(pc.productCode);
+    if (!rootPnSet.has(rootNorm)) continue;
+    if (pc.customerPn) custToRoot.set(normalizePn(pc.customerPn), rootNorm);
+    // pc.customer field may contain customer PNs (e.g., 84650G6080JAQ)
+    if (pc.customer && /^\d/.test(pc.customer)) custToRoot.set(normalizePn(pc.customer), rootNorm);
+  }
+  for (const ri of refInfo) {
+    const itemNorm = normalizePn(ri.itemCode);
+    if (!rootPnSet.has(itemNorm)) continue;
+    if (ri.customerPn) {
+      const custNorm = normalizePn(ri.customerPn);
+      if (!custToRoot.has(custNorm)) custToRoot.set(custNorm, itemNorm);
+    }
+  }
+
+  const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
+
+  // Forecast-driven product list (forecast 순회 → BOM root 매칭)
   const products: ProductCostRow[] = [];
   let totalRevenue = 0;
   let totalMaterial = 0;
   let matchedCount = 0;
+  const processedFcPns = new Set<string>();
 
-  for (const norm of rootPnSet) {
-    const original = rootPnOriginal.get(norm) || '';
-    const pc = pcMap.get(norm);
-    const ri = refInfoMap.get(norm);
+  for (const fc of forecastData) {
+    const fcPn = normalizePn(fc.partNo);
+    const fcNewPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
 
-    let matchedPc = pc;
-    if (!matchedPc && ri?.customerPn) {
-      matchedPc = pcMap.get(normalizePn(ri.customerPn));
-    }
+    // 동일 품번 중복 방지
+    if (processedFcPns.has(fcPn)) continue;
+    processedFcPns.add(fcPn);
 
-    // 고객사명
-    let customerName = '';
-    if (matchedPc?.customer && isRealName(matchedPc.customer)) customerName = matchedPc.customer;
-    if (!customerName && ri?.customerName && isRealName(ri.customerName)) customerName = ri.customerName;
-    if (!customerName && ri?.customerPn) customerName = custNameByPn.get(normalizePn(ri.customerPn)) || '';
-    if (!customerName && matchedPc?.customerPn) customerName = custNameByPn.get(normalizePn(matchedPc.customerPn)) || '';
+    // Find matching BOM root
+    let bomRootNorm = '';
+    if (rootPnSet.has(fcPn)) bomRootNorm = fcPn;
+    else if (fcNewPn && rootPnSet.has(fcNewPn)) bomRootNorm = fcNewPn;
+    else if (custToRoot.has(fcPn)) bomRootNorm = custToRoot.get(fcPn)!;
+    else if (fcNewPn && custToRoot.has(fcNewPn)) bomRootNorm = custToRoot.get(fcNewPn)!;
 
-    // 판매가/수량/매출 — refInfo.customerPn도 매칭 키로 활용
-    const riCustPn = ri?.customerPn ? normalizePn(ri.customerPn) : '';
-    const sellingPrice = revenueMap.get(norm)
-      || (matchedPc?.customerPn ? revenueMap.get(normalizePn(matchedPc.customerPn)) : 0)
-      || (riCustPn ? revenueMap.get(riCustPn) : 0)
-      || 0;
-    const planQty = planQtyMap.get(norm)
-      || (matchedPc?.customerPn ? planQtyMap.get(normalizePn(matchedPc.customerPn)) : 0)
-      || (riCustPn ? planQtyMap.get(riCustPn) : 0)
-      || 0;
-    const expectedRevenue = expectedRevenueMap.get(norm)
-      || (matchedPc?.customerPn ? expectedRevenueMap.get(normalizePn(matchedPc.customerPn)) : 0)
-      || (riCustPn ? expectedRevenueMap.get(riCustPn) : 0)
-      || 0;
+    // Quantities (selectedMonth: -1=전체, 0~11=특정월)
+    const qty = selectedMonth === -1 ? fc.totalQty : (fc.monthlyQty[selectedMonth] || 0);
+    const rev = selectedMonth === -1
+      ? (fc.totalRevenue > 0 ? fc.totalRevenue : fc.unitPrice * fc.totalQty)
+      : (fc.monthlyRevenue?.[selectedMonth] || fc.unitPrice * (fc.monthlyQty[selectedMonth] || 0));
 
-    // EA당 재료비 (BOM 트리 walk)
-    const materialCost = calcRootMaterialCost(original, forwardMap, priceData, refInfoMap, paintMixMap);
-    const materialTotal = planQty * materialCost;
-    const materialRatio = expectedRevenue > 0 ? (materialTotal / expectedRevenue) * 100 : 0;
+    // EA당 재료비 (BOM 매칭 성공 시에만)
+    const materialCost = bomRootNorm ? (rootMaterialCostMap.get(bomRootNorm) || 0) : 0;
+    const materialTotal = qty * materialCost;
+    const materialRatio = rev > 0 ? (materialTotal / rev) * 100 : 0;
 
-    // 출처 판별 (주된 단가원)
-    const children = forwardMap.get(norm) || [];
-    let mainSource = '';
-    if (children.length > 0) {
-      const firstChild = children[0];
-      const { source } = getNodePrice(firstChild.childPn, priceData, refInfoMap, paintMixMap);
-      mainSource = source;
-    }
-
-    if (expectedRevenue > 0 && materialCost > 0) {
-      totalRevenue += expectedRevenue;
+    if (rev > 0 && materialCost > 0) {
+      totalRevenue += rev;
       totalMaterial += materialTotal;
       matchedCount++;
     }
 
-    // MRP용 리프 자재 수집 (전체 12개월)
-    const monthlyQty = forecastMonthlyMap.get(norm)
-      || (ri?.customerPn ? forecastMonthlyMap.get(normalizePn(ri.customerPn)) : undefined)
-      || (matchedPc?.customerPn ? forecastMonthlyMap.get(normalizePn(matchedPc.customerPn)) : undefined)
-      || new Array(12).fill(0);
-    if (materialCost > 0 && monthlyQty.some(q => q > 0)) {
-      collectLeafMaterials(original, monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
+    // MRP용 리프 자재 수집 (BOM 매칭 + 수량 있을 때)
+    if (bomRootNorm && materialCost > 0 && fc.monthlyQty.some(q => q > 0)) {
+      const original = rootPnOriginal.get(bomRootNorm) || '';
+      collectLeafMaterials(original, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
     }
 
     products.push({
-      pn: original,
-      name: matchedPc?.productName || ri?.itemName || '',
-      customer: customerName,
-      model: matchedPc?.model || ri?.variety || '',
-      childCount: children.length,
-      sellingPrice,
-      planQty,
-      expectedRevenue,
+      pn: fc.partNo,
+      name: fc.partName || '',
+      customer: fc.customer || '',
+      model: fc.model || '',
+      childCount: bomRootNorm ? (rootChildCountMap.get(bomRootNorm) || 0) : 0,
+      sellingPrice: fc.unitPrice || 0,
+      planQty: qty,
+      expectedRevenue: rev,
       materialCost,
       materialTotal,
       materialRatio,
-      source: mainSource,
+      source: bomRootNorm ? (rootSourceMap.get(bomRootNorm) || '') : '',
     });
   }
 
-  products.sort((a, b) => a.pn.localeCompare(b.pn));
+  products.sort((a, b) => b.expectedRevenue - a.expectedRevenue);
 
   // Leaf materials 결과 구성
   const leafMaterials: LeafMaterialRow[] = [];
