@@ -654,9 +654,9 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const filtered = useMemo(() => {
     let list = mrpAll;
     if (viewMode === 'resin') {
-      list = list.filter(m => m.materialType === 'RESIN' || m.materialType === '사출');
+      list = list.filter(m => m.materialType === 'RESIN');
     } else if (viewMode === 'paint') {
-      list = list.filter(m => m.materialType === 'PAINT' || m.materialType === '도장');
+      list = list.filter(m => m.materialType === 'PAINT');
     } else if (typeFilter !== '전체') {
       list = list.filter(m => m.materialType === typeFilter);
     }
