@@ -4,7 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import { useCostAnalysis, CostAnalysisData, ProductCostRow, LeafMaterialRow } from '../hooks/useCostAnalysis';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { downloadPurchaseOrder } from '../utils/excelExporter';
 
 type AnalysisMode = 'standard' | 'product' | 'yield' | 'mrp';
@@ -273,8 +273,14 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmt(v)} />
               <Tooltip formatter={(v: number) => `₩${Math.round(v as number).toLocaleString()}`} />
-              <Bar dataKey="매출" fill="#c7d2fe" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="재료비" fill="#6366f1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="매출" fill="#c7d2fe" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="매출" position="top" style={{ fontSize: 9, fill: '#64748b' }}
+                  formatter={(v: number) => v >= 1e8 ? `${(v / 1e8).toFixed(1)}` : ''} />
+              </Bar>
+              <Bar dataKey="재료비" fill="#6366f1" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="재료비" position="top" style={{ fontSize: 9, fill: '#4338ca' }}
+                  formatter={(v: number) => v >= 1e8 ? `${(v / 1e8).toFixed(1)}` : ''} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

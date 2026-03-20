@@ -96,7 +96,9 @@ export function buildPriceData(
   for (const mc of materialCodes) {
     const code = normalizePn(mc.materialCode);
     if (mc.currentPrice > 0) matPriceMap.set(code, mc.currentPrice);
-    materialTypeMap.set(code, mc.materialType || '');
+    // 업종명 + 재질분류 + 도료구분을 결합하여 RESIN/PAINT 분류에 활용
+    const combined = [mc.materialType, mc.materialCategory, mc.paintCategory].filter(Boolean).join('|');
+    materialTypeMap.set(code, combined);
     matNameMap.set(code, mc.materialName || '');
   }
 
@@ -418,13 +420,21 @@ function collectLeafMaterials(
 
   function addToAgg(code: string, pn: string, qtyPerRoot: number, price: number, source: string) {
     const ri = refInfoMap.get(code);
-    // 재질 유형을 먼저 확인 — 구매단가가 있어도 원재료는 RESIN/PAINT로 분류
-    const mt = materialTypeMap.get(code) || '';
+    // 1차: 직접 코드(재질코드)로 materialTypeMap 조회
+    let mt = materialTypeMap.get(code) || '';
+    // 2차: 원재료코드(refInfo)로 조회 — BOM 품번 ≠ 재질코드인 경우
+    if (!mt && ri) {
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+      for (const raw of rawCodes) {
+        const rawMt = materialTypeMap.get(normalizePn(raw));
+        if (rawMt) { mt = rawMt; break; }
+      }
+    }
     let matType = '구매';
-    if (/resin|수지/i.test(mt)) matType = 'RESIN';
-    else if (/paint|도료/i.test(mt)) matType = 'PAINT';
-    else if (source === '사출') matType = '사출';
-    else if (source === '도장') matType = '도장';
+    if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
+    else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    else if (source === '사출') matType = 'RESIN';
+    else if (source === '도장') matType = 'PAINT';
     else if (source === '외주') matType = '외주';
 
     // 업체명 결정: 기준정보 → 구매/외주 데이터 → 자작 자동지정
