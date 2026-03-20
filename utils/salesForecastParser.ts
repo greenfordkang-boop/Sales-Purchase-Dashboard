@@ -146,8 +146,16 @@ export function parseForecastExcel(buffer: ArrayBuffer, fileName: string): Forec
       monthlyRev.push(getNumericValue(ws, `${col}${r + 1}`));
     }
 
-    const itemTotalQty = getNumericValue(ws, `X${r + 1}`);
-    const itemTotalRev = getNumericValue(ws, `AO${r + 1}`);
+    const itemTotalQtyCell = getNumericValue(ws, `X${r + 1}`);
+    const itemTotalRevCell = getNumericValue(ws, `AO${r + 1}`);
+
+    // 월별 데이터 합산 (수식 캐시 미반영 대비)
+    const itemTotalQtySum = monthlyQty.reduce((s, v) => s + v, 0);
+    const itemTotalRevSum = monthlyRev.reduce((s, v) => s + v, 0);
+
+    // 셀 값과 월별합 중 큰 값 사용 (수식 캐시 문제 보완)
+    const itemTotalQty = Math.max(itemTotalQtyCell, itemTotalQtySum);
+    const itemTotalRev = Math.max(itemTotalRevCell, itemTotalRevSum);
 
     // Skip items with zero total (both qty and revenue)
     if (itemTotalQty === 0 && itemTotalRev === 0) continue;

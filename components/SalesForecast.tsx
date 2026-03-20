@@ -289,11 +289,19 @@ const SalesForecast: React.FC = () => {
   }, [chartData]);
 
   // Totals for selected customer
+  // "전체 고객사"일 때 summary 사용 (Excel 합계행 AO8 기준, 수식 캐시 이슈 보완)
   const totals = useMemo(() => {
+    if (selectedCustomer === 'All' && summary) {
+      return {
+        totalRevenue: summary.totalRevenue,
+        totalQty: summary.totalQty,
+        itemCount: forecastItems.length,
+      };
+    }
     const totalRevenue = filteredByCustomer.reduce((s, i) => s + i.totalRevenue, 0);
     const totalQty = filteredByCustomer.reduce((s, i) => s + i.totalQty, 0);
     return { totalRevenue, totalQty, itemCount: filteredByCustomer.length };
-  }, [filteredByCustomer]);
+  }, [filteredByCustomer, selectedCustomer, summary, forecastItems.length]);
 
   // Customer-level revenue breakdown (1% 미만은 기타 합산)
   const customerRevenue = useMemo(() => {
