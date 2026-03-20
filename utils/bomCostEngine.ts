@@ -595,8 +595,6 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
     }
   }
 
-  // 유형별 집계
-  const typeAmounts = new Map<string, number>();
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
 
   // Root products 산출
@@ -647,18 +645,10 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       mainSource = source;
     }
 
-    // 유형별 집계 (조달구분 기반)
-    const supplyType = ri?.supplyType || '';
-    let typeName = '구매';
-    if (/외주/.test(supplyType)) typeName = '외주';
-    else if (/자작/.test(supplyType) || /사출/.test(ri?.processType || '')) typeName = 'RESIN';
-    if (/도장/.test(ri?.processType || '') && typeName === 'RESIN') typeName = 'RESIN'; // 사출+도장 → RESIN
-
     if (expectedRevenue > 0 && materialCost > 0) {
       totalRevenue += expectedRevenue;
       totalMaterial += materialTotal;
       matchedCount++;
-      typeAmounts.set(typeName, (typeAmounts.get(typeName) || 0) + materialTotal);
     }
 
     // MRP용 리프 자재 수집 (전체 12개월)
@@ -706,8 +696,14 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
   leafMaterials.sort((a, b) => b.totalCost - a.totalCost);
 
-  // byType 결과
-  const byType = Array.from(typeAmounts.entries()).map(([name, amount]) => ({ name, amount }));
+  // byType 결과 — leafMaterials 기반 집계 (정확한 materialType 사용)
+  const leafTypeAmounts = new Map<string, number>();
+  for (const lm of leafMaterials) {
+    leafTypeAmounts.set(lm.materialType, (leafTypeAmounts.get(lm.materialType) || 0) + lm.totalCost);
+  }
+  const byType = Array.from(leafTypeAmounts.entries())
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((a, b) => b.amount - a.amount);
 
   return {
     products,

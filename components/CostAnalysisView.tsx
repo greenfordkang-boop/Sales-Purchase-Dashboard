@@ -1,17 +1,18 @@
 /**
- * CostAnalysisView — 원가분석 통합 워크벤치 v3
- * BomReviewView와 100% 동일한 bomCostEngine 기반
+ * CostAnalysisView — 원가분석 통합 워크벤치 v4
+ * 이슈 #1~#9 고도화: byType정확화, 전체정렬, 수율계산, MRP발주, RESIN/PAINT뷰
  */
 import React, { useState, useMemo } from 'react';
 import { useCostAnalysis, CostAnalysisData, ProductCostRow, LeafMaterialRow } from '../hooks/useCostAnalysis';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { downloadPurchaseOrder } from '../utils/excelExporter';
 
 type AnalysisMode = 'standard' | 'product' | 'yield' | 'mrp';
 
 const MODE_TABS: { id: AnalysisMode; label: string; desc: string }[] = [
   { id: 'standard', label: '표준재료비', desc: '총괄 요약' },
   { id: 'product', label: '제품별 재료비', desc: '제품 단위 원가' },
-  { id: 'yield', label: '자재수율', desc: '유형별 소요' },
+  { id: 'yield', label: '자재수율', desc: '소요 vs 입고' },
   { id: 'mrp', label: 'MRP', desc: '자재별/업체별' },
 ];
 
@@ -31,17 +32,16 @@ const typeBadgeClass = (t: string) =>
   t === '외주' ? 'bg-blue-100 text-blue-700' :
   'bg-emerald-100 text-emerald-700';
 
+const normCode = (s: string) => s.trim().toUpperCase();
+
 // ============================================================
-// KPICard
+// Shared: KPICard, EmptyState, MonthSelector, SortHeader, Pagination
 // ============================================================
 const KPICard: React.FC<{ label: string; value: string; sub?: string; color?: string }> = ({ label, value, sub, color = 'slate' }) => {
   const colorMap: Record<string, string> = {
-    indigo: 'border-indigo-200 bg-indigo-50',
-    violet: 'border-violet-200 bg-violet-50',
-    amber: 'border-amber-200 bg-amber-50',
-    emerald: 'border-emerald-200 bg-emerald-50',
-    red: 'border-red-200 bg-red-50',
-    slate: 'border-slate-200 bg-slate-50',
+    indigo: 'border-indigo-200 bg-indigo-50', violet: 'border-violet-200 bg-violet-50',
+    amber: 'border-amber-200 bg-amber-50', emerald: 'border-emerald-200 bg-emerald-50',
+    red: 'border-red-200 bg-red-50', slate: 'border-slate-200 bg-slate-50',
   };
   return (
     <div className={`rounded-xl border p-3 ${colorMap[color] || colorMap.slate}`}>
@@ -55,6 +55,49 @@ const KPICard: React.FC<{ label: string; value: string; sub?: string; color?: st
 const EmptyState: React.FC<{ message: string }> = ({ message }) => (
   <div className="flex items-center justify-center py-20 text-sm text-slate-400">{message}</div>
 );
+
+const MonthSelector: React.FC<{ selectedMonth: number; setSelectedMonth: (m: number) => void }> = ({ selectedMonth, setSelectedMonth }) => (
+  <div className="flex items-center gap-1 flex-wrap">
+    <button onClick={() => setSelectedMonth(-1)}
+      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+      전체
+    </button>
+    {Array.from({ length: 12 }, (_, i) => (
+      <button key={i} onClick={() => setSelectedMonth(i)}
+        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+        {i + 1}월
+      </button>
+    ))}
+  </div>
+);
+
+function SortTh<K extends string>({ field, label, sortKey, sortDir, onSort, align = 'right' }: {
+  field: K; label: string; sortKey: K; sortDir: string; onSort: (k: K) => void; align?: string;
+}) {
+  return (
+    <th className={`px-3 py-2 text-${align} cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap`}
+      onClick={() => onSort(field)}>
+      {label} {sortKey === field ? (sortDir === 'desc' ? '▼' : '▲') : ''}
+    </th>
+  );
+}
+
+const Pagination: React.FC<{ page: number; setPage: (p: number) => void; total: number; pageSize: number }> = ({ page, setPage, total, pageSize }) => {
+  const totalPages = Math.ceil(total / pageSize);
+  if (total <= pageSize) return null;
+  return (
+    <div className="flex items-center justify-between px-3 py-2 border-t border-slate-200 text-xs">
+      <span className="text-slate-400">{page * pageSize + 1}~{Math.min((page + 1) * pageSize, total)} / {total}건</span>
+      <div className="flex gap-1">
+        <button disabled={page === 0} onClick={() => setPage(page - 1)}
+          className="px-2 py-1 rounded bg-slate-100 text-slate-500 disabled:opacity-30 hover:bg-slate-200">이전</button>
+        <span className="px-2 py-1 text-slate-400">{page + 1}/{totalPages}</span>
+        <button disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}
+          className="px-2 py-1 rounded bg-slate-100 text-slate-500 disabled:opacity-30 hover:bg-slate-200">다음</button>
+      </div>
+    </div>
+  );
+};
 
 // ============================================================
 // ForecastSummaryBar
@@ -132,7 +175,6 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           </div>
         </div>
 
-        {/* 월별 미니바 */}
         <div className="flex items-end gap-0.5 h-10">
           {s.monthlyRevenue.map((rev, i) => (
             <div key={i} className="flex flex-col items-center gap-0.5">
@@ -161,22 +203,17 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { summary, products } = costResult;
   const ratio = summary.materialRatio * 100;
 
-  // 유형별 파이차트 데이터
   const pieData = summary.byType.filter(s => s.amount > 0).map(s => ({
     name: s.name, value: s.amount, color: TYPE_COLORS[s.name] || '#94a3b8',
   }));
 
-  // 월별 재료비 (forecast 월별 매출 × 비율)
   const monthlyData = useMemo(() => {
     if (!forecastSummary) return [];
     return forecastSummary.monthlyRevenue.map((rev, i) => ({
-      month: `${i + 1}월`,
-      매출: rev,
-      재료비: rev > 0 ? rev * summary.materialRatio : 0,
+      month: `${i + 1}월`, 매출: rev, 재료비: rev > 0 ? rev * summary.materialRatio : 0,
     }));
   }, [forecastSummary, summary.materialRatio]);
 
-  // 출처별 집계
   const bySource = useMemo(() => {
     const map = new Map<string, { count: number; total: number }>();
     for (const row of products) {
@@ -190,40 +227,24 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     return Array.from(map.entries()).map(([name, v]) => ({ name, ...v }));
   }, [products]);
 
-  // Top 10 제품
   const top10 = useMemo(() =>
     [...products].filter(p => p.materialTotal > 0).sort((a, b) => b.materialTotal - a.materialTotal).slice(0, 10),
   [products]);
 
   return (
     <div className="space-y-4">
-      {/* 월별 선택 */}
-      <div className="flex items-center gap-1 flex-wrap">
-        <button onClick={() => setSelectedMonth(-1)}
-          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-          전체
-        </button>
-        {Array.from({ length: 12 }, (_, i) => (
-          <button key={i} onClick={() => setSelectedMonth(i)}
-            className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-            {i + 1}월
-          </button>
-        ))}
-      </div>
+      <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
 
-      {/* KPI 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="총 표준재료비" value={fmt(summary.totalMaterial)} sub={`재료비율 ${ratio.toFixed(1)}%`} color="indigo" />
-        {summary.byType.map(t => (
+        {summary.byType.slice(0, 3).map(t => (
           <KPICard key={t.name} label={t.name} value={fmt(t.amount)}
             sub={`${summary.totalMaterial > 0 ? (t.amount / summary.totalMaterial * 100).toFixed(1) : 0}%`}
             color={t.name === 'RESIN' ? 'violet' : t.name === 'PAINT' ? 'amber' : 'emerald'} />
         ))}
       </div>
 
-      {/* 차트 영역 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* 유형별 파이 */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <h3 className="text-xs font-bold text-slate-600 mb-2">유형별 구성</h3>
           <ResponsiveContainer width="100%" height={200}>
@@ -244,7 +265,6 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           </div>
         </div>
 
-        {/* 월별 매출 vs 재료비 */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-4">
           <h3 className="text-xs font-bold text-slate-600 mb-2">월별 매출 vs 재료비</h3>
           <ResponsiveContainer width="100%" height={200}>
@@ -260,7 +280,6 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         </div>
       </div>
 
-      {/* 출처별 요약 + Top 10 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <h3 className="text-xs font-bold text-slate-600 mb-3">단가 출처별</h3>
@@ -304,55 +323,55 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 };
 
 // ============================================================
-// ProductCostPanel — 제품별 재료비
+// ProductCostPanel — 제품별 재료비 (이슈 #2: 전체 컬럼 정렬)
 // ============================================================
+type ProductSortKey = 'pn' | 'name' | 'customer' | 'planQty' | 'materialCost' | 'expectedRevenue' | 'materialTotal' | 'materialRatio' | 'source';
+const PRODUCT_STR_KEYS: ProductSortKey[] = ['pn', 'name', 'customer', 'source'];
+
 const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { costResult, selectedMonth, setSelectedMonth } = data;
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<'materialTotal' | 'materialCost' | 'materialRatio'>('materialTotal');
+  const [sortKey, setSortKey] = useState<ProductSortKey>('materialTotal');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 100;
 
   if (!costResult) return <EmptyState message="매출계획 + BOM 데이터가 필요합니다." />;
 
   const { products, summary } = costResult;
 
-  const handleSort = (key: typeof sortKey) => {
+  const handleSort = (key: ProductSortKey) => {
     if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
     else { setSortKey(key); setSortDir('desc'); }
+    setPage(0);
   };
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     let list = products.filter(p => p.planQty > 0);
     if (q) list = list.filter(p => p.pn.toLowerCase().includes(q) || p.name.toLowerCase().includes(q) || p.customer.toLowerCase().includes(q));
-    list.sort((a, b) => sortDir === 'desc' ? (b[sortKey] - a[sortKey]) : (a[sortKey] - b[sortKey]));
+    list.sort((a, b) => {
+      if (PRODUCT_STR_KEYS.includes(sortKey)) {
+        const cmp = String(a[sortKey]).localeCompare(String(b[sortKey]), 'ko');
+        return sortDir === 'desc' ? -cmp : cmp;
+      }
+      return sortDir === 'desc' ? ((b[sortKey] as number) - (a[sortKey] as number)) : ((a[sortKey] as number) - (b[sortKey] as number));
+    });
     return list;
   }, [products, search, sortKey, sortDir]);
 
+  const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   const ratio = summary.materialRatio * 100;
 
   return (
     <div className="space-y-4">
-      {/* 월별 선택 + 검색 */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <div className="flex items-center gap-1 flex-wrap">
-          <button onClick={() => setSelectedMonth(-1)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-            전체
-          </button>
-          {Array.from({ length: 12 }, (_, i) => (
-            <button key={i} onClick={() => setSelectedMonth(i)}
-              className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
-              {i + 1}월
-            </button>
-          ))}
-        </div>
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
+        <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
           placeholder="품번/품명/거래선 검색"
           className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
       </div>
 
-      {/* KPI */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="매출(BOM매칭)" value={fmt(summary.totalRevenue)} color="indigo" />
         <KPICard label="재료비 합계" value={fmt(summary.totalMaterial)} color="violet" />
@@ -360,31 +379,24 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         <KPICard label="산출 제품" value={`${summary.matchedCount}건`} sub={`전체 ${summary.productCount}건`} color="slate" />
       </div>
 
-      {/* 테이블 */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-xs">
           <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
-            <th className="px-3 py-2 text-left">품번</th>
-            <th className="px-3 py-2 text-left">품명</th>
-            <th className="px-3 py-2 text-left">거래선</th>
-            <th className="px-3 py-2 text-right">수량</th>
-            <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialCost')}>
-              단가 {sortKey === 'materialCost' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
-            </th>
-            <th className="px-3 py-2 text-right">매출액</th>
-            <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialTotal')}>
-              재료비합계 {sortKey === 'materialTotal' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
-            </th>
-            <th className="px-3 py-2 text-right cursor-pointer hover:text-indigo-600" onClick={() => handleSort('materialRatio')}>
-              재료비율 {sortKey === 'materialRatio' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
-            </th>
-            <th className="px-3 py-2 text-center">출처</th>
+            <SortTh field="pn" label="품번" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="name" label="품명" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="customer" label="거래선" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="planQty" label="수량" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="materialCost" label="단가" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="expectedRevenue" label="매출액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="materialTotal" label="재료비합계" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="materialRatio" label="재료비율" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="source" label="출처" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="center" />
           </tr></thead>
           <tbody>
-            {filtered.slice(0, 100).map(row => (
+            {pageData.map(row => (
               <tr key={row.pn} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="px-3 py-2 font-mono text-indigo-600 whitespace-nowrap">{row.pn}</td>
-                <td className="px-3 py-2 truncate max-w-[180px]">{row.name}</td>
+                <td className="px-3 py-2 truncate max-w-[180px]" title={row.name}>{row.name}</td>
                 <td className="px-3 py-2 text-slate-500">{row.customer}</td>
                 <td className="px-3 py-2 text-right font-mono">{row.planQty.toLocaleString()}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">{Math.round(row.materialCost).toLocaleString()}</td>
@@ -403,7 +415,6 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
               </tr>
             ))}
           </tbody>
-          {/* 합계 행 */}
           <tfoot><tr className="bg-indigo-50 border-t-2 border-indigo-200 font-bold text-xs">
             <td className="px-3 py-2" colSpan={3}>합계 ({filtered.length}건)</td>
             <td className="px-3 py-2 text-right font-mono">{filtered.reduce((s, r) => s + r.planQty, 0).toLocaleString()}</td>
@@ -414,19 +425,31 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             <td className="px-3 py-2"></td>
           </tr></tfoot>
         </table>
-        {filtered.length > 100 && (
-          <div className="text-center py-2 text-xs text-slate-400">상위 100건 표시 (전체 {filtered.length}건)</div>
-        )}
+        <Pagination page={page} setPage={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
       </div>
     </div>
   );
 };
 
 // ============================================================
-// YieldPanel — 자재수율 (유형별 소요)
+// YieldPanel — 자재수율 (이슈 #3, #4, #5: 월필터+구입처+수율+전체+정렬)
 // ============================================================
+type YieldSortKey = 'materialCode' | 'materialName' | 'materialType' | 'supplier' | 'requiredQty' | 'inboundQty' | 'diff' | 'yieldRate' | 'unitPrice' | 'totalCost';
+const YIELD_STR_KEYS: YieldSortKey[] = ['materialCode', 'materialName', 'materialType', 'supplier'];
+
+interface YieldRow extends LeafMaterialRow {
+  requiredQty: number;
+  inboundQty: number;
+  diff: number;
+  yieldRate: number;
+}
+
 const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
-  const { costResult } = data;
+  const { costResult, selectedMonth, setSelectedMonth, purchaseData } = data;
+  const [sortKey, setSortKey] = useState<YieldSortKey>('totalCost');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
 
   if (!costResult || costResult.leafMaterials.length === 0) {
     return <EmptyState message="BOM 전개 데이터가 필요합니다." />;
@@ -434,22 +457,72 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 
   const { leafMaterials, summary } = costResult;
 
-  // 유형별 소요금액 집계
+  const handleSort = (key: YieldSortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setSortKey(key); setSortDir('desc'); }
+    setPage(0);
+  };
+
+  // 입고 실적 맵 구성
+  const inboundMap = useMemo(() => {
+    const map = new Map<string, number[]>();
+    for (const p of purchaseData) {
+      const code = normCode(p.itemCode);
+      if (!code) continue;
+      const monthStr = p.month?.replace(/[^0-9]/g, '') || '';
+      const monthIdx = parseInt(monthStr) - 1;
+      if (monthIdx < 0 || monthIdx > 11) continue;
+      const existing = map.get(code) || new Array(12).fill(0);
+      existing[monthIdx] += p.qty;
+      map.set(code, existing);
+    }
+    return map;
+  }, [purchaseData]);
+
+  // 수율 데이터 계산
+  const yieldData = useMemo(() => {
+    const rows: YieldRow[] = leafMaterials.map(m => {
+      const code = normCode(m.materialCode);
+      const inbound = inboundMap.get(code) || new Array(12).fill(0);
+      const requiredQty = selectedMonth === -1
+        ? m.monthlyQty.reduce((s, q) => s + q, 0)
+        : m.monthlyQty[selectedMonth] || 0;
+      const inboundQty = selectedMonth === -1
+        ? inbound.reduce((s, q) => s + q, 0)
+        : inbound[selectedMonth] || 0;
+      const diff = inboundQty - requiredQty;
+      const yieldRate = requiredQty > 0 ? (inboundQty / requiredQty) * 100 : 0;
+      return { ...m, requiredQty, inboundQty, diff, yieldRate };
+    });
+
+    rows.sort((a, b) => {
+      if (YIELD_STR_KEYS.includes(sortKey)) {
+        const cmp = String(a[sortKey]).localeCompare(String(b[sortKey]), 'ko');
+        return sortDir === 'desc' ? -cmp : cmp;
+      }
+      return sortDir === 'desc' ? ((b[sortKey] as number) - (a[sortKey] as number)) : ((a[sortKey] as number) - (b[sortKey] as number));
+    });
+    return rows;
+  }, [leafMaterials, inboundMap, selectedMonth, sortKey, sortDir]);
+
+  // 유형별 소요금액
   const byType = useMemo(() => {
     const map = new Map<string, number>();
-    for (const m of leafMaterials) {
+    for (const m of yieldData) {
       map.set(m.materialType, (map.get(m.materialType) || 0) + m.totalCost);
     }
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value, color: TYPE_COLORS[name] || '#94a3b8' }))
       .sort((a, b) => b.value - a.value);
-  }, [leafMaterials]);
+  }, [yieldData]);
 
-  const totalCost = leafMaterials.reduce((s, m) => s + m.totalCost, 0);
-  const top50 = leafMaterials.slice(0, 50);
+  const totalCost = yieldData.reduce((s, m) => s + m.totalCost, 0);
+  const pageData = yieldData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div className="space-y-4">
+      <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="총 자재 종류" value={`${leafMaterials.length}건`} color="indigo" />
         <KPICard label="총 소요금액 (조달기준)" value={fmt(totalCost)}
@@ -459,7 +532,6 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         <KPICard label="재료비율" value={`${(summary.materialRatio * 100).toFixed(1)}%`} color={summary.materialRatio > 0.5 ? 'red' : 'emerald'} />
       </div>
 
-      {/* 유형별 소요금액 차트 */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4">
         <h3 className="text-xs font-bold text-slate-600 mb-2">유형별 소요금액</h3>
         <ResponsiveContainer width="100%" height={180}>
@@ -475,48 +547,78 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         </ResponsiveContainer>
       </div>
 
-      {/* 자재 소요량 테이블 (Top 50) */}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
         <table className="w-full text-xs">
           <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
-            <th className="px-3 py-2 text-left">자재코드</th>
-            <th className="px-3 py-2 text-left">자재명</th>
-            <th className="px-3 py-2 text-center">유형</th>
-            <th className="px-3 py-2 text-right">소요량</th>
-            <th className="px-3 py-2 text-right">단가</th>
-            <th className="px-3 py-2 text-right">소요금액</th>
+            <SortTh field="materialCode" label="자재코드" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="materialName" label="자재명" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="materialType" label="유형" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="center" />
+            <SortTh field="supplier" label="구입처" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+            <SortTh field="requiredQty" label="소요량" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="inboundQty" label="입고량" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="diff" label="초과/부족" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="yieldRate" label="수율%" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="unitPrice" label="단가" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="totalCost" label="소요금액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
           </tr></thead>
           <tbody>
-            {top50.map(m => (
+            {pageData.map(m => (
               <tr key={m.materialCode} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="px-3 py-1.5 font-mono text-indigo-600">{m.materialCode}</td>
-                <td className="px-3 py-1.5 truncate max-w-[200px]">{m.materialName}</td>
+                <td className="px-3 py-1.5 truncate max-w-[200px]" title={m.materialName}>{m.materialName}</td>
                 <td className="px-3 py-1.5 text-center">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
                 </td>
-                <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.monthlyQty.reduce((s, q) => s + q, 0)).toLocaleString()}</td>
+                <td className="px-3 py-1.5 text-slate-500 truncate max-w-[120px]" title={m.supplier}>{m.supplier || '-'}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.requiredQty).toLocaleString()}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{m.inboundQty > 0 ? Math.round(m.inboundQty).toLocaleString() : '-'}</td>
+                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-emerald-600' : m.diff < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                  {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diff > 0 ? '+' : '') + Math.round(m.diff).toLocaleString() : '-'}
+                </td>
+                <td className={`px-3 py-1.5 text-right font-mono ${m.yieldRate >= 100 ? 'text-emerald-600' : m.yieldRate > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                  {m.yieldRate > 0 ? `${m.yieldRate.toFixed(0)}%` : '-'}
+                </td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.unitPrice).toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {leafMaterials.length > 50 && (
-          <div className="text-center py-2 text-xs text-slate-400">상위 50건 표시 (전체 {leafMaterials.length}건)</div>
-        )}
+        <Pagination page={page} setPage={setPage} total={yieldData.length} pageSize={PAGE_SIZE} />
       </div>
     </div>
   );
 };
 
 // ============================================================
-// MRPPanel — 자재별/업체별 소요량 (12개월)
+// MRPPanel — 자재별/업체별/RESIN/PAINT (이슈 #5~#9)
 // ============================================================
+type MRPViewMode = 'material' | 'supplier' | 'resin' | 'paint';
+type MRPSortKey = 'materialCode' | 'materialName' | 'materialType' | 'unitPrice' | 'totalQty' | 'totalCost' | 'currentStock' | 'orderQty';
+const MRP_STR_KEYS: MRPSortKey[] = ['materialCode', 'materialName', 'materialType'];
+
+interface MRPRow extends LeafMaterialRow {
+  totalQty: number;
+  currentStock: number;
+  orderQty: number;
+}
+
+const VIEW_TABS: { id: MRPViewMode; label: string }[] = [
+  { id: 'material', label: '자재별' },
+  { id: 'supplier', label: '업체별' },
+  { id: 'resin', label: 'RESIN' },
+  { id: 'paint', label: 'PAINT' },
+];
+
 const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
-  const { costResult } = data;
-  const [viewMode, setViewMode] = useState<'material' | 'supplier'>('material');
+  const { costResult, inventoryItems, selectedMonth, setSelectedMonth } = data;
+  const [viewMode, setViewMode] = useState<MRPViewMode>('material');
   const [typeFilter, setTypeFilter] = useState<string>('전체');
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+  const [sortKey, setSortKey] = useState<MRPSortKey>('totalCost');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 50;
 
   if (!costResult || costResult.leafMaterials.length === 0) {
     return <EmptyState message="BOM 전개 데이터가 필요합니다." />;
@@ -525,19 +627,66 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { leafMaterials, summary } = costResult;
   const totalCost = leafMaterials.reduce((s, m) => s + m.totalCost, 0);
 
-  // 유형 필터
-  const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];
-  const filtered = typeFilter === '전체' ? leafMaterials : leafMaterials.filter(m => m.materialType === typeFilter);
+  // 현재고 맵
+  const inventoryMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const inv of inventoryItems) {
+      const code = normCode(inv.code);
+      if (code) map.set(code, (map.get(code) || 0) + inv.qty);
+    }
+    return map;
+  }, [inventoryItems]);
 
-  // 업체별 집계 (상세 자재 목록 포함)
+  // MRP 데이터 (현재고 + 발주량 포함)
+  const mrpAll = useMemo(() => {
+    return leafMaterials.map(m => {
+      const code = normCode(m.materialCode);
+      const totalQty = m.monthlyQty.reduce((s, q) => s + q, 0);
+      const currentStock = inventoryMap.get(code) || 0;
+      const orderQty = Math.max(0, totalQty - currentStock);
+      return { ...m, totalQty, currentStock, orderQty } as MRPRow;
+    });
+  }, [leafMaterials, inventoryMap]);
+
+  // 유형 필터 + 뷰모드 필터
+  const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];
+
+  const filtered = useMemo(() => {
+    let list = mrpAll;
+    if (viewMode === 'resin') {
+      list = list.filter(m => m.materialType === 'RESIN' || m.materialType === '사출');
+    } else if (viewMode === 'paint') {
+      list = list.filter(m => m.materialType === 'PAINT' || m.materialType === '도장');
+    } else if (typeFilter !== '전체') {
+      list = list.filter(m => m.materialType === typeFilter);
+    }
+
+    list.sort((a, b) => {
+      if (MRP_STR_KEYS.includes(sortKey)) {
+        const cmp = String(a[sortKey]).localeCompare(String(b[sortKey]), 'ko');
+        return sortDir === 'desc' ? -cmp : cmp;
+      }
+      return sortDir === 'desc' ? ((b[sortKey] as number) - (a[sortKey] as number)) : ((a[sortKey] as number) - (b[sortKey] as number));
+    });
+    return list;
+  }, [mrpAll, viewMode, typeFilter, sortKey, sortDir]);
+
+  const handleSort = (key: MRPSortKey) => {
+    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    else { setSortKey(key); setSortDir('desc'); }
+    setPage(0);
+  };
+
+  // 업체별 집계
   const supplierData = useMemo(() => {
-    const map = new Map<string, { totalCost: number; materialCount: number; monthlyQty: number[]; materials: typeof filtered }>();
+    const map = new Map<string, { totalCost: number; materialCount: number; monthlyQty: number[]; materials: MRPRow[]; totalOrderAmount: number }>();
     for (const m of filtered) {
       const supplier = m.supplier || '(미지정)';
-      const existing = map.get(supplier) || { totalCost: 0, materialCount: 0, monthlyQty: new Array(12).fill(0), materials: [] as typeof filtered };
+      const existing = map.get(supplier) || { totalCost: 0, materialCount: 0, monthlyQty: new Array(12).fill(0), materials: [] as MRPRow[], totalOrderAmount: 0 };
       existing.totalCost += m.totalCost;
       existing.materialCount++;
       existing.materials.push(m);
+      existing.totalOrderAmount += m.orderQty * m.unitPrice;
       for (let i = 0; i < 12; i++) existing.monthlyQty[i] += m.monthlyQty[i] || 0;
       map.set(supplier, existing);
     }
@@ -554,139 +703,188 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     });
   };
 
+  const toggleAllSuppliers = () => {
+    if (expandedSuppliers.size === supplierData.length) {
+      setExpandedSuppliers(new Set());
+    } else {
+      setExpandedSuppliers(new Set(supplierData.map(s => s.name)));
+    }
+  };
+
+  const handleDownloadPO = (supplierName: string, materials: MRPRow[]) => {
+    downloadPurchaseOrder(supplierName, materials.map(m => ({
+      materialCode: m.materialCode, materialName: m.materialName,
+      materialType: m.materialType, unit: m.unit,
+      totalRequired: m.totalQty, currentStock: m.currentStock,
+      orderQty: m.orderQty, unitPrice: m.unitPrice,
+    })));
+  };
+
+  const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  // 자재별/RESIN/PAINT 뷰 렌더링
+  const renderMaterialTable = () => (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+          <SortTh field="materialCode" label="자재코드" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
+          <th className="px-2 py-2 text-left cursor-pointer hover:text-indigo-600 select-none min-w-[200px]"
+            onClick={() => handleSort('materialName')}>
+            자재명 {sortKey === 'materialName' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
+          </th>
+          <SortTh field="materialType" label="유형" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="center" />
+          <SortTh field="unitPrice" label="단가" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          {Array.from({ length: 12 }, (_, i) => (
+            <th key={i} className="px-1.5 py-2 text-right w-14">{i + 1}월</th>
+          ))}
+          <SortTh field="totalQty" label="합계" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          <SortTh field="currentStock" label="현재고" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          <SortTh field="orderQty" label="발주량" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+          <SortTh field="totalCost" label="금액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+        </tr></thead>
+        <tbody>
+          {pageData.map(m => (
+            <tr key={m.materialCode} className="border-b border-slate-50 hover:bg-slate-50">
+              <td className="px-2 py-1.5 font-mono text-indigo-600 whitespace-nowrap sticky left-0 bg-white">{m.materialCode}</td>
+              <td className="px-2 py-1.5 min-w-[200px]" title={m.materialName}>
+                <span className="block truncate max-w-[200px]">{m.materialName}</span>
+              </td>
+              <td className="px-2 py-1.5 text-center">
+                <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
+              </td>
+              <td className="px-2 py-1.5 text-right font-mono text-slate-500">{Math.round(m.unitPrice).toLocaleString()}</td>
+              {m.monthlyQty.map((q, i) => (
+                <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+              ))}
+              <td className="px-2 py-1.5 text-right font-mono font-bold">{Math.round(m.totalQty).toLocaleString()}</td>
+              <td className="px-2 py-1.5 text-right font-mono text-slate-500">{m.currentStock > 0 ? Math.round(m.currentStock).toLocaleString() : '-'}</td>
+              <td className={`px-2 py-1.5 text-right font-mono font-bold ${m.orderQty > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                {m.orderQty > 0 ? Math.round(m.orderQty).toLocaleString() : '-'}
+              </td>
+              <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Pagination page={page} setPage={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
+    </div>
+  );
+
+  // 업체별 뷰 렌더링
+  const renderSupplierTable = () => (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
+        <span className="text-xs font-bold text-slate-600">{supplierData.length}개 업체</span>
+        <button onClick={toggleAllSuppliers}
+          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200">
+          {expandedSuppliers.size === supplierData.length ? '전체 접기' : '전체 펼치기'}
+        </button>
+      </div>
+      <table className="w-full text-xs">
+        <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+          <th className="px-3 py-2 text-left sticky left-0 bg-slate-50">업체명</th>
+          <th className="px-3 py-2 text-right">자재수</th>
+          {Array.from({ length: 12 }, (_, i) => (
+            <th key={i} className="px-1.5 py-2 text-right w-14">{i + 1}월</th>
+          ))}
+          <th className="px-3 py-2 text-right font-bold">총금액</th>
+          <th className="px-3 py-2 text-right">발주금액</th>
+          <th className="px-2 py-2 text-center">발주서</th>
+        </tr></thead>
+        <tbody>
+          {supplierData.map(s => {
+            const isExpanded = expandedSuppliers.has(s.name);
+            return (
+              <React.Fragment key={s.name}>
+                <tr className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                  onClick={() => toggleSupplier(s.name)}>
+                  <td className="px-3 py-2 font-bold text-slate-700 sticky left-0 bg-white">
+                    <span className={`inline-block w-4 text-indigo-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                    {s.name}
+                  </td>
+                  <td className="px-3 py-2 text-right text-slate-500">{s.materialCount}</td>
+                  {s.monthlyQty.map((q, i) => (
+                    <td key={i} className="px-1.5 py-2 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                  ))}
+                  <td className="px-3 py-2 text-right font-mono font-bold">{fmt(s.totalCost)}</td>
+                  <td className="px-3 py-2 text-right font-mono text-red-600">{s.totalOrderAmount > 0 ? fmt(s.totalOrderAmount) : '-'}</td>
+                  <td className="px-2 py-2 text-center">
+                    {s.totalOrderAmount > 0 && (
+                      <button onClick={(e) => { e.stopPropagation(); handleDownloadPO(s.name, s.materials); }}
+                        className="text-indigo-500 hover:text-indigo-700" title="발주서 다운로드">
+                        <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {isExpanded && s.materials
+                  .sort((a, b) => b.totalCost - a.totalCost)
+                  .map(m => (
+                  <tr key={m.materialCode} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-100/50">
+                    <td className="pl-9 pr-2 py-1.5 sticky left-0 bg-slate-50/50">
+                      <span className="font-mono text-indigo-600 text-[10px]">{m.materialCode}</span>
+                      <span className="ml-1.5 text-slate-500 truncate">{m.materialName}</span>
+                      <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-mono text-slate-400 text-[10px]">@{Math.round(m.unitPrice).toLocaleString()}</td>
+                    {m.monthlyQty.map((q, i) => (
+                      <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px] text-slate-500">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                    ))}
+                    <td className="px-3 py-1.5 text-right font-mono text-[10px] font-bold text-slate-600">{fmt(m.totalCost)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono text-[10px]">
+                      {m.orderQty > 0 && <span className="text-red-600">{Math.round(m.orderQty).toLocaleString()}</span>}
+                    </td>
+                    <td className="px-2 py-1.5"></td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* 모드 전환 + 필터 */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
+      </div>
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="flex gap-1">
-          <button onClick={() => setViewMode('material')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === 'material' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-            자재별
-          </button>
-          <button onClick={() => setViewMode('supplier')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === 'supplier' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-            업체별
-          </button>
-        </div>
-        <div className="flex gap-1 flex-wrap">
-          {types.map(t => (
-            <button key={t} onClick={() => setTypeFilter(t)}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold ${typeFilter === t ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
-              {t}
+          {VIEW_TABS.map(tab => (
+            <button key={tab.id} onClick={() => { setViewMode(tab.id); setPage(0); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === tab.id ? (
+                tab.id === 'resin' ? 'bg-indigo-600 text-white' :
+                tab.id === 'paint' ? 'bg-amber-600 text-white' :
+                'bg-indigo-600 text-white'
+              ) : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+              {tab.label}
             </button>
           ))}
         </div>
+        {(viewMode === 'material' || viewMode === 'supplier') && (
+          <div className="flex gap-1 flex-wrap">
+            {types.map(t => (
+              <button key={t} onClick={() => { setTypeFilter(t); setPage(0); }}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold ${typeFilter === t ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard label="자재 종류" value={`${filtered.length}건`} color="indigo" />
-        <KPICard label="총 소요금액 (조달기준)" value={fmt(totalCost)}
-          sub={totalCost !== summary.totalMaterial ? `매출매칭 ${fmt(summary.totalMaterial)}` : undefined}
-          color="violet" />
-        <KPICard label="BOM매칭 제품" value={`${summary.matchedCount}건`} color="emerald" />
-        <KPICard label="업체 수" value={`${supplierData.length}곳`} color="slate" />
+        <KPICard label="총 소요금액" value={fmt(filtered.reduce((s, m) => s + m.totalCost, 0))} color="violet" />
+        <KPICard label="업체 수" value={`${supplierData.length}곳`} color="emerald" />
+        <KPICard label="발주 필요 금액" value={fmt(filtered.reduce((s, m) => s + m.orderQty * m.unitPrice, 0))} color="red" />
       </div>
 
-      {/* 자재별 테이블 */}
-      {viewMode === 'material' && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
-              <th className="px-2 py-2 text-left sticky left-0 bg-slate-50">자재코드</th>
-              <th className="px-2 py-2 text-left">자재명</th>
-              <th className="px-2 py-2 text-center">유형</th>
-              <th className="px-2 py-2 text-right">단가</th>
-              {Array.from({ length: 12 }, (_, i) => (
-                <th key={i} className="px-1.5 py-2 text-right w-14">{i + 1}월</th>
-              ))}
-              <th className="px-2 py-2 text-right font-bold">합계</th>
-              <th className="px-2 py-2 text-right">금액</th>
-            </tr></thead>
-            <tbody>
-              {filtered.slice(0, 80).map(m => (
-                <tr key={m.materialCode} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-2 py-1.5 font-mono text-indigo-600 whitespace-nowrap sticky left-0 bg-white">{m.materialCode}</td>
-                  <td className="px-2 py-1.5 truncate max-w-[120px]">{m.materialName}</td>
-                  <td className="px-2 py-1.5 text-center">
-                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${
-                      m.materialType === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
-                      m.materialType === 'PAINT' ? 'bg-amber-100 text-amber-700' :
-                      m.materialType === '외주' ? 'bg-blue-100 text-blue-700' :
-                      'bg-emerald-100 text-emerald-700'
-                    }`}>{m.materialType}</span>
-                  </td>
-                  <td className="px-2 py-1.5 text-right font-mono text-slate-500">{Math.round(m.unitPrice).toLocaleString()}</td>
-                  {m.monthlyQty.map((q, i) => (
-                    <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
-                  ))}
-                  <td className="px-2 py-1.5 text-right font-mono font-bold">{Math.round(m.monthlyQty.reduce((s, q) => s + q, 0)).toLocaleString()}</td>
-                  <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filtered.length > 80 && (
-            <div className="text-center py-2 text-xs text-slate-400">상위 80건 표시 (전체 {filtered.length}건)</div>
-          )}
-        </div>
-      )}
-
-      {/* 업체별 테이블 (펼침 가능) */}
-      {viewMode === 'supplier' && (
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
-              <th className="px-3 py-2 text-left sticky left-0 bg-slate-50">업체명</th>
-              <th className="px-3 py-2 text-right">자재수</th>
-              {Array.from({ length: 12 }, (_, i) => (
-                <th key={i} className="px-1.5 py-2 text-right w-14">{i + 1}월</th>
-              ))}
-              <th className="px-3 py-2 text-right font-bold">총금액</th>
-            </tr></thead>
-            <tbody>
-              {supplierData.map(s => {
-                const isExpanded = expandedSuppliers.has(s.name);
-                return (
-                  <React.Fragment key={s.name}>
-                    {/* 업체 요약 행 */}
-                    <tr
-                      className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors"
-                      onClick={() => toggleSupplier(s.name)}
-                    >
-                      <td className="px-3 py-2 font-bold text-slate-700 sticky left-0 bg-white">
-                        <span className={`inline-block w-4 text-indigo-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
-                        {s.name}
-                      </td>
-                      <td className="px-3 py-2 text-right text-slate-500">{s.materialCount}</td>
-                      {s.monthlyQty.map((q, i) => (
-                        <td key={i} className="px-1.5 py-2 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
-                      ))}
-                      <td className="px-3 py-2 text-right font-mono font-bold">{fmt(s.totalCost)}</td>
-                    </tr>
-                    {/* 상세 자재 행 */}
-                    {isExpanded && s.materials
-                      .sort((a, b) => b.totalCost - a.totalCost)
-                      .map(m => (
-                      <tr key={m.materialCode} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-100/50">
-                        <td className="pl-9 pr-2 py-1.5 sticky left-0 bg-slate-50/50">
-                          <span className="font-mono text-indigo-600 text-[10px]">{m.materialCode}</span>
-                          <span className="ml-1.5 text-slate-500 truncate">{m.materialName}</span>
-                          <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-mono text-slate-400 text-[10px]">@{Math.round(m.unitPrice).toLocaleString()}</td>
-                        {m.monthlyQty.map((q, i) => (
-                          <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px] text-slate-500">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
-                        ))}
-                        <td className="px-3 py-1.5 text-right font-mono text-[10px] font-bold text-slate-600">{fmt(m.totalCost)}</td>
-                      </tr>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {(viewMode === 'material' || viewMode === 'resin' || viewMode === 'paint') && renderMaterialTable()}
+      {viewMode === 'supplier' && renderSupplierTable()}
     </div>
   );
 };
@@ -701,6 +899,8 @@ const DataQualityBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     { label: 'BOM', ok: (result?.summary.productCount || 0) > 0 },
     { label: 'BOM매칭', ok: (result?.summary.matchedCount || 0) > 0 },
     { label: '자재수', ok: (result?.leafMaterials.length || 0) > 0 },
+    { label: '입고실적', ok: data.purchaseData.length > 0 },
+    { label: '재고', ok: data.inventoryItems.length > 0 },
   ];
   const okCount = items.filter(i => i.ok).length;
 

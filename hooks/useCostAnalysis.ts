@@ -10,12 +10,15 @@ import { ReferenceInfoRecord, MaterialCodeRecord, ProductCodeRecord } from '../u
 import {
   PurchasePrice, OutsourcePrice, PaintMixRatio, ItemStandardCost,
 } from '../utils/standardMaterialParser';
+import { PurchaseItem } from '../utils/purchaseDataParser';
+import { InventoryItem } from '../utils/inventoryDataParser';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   forecastService, bomMasterService, itemRevenueService,
   referenceInfoService, materialCodeService,
   purchasePriceService, outsourceInjPriceService, paintMixRatioService,
   itemStandardCostService, productCodeService,
+  purchaseService, inventoryService,
 } from '../services/supabaseService';
 import {
   calcAllProductCosts, CostEngineResult, ProductCostRow, LeafMaterialRow, CostEngineSummary,
@@ -41,13 +44,19 @@ export interface CostAnalysisData {
     monthlyRevenue: number[];
   } | null;
 
+  // 입고실적 (자재수율 계산용)
+  purchaseData: PurchaseItem[];
+
+  // 재고 데이터 (MRP 발주량 산출용)
+  inventoryItems: InventoryItem[];
+
   // Controls
   selectedMonth: number;  // -1 = all, 0-11 = specific month
   setSelectedMonth: (m: number) => void;
 }
 
 // Re-export for panels
-export type { ProductCostRow, LeafMaterialRow, CostEngineSummary };
+export type { ProductCostRow, LeafMaterialRow, CostEngineSummary, PurchaseItem, InventoryItem };
 
 // ============================================================
 // Safe helpers
@@ -79,6 +88,8 @@ export function useCostAnalysis(): CostAnalysisData {
   const [paintMixRatios, setPaintMixRatios] = useState<PaintMixRatio[]>([]);
   const [itemStandardCosts, setItemStandardCosts] = useState<ItemStandardCost[]>([]);
   const [productCodes, setProductCodes] = useState<ProductCodeRecord[]>([]);
+  const [purchaseData, setPurchaseData] = useState<PurchaseItem[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   // Load all data on mount
   useEffect(() => {
@@ -86,7 +97,7 @@ export function useCostAnalysis(): CostAnalysisData {
       setLoading(true);
       try {
         if (isSupabaseConfigured()) {
-          const [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes] =
+          const [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes] =
             await Promise.allSettled([
               forecastService.getItems('current'),
               bomMasterService.getAll(),
@@ -98,6 +109,8 @@ export function useCostAnalysis(): CostAnalysisData {
               paintMixRatioService.getAll(),
               itemStandardCostService.getAll(),
               productCodeService.getAll(),
+              purchaseService.getAll(),
+              inventoryService.getAll(),
             ]);
 
           const val = <T>(r: PromiseSettledResult<T[]>): T[] =>
@@ -113,6 +126,19 @@ export function useCostAnalysis(): CostAnalysisData {
           setPaintMixRatios(val(pmRes) as PaintMixRatio[]);
           setItemStandardCosts(val(iscRes));
           setProductCodes(val(pcRes) as ProductCodeRecord[]);
+          setPurchaseData(val(purchRes) as PurchaseItem[]);
+
+          // inventoryService.getAll() returns InventoryData (not array)
+          if (invRes.status === 'fulfilled') {
+            const inv = invRes.value as any;
+            const flat: InventoryItem[] = [
+              ...(inv.warehouse || []),
+              ...(inv.material || []),
+              ...(inv.parts || []),
+              ...(inv.product || []),
+            ];
+            setInventoryItems(flat);
+          }
         } else {
           setForecast(safeParseJson('dashboard_forecastData', []));
           setBomRecords(safeParseJson('dashboard_bomData', []));
@@ -122,6 +148,14 @@ export function useCostAnalysis(): CostAnalysisData {
           setPurchasePrices(safeParseJson('dashboard_purchasePriceMaster', []));
           setOutsourcePrices(safeParseJson('dashboard_outsourceInjPrice', []));
           setPaintMixRatios(safeParseJson('dashboard_paintMixRatioMaster', []));
+          setPurchaseData(safeParseJson('dashboard_purchaseData', []));
+          const invStored = safeParseJson<any>('dashboard_inventoryData', { warehouse: [], material: [], parts: [], product: [] });
+          setInventoryItems([
+            ...(invStored.warehouse || []),
+            ...(invStored.material || []),
+            ...(invStored.parts || []),
+            ...(invStored.product || []),
+          ]);
         }
       } catch (err) {
         console.error('[원가분석] 데이터 로드 실패:', err);
@@ -134,6 +168,7 @@ export function useCostAnalysis(): CostAnalysisData {
       const detail = (e as CustomEvent).detail;
       if (detail?.key === 'dashboard_forecastData' && detail?.data) setForecast(detail.data);
       else if (detail?.key === 'dashboard_bomData' && detail?.data) setBomRecords(detail.data);
+      else if (detail?.key === 'dashboard_purchaseData' && detail?.data) setPurchaseData(detail.data);
     };
     window.addEventListener('dashboard-data-updated', onDataUpdate);
     return () => window.removeEventListener('dashboard-data-updated', onDataUpdate);
@@ -180,6 +215,7 @@ export function useCostAnalysis(): CostAnalysisData {
 
   return {
     loading, costResult, forecastSummary,
+    purchaseData, inventoryItems,
     selectedMonth, setSelectedMonth,
   };
 }

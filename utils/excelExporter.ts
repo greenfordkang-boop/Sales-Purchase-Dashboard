@@ -181,7 +181,35 @@ export function downloadPaintMixRatio(data: PaintMixRatio[]) {
   saveWorkbook(wb, '도료배합비율.xlsx');
 }
 
-/** (7) 품목매출현황 다운로드 */
+/** (7) 업체별 발주서 다운로드 (MRP) */
+export function downloadPurchaseOrder(
+  supplierName: string,
+  materials: { materialCode: string; materialName: string; materialType: string; unit: string; totalRequired: number; currentStock: number; orderQty: number; unitPrice: number }[],
+): void {
+  const orderItems = materials.filter(m => m.orderQty > 0);
+  if (orderItems.length === 0) return;
+
+  const headers = ['자재코드', '자재명', '유형', '단위', '소요량', '현재고', '발주량', '단가', '금액'];
+  const rows = orderItems.map(m => [
+    m.materialCode, m.materialName, m.materialType, m.unit,
+    Math.round(m.totalRequired),
+    Math.round(m.currentStock),
+    Math.round(m.orderQty),
+    Math.round(m.unitPrice),
+    Math.round(m.orderQty * m.unitPrice),
+  ]);
+
+  // 합계 행
+  const totalAmount = orderItems.reduce((s, m) => s + m.orderQty * m.unitPrice, 0);
+  rows.push(['', '', '', '', '', '', '', '합계', Math.round(totalAmount)]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '발주서');
+  saveWorkbook(wb, `발주서_${supplierName}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+/** (8) 품목매출현황 다운로드 */
 export function downloadItemRevenue(data: ItemRevenueRow[]) {
   const headers = ['기간', '거래선', '차종', '품번', '고객사 P/N', '품명', '수량', '금액'];
   const rows = data.map(d => [
