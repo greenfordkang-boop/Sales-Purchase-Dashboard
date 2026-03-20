@@ -1850,7 +1850,10 @@ const BomReviewView: React.FC = () => {
                             if (newSupply !== oldSupply) refUpdates.supplyType = newSupply;
                             if (newSupplier !== oldSupplier) refUpdates.supplier = newSupplier;
                             if (Object.keys(refUpdates).length > 0) {
-                              await referenceInfoService.updateFields(pn, refUpdates);
+                              // BOM 품번이 customer_pn일 수 있으므로 refInfoMap에서 실제 item_code 조회
+                              const riRec = refInfoMap.get(normalizePn(pn));
+                              const updateCode = riRec?.itemCode || pn;
+                              await referenceInfoService.updateFields(updateCode, refUpdates);
                               const ri = await referenceInfoService.getAll();
                               setRefInfo(ri);
                             }

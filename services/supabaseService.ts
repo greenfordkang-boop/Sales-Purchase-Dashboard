@@ -2584,16 +2584,28 @@ export const referenceInfoService = {
         .select('item_code')
         .eq('item_code', itemCode)
         .limit(1);
-      // 정규화 비교 fallback
+      // 정규화 비교 fallback (item_code → customer_pn 순)
       let actualItemCode = itemCode;
       if (!data || data.length === 0) {
-        const { data: all } = await supabase!
+        // customer_pn으로 시도 (BOM 품번이 customer_pn인 경우)
+        const { data: custMatch } = await supabase!
           .from('reference_info_master')
-          .select('item_code');
-        const match = all?.find(r =>
-          r.item_code.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode
-        );
-        if (match) actualItemCode = match.item_code;
+          .select('item_code')
+          .eq('customer_pn', itemCode)
+          .limit(1);
+        if (custMatch && custMatch.length > 0) {
+          actualItemCode = custMatch[0].item_code;
+        } else {
+          // 전체 정규화 비교 fallback
+          const { data: all } = await supabase!
+            .from('reference_info_master')
+            .select('item_code, customer_pn');
+          const match = all?.find(r =>
+            r.item_code.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode ||
+            (r.customer_pn && r.customer_pn.trim().toUpperCase().replace(/[\s\-_\.]+/g, '') === normCode)
+          );
+          if (match) actualItemCode = match.item_code;
+        }
       } else {
         actualItemCode = data[0].item_code;
       }
