@@ -1240,9 +1240,10 @@ const BomReviewView: React.FC = () => {
       const nodeAmount = node.qty * nodePrice;
       const effectiveType = node.partType || node.processType || node.supplyType || '';
       const badge = typeBadge(isVirtualPaint ? '도장' : effectiveType);
-      // 구입처 표시: refInfoMap에서 최신 supplyType 직접 조회 (트리 rebuild 의존 X)
+      // 구입처 표시: 실제 supplier(회사명) 우선, 없으면 supplyType(자작/구매/외주) 표시
       const nodeRef = isVirtualPaint ? undefined : refInfoMap.get(normalizePn(node.pn));
-      const displaySupplier = nodeRef?.supplyType || node.supplyType || node.supplier || '';
+      const actualSupplier = node.supplier || nodeRef?.supplier || '';
+      const displaySupplier = actualSupplier || nodeRef?.supplyType || node.supplyType || '';
 
       const renderEditableCell = (
         field: EditCell['field'],
