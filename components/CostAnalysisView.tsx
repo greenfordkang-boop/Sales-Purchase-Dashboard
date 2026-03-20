@@ -235,12 +235,12 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     <div className="space-y-4">
       <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KPICard label="총 표준재료비" value={fmt(summary.totalMaterial)} sub={`재료비율 ${ratio.toFixed(1)}%`} color="indigo" />
-        {summary.byType.slice(0, 3).map(t => (
+        {summary.byType.map(t => (
           <KPICard key={t.name} label={t.name} value={fmt(t.amount)}
             sub={`${summary.totalMaterial > 0 ? (t.amount / summary.totalMaterial * 100).toFixed(1) : 0}%`}
-            color={t.name === 'RESIN' ? 'violet' : t.name === 'PAINT' ? 'amber' : 'emerald'} />
+            color={t.name === 'RESIN' ? 'violet' : t.name === 'PAINT' ? 'amber' : t.name === '사출' ? 'violet' : t.name === '도장' ? 'amber' : t.name === '외주' ? 'red' : 'emerald'} />
         ))}
       </div>
 
