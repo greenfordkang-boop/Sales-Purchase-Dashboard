@@ -129,20 +129,34 @@ const fetchAllRows = async (
   let allRows: any[] = [];
 
   while (true) {
-    let query = supabase!
-      .from(table)
-      .select('*')
-      .order(orderBy, orderOpts || {})
-      .range(from, from + pageSize - 1);
+    let lastError: any = null;
+    let data: any[] | null = null;
 
-    if (extraOrder) {
-      query = query.order(extraOrder.column, { ascending: extraOrder.ascending ?? true });
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let query = supabase!
+        .from(table)
+        .select('*')
+        .order(orderBy, orderOpts || {})
+        .range(from, from + pageSize - 1);
+
+      if (extraOrder) {
+        query = query.order(extraOrder.column, { ascending: extraOrder.ascending ?? true });
+      }
+
+      const result = await query;
+      if (result.error) {
+        if (checkTableError(result.error, table)) return allRows.length > 0 ? allRows : [];
+        lastError = result.error;
+        if (attempt < 3) await sleep(500 * attempt);
+        continue;
+      }
+      data = result.data;
+      lastError = null;
+      break;
     }
 
-    const { data, error } = await query;
-    if (error) {
-      if (checkTableError(error, table)) return [];
-      handleError(error, `${table} fetchAll`);
+    if (lastError) {
+      handleError(lastError, `${table} fetchAll (page ${from})`);
       break;
     }
     if (!data || data.length === 0) break;
@@ -2127,7 +2141,7 @@ export const bomMasterService = {
 
     try {
       const data = await fetchAllRows('bom_master', 'parent_pn');
-      return data.map((row: any) => ({
+      const records = data.map((row: any) => ({
         parentPn: row.parent_pn || '',
         childPn: row.child_pn || '',
         level: row.level || 1,
@@ -2136,9 +2150,30 @@ export const bomMasterService = {
         partType: row.part_type || '',
         supplier: row.supplier || '',
       }));
-    } catch {
+      if (records.length > 0) {
+        console.log(`✅ bom_master 로드: ${records.length}건 (Supabase)`);
+        try { safeSetItem('dashboard_bomMasterData', JSON.stringify(records)); } catch { /* ignore */ }
+      } else {
+        console.warn('⚠️ bom_master Supabase 응답 0건 — localStorage 폴백 시도');
+        const stored = localStorage.getItem('dashboard_bomMasterData');
+        if (stored) {
+          const cached = JSON.parse(stored) as BomMasterRecord[];
+          if (cached.length > 0) {
+            console.log(`📦 bom_master localStorage 캐시: ${cached.length}건`);
+            return cached;
+          }
+        }
+      }
+      return records;
+    } catch (err) {
+      console.error('❌ bom_master 로드 실패:', err);
       const stored = localStorage.getItem('dashboard_bomMasterData');
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        const cached = JSON.parse(stored) as BomMasterRecord[];
+        console.log(`📦 bom_master localStorage 폴백: ${cached.length}건`);
+        return cached;
+      }
+      return [];
     }
   },
 

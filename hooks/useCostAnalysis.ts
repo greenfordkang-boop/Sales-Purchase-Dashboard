@@ -116,8 +116,16 @@ export function useCostAnalysis(): CostAnalysisData {
           const val = <T>(r: PromiseSettledResult<T[]>): T[] =>
             r.status === 'fulfilled' ? r.value : [];
 
+          // 실패한 서비스 로그
+          const names = ['forecast', 'bomMaster', 'itemRevenue', 'refInfo', 'materialCodes', 'purchasePrices', 'outsourcePrices', 'paintMixRatios', 'itemStandardCosts', 'productCodes', 'purchase', 'inventory'];
+          [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes].forEach((r, i) => {
+            if (r.status === 'rejected') console.error(`[원가분석] ${names[i]} 로드 실패:`, r.reason);
+          });
+
           setForecast(val(fcRes));
-          setBomRecords(val(bomRes) as BomRecord[]);
+          const bomData = val(bomRes) as BomRecord[];
+          console.log(`[원가분석] 데이터 로드: forecast=${val(fcRes).length}, bom=${bomData.length}, refInfo=${val(riRes).length}, materialCodes=${val(mcRes).length}, purchasePrices=${val(ppRes as PromiseSettledResult<PurchasePrice[]>).length}`);
+          setBomRecords(bomData);
           setItemRevenue(val(revRes));
           setRefInfo(val(riRes));
           setMaterialCodes(val(mcRes));
