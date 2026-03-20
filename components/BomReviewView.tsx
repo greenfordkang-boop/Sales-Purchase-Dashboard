@@ -86,6 +86,7 @@ interface PaintDetail {
 
 interface SelectedNodeInfo {
   pn: string;
+  parentPn: string;
   name: string;
   partType: string;
   supplier: string;
@@ -1138,6 +1139,7 @@ const BomReviewView: React.FC = () => {
       const paint = getPaintInfo(realPn);
       setSelectedNodeInfo({
         pn: node.pn,
+        parentPn,
         name: node.name,
         partType: '도장',
         supplier: '',
@@ -1189,9 +1191,10 @@ const BomReviewView: React.FC = () => {
     const ri = refInfoMap.get(normalizePn(node.pn));
     setSelectedNodeInfo({
       pn: node.pn,
+      parentPn,
       name: node.name,
       partType: effectiveType,
-      supplier: node.supplier,
+      supplier: node.supplier || ri?.supplier || '',
       supplyType: ri?.supplyType || node.supplyType || '',
       unitQty: node.unitQty,
       price,
@@ -1850,10 +1853,16 @@ const BomReviewView: React.FC = () => {
                             if (newSupply !== oldSupply) refUpdates.supplyType = newSupply;
                             if (newSupplier !== oldSupplier) refUpdates.supplier = newSupplier;
                             if (Object.keys(refUpdates).length > 0) {
-                              // BOM 품번이 customer_pn일 수 있으므로 refInfoMap에서 실제 item_code 조회
+                              // 1) reference_info_master 업데이트
                               const riRec = refInfoMap.get(normalizePn(pn));
                               const updateCode = riRec?.itemCode || pn;
                               await referenceInfoService.updateFields(updateCode, refUpdates);
+                              // 2) bom_master supplier도 함께 업데이트 (트리 노드가 bom_master에서 직접 읽으므로)
+                              if (newSupplier !== oldSupplier && selectedNodeInfo.parentPn) {
+                                await bomMasterService.updateRecord(selectedNodeInfo.parentPn, pn, { supplier: newSupplier });
+                                const bom = await bomMasterService.getAll();
+                                setBomRecords(bom);
+                              }
                               const ri = await referenceInfoService.getAll();
                               setRefInfo(ri);
                             }

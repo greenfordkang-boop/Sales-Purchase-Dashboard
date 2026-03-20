@@ -107,7 +107,7 @@ export function expandForwardTree(
     qty: parentQty,
     unitQty: parentQty,
     partType: '',
-    supplier: '',
+    supplier: ref?.supplier || '',
     children: [],
     ...(ref ? {
       netWeight: ref.netWeight || undefined,
@@ -143,7 +143,7 @@ export function expandForwardTree(
         qty: cumulativeQty,
         unitQty: child.qty,
         partType: child.partType || '',
-        supplier: child.supplier || '',
+        supplier: child.supplier || childRef?.supplier || '',
         children: [],
         ...(childRef ? {
           netWeight: childRef.netWeight || undefined,
