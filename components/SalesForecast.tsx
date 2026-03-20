@@ -292,12 +292,19 @@ const SalesForecast: React.FC = () => {
     if (filteredByCustomer.length === 0) return [];
     const hasPrev = filteredPrevByCustomer.length > 0;
     return MONTH_LABELS.map((label, idx) => {
-      const revenue = filteredByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0);
-      const prevRevenue = hasPrev ? filteredPrevByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0) : 0;
+      // "전체 고객사"일 때 summary.monthlyRevenueTotals 사용 (Excel 합계행 기준, 수식 캐시 이슈 보완)
+      const revenue = (selectedCustomer === 'All' && summary?.monthlyRevenueTotals?.[idx] != null)
+        ? summary.monthlyRevenueTotals[idx]
+        : filteredByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0);
+      const prevRevenue = hasPrev
+        ? ((selectedCustomer === 'All' && prevSummary?.monthlyRevenueTotals?.[idx] != null)
+          ? prevSummary.monthlyRevenueTotals[idx]
+          : filteredPrevByCustomer.reduce((sum, item) => sum + (item.monthlyRevenue[idx] || 0), 0))
+        : 0;
       const diff = hasPrev ? revenue - prevRevenue : 0;
       return { month: label, revenue, prevRevenue: hasPrev ? prevRevenue : undefined, diff };
     });
-  }, [filteredByCustomer, filteredPrevByCustomer]);
+  }, [filteredByCustomer, filteredPrevByCustomer, selectedCustomer, summary, prevSummary]);
 
   // Month-over-month change data
   const monthlyChanges = useMemo(() => {
