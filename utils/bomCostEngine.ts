@@ -508,56 +508,67 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const refInfoMap = buildRefInfoMap(refInfo);
   const forwardMap = buildForwardMap(bomRecords);
 
-  // BOM Root 판별 (BomReviewView 동일)
-  const childSet = new Set<string>();
-  for (const rec of bomRecords) childSet.add(normalizePn(rec.childPn));
-
-  const rootPnSet = new Set<string>();
-  const rootPnOriginal = new Map<string, string>();
-  for (const rec of bomRecords) {
-    const norm = normalizePn(rec.parentPn);
-    if (!childSet.has(norm) && !rootPnSet.has(norm)) {
-      rootPnSet.add(norm);
-      rootPnOriginal.set(norm, rec.parentPn);
-    }
-  }
-
-  // Pre-compute materialCost & metadata for ALL BOM roots
-  const rootMaterialCostMap = new Map<string, number>();
-  const rootChildCountMap = new Map<string, number>();
-  const rootSourceMap = new Map<string, string>();
-  for (const norm of rootPnSet) {
-    const original = rootPnOriginal.get(norm) || '';
-    rootMaterialCostMap.set(norm, calcRootMaterialCost(original, forwardMap, priceData, refInfoMap, paintMixMap));
-    const children = forwardMap.get(norm) || [];
-    rootChildCountMap.set(norm, children.length);
-    if (children.length > 0) {
-      const { source } = getNodePrice(children[0].childPn, priceData, refInfoMap, paintMixMap);
-      rootSourceMap.set(norm, source);
-    }
-  }
-
-  // Build custPN → BOM root mapping (for forecast→BOM matching)
-  const custToRoot = new Map<string, string>();
+  // P/N 매핑 (이전 ProductMaterialCostView 동일)
+  const custToInternal = new Map<string, string>();
+  const internalToCust = new Map<string, string>();
   for (const pc of productCodes) {
-    const rootNorm = normalizePn(pc.productCode);
-    if (!rootPnSet.has(rootNorm)) continue;
-    if (pc.customerPn) custToRoot.set(normalizePn(pc.customerPn), rootNorm);
-    // pc.customer field may contain customer PNs (e.g., 84650G6080JAQ)
-    if (pc.customer && /^\d/.test(pc.customer)) custToRoot.set(normalizePn(pc.customer), rootNorm);
+    if (pc.productCode && pc.customerPn) {
+      custToInternal.set(normalizePn(pc.customerPn), normalizePn(pc.productCode));
+      internalToCust.set(normalizePn(pc.productCode), normalizePn(pc.customerPn));
+    }
+    // pc.customer field에 고객 PN이 저장된 경우 (e.g., 84650G6080JAQ)
+    if (pc.productCode && pc.customer && /^\d/.test(pc.customer)) {
+      const custNorm = normalizePn(pc.customer);
+      if (!custToInternal.has(custNorm)) custToInternal.set(custNorm, normalizePn(pc.productCode));
+    }
   }
   for (const ri of refInfo) {
-    const itemNorm = normalizePn(ri.itemCode);
-    if (!rootPnSet.has(itemNorm)) continue;
-    if (ri.customerPn) {
-      const custNorm = normalizePn(ri.customerPn);
-      if (!custToRoot.has(custNorm)) custToRoot.set(custNorm, itemNorm);
+    if (ri.itemCode && ri.customerPn) {
+      custToInternal.set(normalizePn(ri.customerPn), normalizePn(ri.itemCode));
+      internalToCust.set(normalizePn(ri.itemCode), normalizePn(ri.customerPn));
     }
+  }
+  // item_standard_cost에서 추가 P/N 매핑
+  for (const sc of itemStandardCosts) {
+    if (sc.customer_pn && sc.item_code) {
+      const cpn = normalizePn(sc.customer_pn);
+      const icode = normalizePn(sc.item_code);
+      if (!custToInternal.has(cpn)) custToInternal.set(cpn, icode);
+      if (!internalToCust.has(icode)) internalToCust.set(icode, cpn);
+    }
+  }
+
+  // BOM prefix index (fuzzy 매칭용 — 이전 코드 동일)
+  const bomPrefixIndex = new Map<string, string>();
+  for (const pn of forwardMap.keys()) {
+    for (let len = 8; len <= pn.length; len++) {
+      const p = pn.slice(0, len);
+      if (!bomPrefixIndex.has(p)) bomPrefixIndex.set(p, pn);
+    }
+  }
+
+  // BOM 부모 찾기 (이전 ProductMaterialCostView.findBomParent 동일)
+  function findBomParent(forecastPn: string): string | null {
+    const bomParent = normalizePn(forecastPn);
+    if (forwardMap.has(bomParent)) return bomParent;
+    const internal = custToInternal.get(bomParent);
+    if (internal && forwardMap.has(internal)) return internal;
+    const cust = internalToCust.get(bomParent);
+    if (cust && forwardMap.has(cust)) return cust;
+    // fuzzy prefix matching
+    if (bomParent.length >= 10) {
+      for (let pl = bomParent.length - 1; pl >= 8; pl--) {
+        const prefix = bomParent.slice(0, pl);
+        const candidate = bomPrefixIndex.get(prefix);
+        if (candidate && forwardMap.has(candidate)) return candidate;
+      }
+    }
+    return null;
   }
 
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
 
-  // Forecast-driven product list (forecast 순회 → BOM root 매칭)
+  // Forecast-driven product list (forecast 순회 → BOM parent 매칭)
   const products: ProductCostRow[] = [];
   let totalRevenue = 0;
   let totalMaterial = 0;
@@ -565,19 +576,18 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const processedFcPns = new Set<string>();
 
   for (const fc of forecastData) {
-    const fcPn = normalizePn(fc.partNo);
-    const fcNewPn = fc.newPartNo ? normalizePn(fc.newPartNo) : '';
+    // 이전 코드 동일: newPartNo 우선 사용
+    const forecastPn = normalizePn(fc.newPartNo || fc.partNo);
 
     // 동일 품번 중복 방지
-    if (processedFcPns.has(fcPn)) continue;
-    processedFcPns.add(fcPn);
+    if (processedFcPns.has(forecastPn)) continue;
+    processedFcPns.add(forecastPn);
 
-    // Find matching BOM root
-    let bomRootNorm = '';
-    if (rootPnSet.has(fcPn)) bomRootNorm = fcPn;
-    else if (fcNewPn && rootPnSet.has(fcNewPn)) bomRootNorm = fcNewPn;
-    else if (custToRoot.has(fcPn)) bomRootNorm = custToRoot.get(fcPn)!;
-    else if (fcNewPn && custToRoot.has(fcNewPn)) bomRootNorm = custToRoot.get(fcNewPn)!;
+    // BOM 매칭 (newPartNo 우선 → partNo 보조)
+    let bomParent = findBomParent(forecastPn);
+    if (!bomParent && fc.newPartNo) {
+      bomParent = findBomParent(fc.partNo);
+    }
 
     // Quantities (selectedMonth: -1=전체, 0~11=특정월)
     const qty = selectedMonth === -1 ? fc.totalQty : (fc.monthlyQty[selectedMonth] || 0);
@@ -585,8 +595,10 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       ? (fc.totalRevenue > 0 ? fc.totalRevenue : fc.unitPrice * fc.totalQty)
       : (fc.monthlyRevenue?.[selectedMonth] || fc.unitPrice * (fc.monthlyQty[selectedMonth] || 0));
 
-    // EA당 재료비 (BOM 매칭 성공 시에만)
-    const materialCost = bomRootNorm ? (rootMaterialCostMap.get(bomRootNorm) || 0) : 0;
+    // EA당 재료비 (BOM 매칭 시 on-demand 계산)
+    const materialCost = bomParent
+      ? calcRootMaterialCost(bomParent, forwardMap, priceData, refInfoMap, paintMixMap)
+      : 0;
     const materialTotal = qty * materialCost;
     const materialRatio = rev > 0 ? (materialTotal / rev) * 100 : 0;
 
@@ -596,10 +608,19 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       matchedCount++;
     }
 
-    // MRP용 리프 자재 수집 (BOM 매칭 + 수량 있을 때)
-    if (bomRootNorm && materialCost > 0 && fc.monthlyQty.some(q => q > 0)) {
-      const original = rootPnOriginal.get(bomRootNorm) || '';
-      collectLeafMaterials(original, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
+    // MRP용 리프 자재 수집
+    if (bomParent && materialCost > 0 && fc.monthlyQty.some(q => q > 0)) {
+      collectLeafMaterials(bomParent, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
+    }
+
+    // 출처 판별
+    let mainSource = '';
+    if (bomParent) {
+      const children = forwardMap.get(bomParent) || [];
+      if (children.length > 0) {
+        const { source } = getNodePrice(children[0].childPn, priceData, refInfoMap, paintMixMap);
+        mainSource = source;
+      }
     }
 
     products.push({
@@ -607,14 +628,14 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       name: fc.partName || '',
       customer: fc.customer || '',
       model: fc.model || '',
-      childCount: bomRootNorm ? (rootChildCountMap.get(bomRootNorm) || 0) : 0,
+      childCount: bomParent ? (forwardMap.get(bomParent)?.length || 0) : 0,
       sellingPrice: fc.unitPrice || 0,
       planQty: qty,
       expectedRevenue: rev,
       materialCost,
       materialTotal,
       materialRatio,
-      source: bomRootNorm ? (rootSourceMap.get(bomRootNorm) || '') : '',
+      source: mainSource,
     });
   }
 
