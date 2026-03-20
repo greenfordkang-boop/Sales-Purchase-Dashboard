@@ -418,15 +418,14 @@ function collectLeafMaterials(
 
   function addToAgg(code: string, pn: string, qtyPerRoot: number, price: number, source: string) {
     const ri = refInfoMap.get(code);
+    // 재질 유형을 먼저 확인 — 구매단가가 있어도 원재료는 RESIN/PAINT로 분류
+    const mt = materialTypeMap.get(code) || '';
     let matType = '구매';
-    if (source === '사출') matType = '사출';
+    if (/resin|수지/i.test(mt)) matType = 'RESIN';
+    else if (/paint|도료/i.test(mt)) matType = 'PAINT';
+    else if (source === '사출') matType = '사출';
     else if (source === '도장') matType = '도장';
     else if (source === '외주') matType = '외주';
-    else if (source === '재질') {
-      const mt = materialTypeMap.get(code) || '';
-      if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
-      else if (/paint|도장|도료/i.test(mt)) matType = 'PAINT';
-    }
 
     // 업체명 결정: 기준정보 → 구매/외주 데이터 → 자작 자동지정
     let supplier = ri?.supplier || '';
