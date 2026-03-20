@@ -568,6 +568,22 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
 
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
 
+  // 디버그: 매칭 진단
+  const fcSamples = forecastData.slice(0, 5).map(f => ({ pn: f.partNo, newPn: f.newPartNo, cust: f.customer }));
+  const c2iSample = [...custToInternal.entries()].slice(0, 5);
+  const fwdSample = [...forwardMap.keys()].slice(0, 5);
+  console.log(`[원가분석 매칭진단] forecast=${forecastData.length}건, custToInternal=${custToInternal.size}, forwardMap=${forwardMap.size}, bomPrefixIndex=${bomPrefixIndex.size}`);
+  console.log(`[원가분석 forecast샘플]`, JSON.stringify(fcSamples));
+  console.log(`[원가분석 custToInternal샘플]`, JSON.stringify(c2iSample));
+  console.log(`[원가분석 forwardMap샘플]`, JSON.stringify(fwdSample));
+  // 첫 3개 forecast에 대해 findBomParent 결과
+  for (const f of forecastData.slice(0, 3)) {
+    const fpn = normalizePn(f.newPartNo || f.partNo);
+    const result = findBomParent(fpn);
+    const altResult = f.newPartNo ? findBomParent(f.partNo) : null;
+    console.log(`[매칭시도] newPartNo="${f.newPartNo}" partNo="${f.partNo}" → fpn="${fpn}" → bomParent=${result}, alt=${altResult}`);
+  }
+
   // Forecast-driven product list (forecast 순회 → BOM parent 매칭)
   const products: ProductCostRow[] = [];
   let totalRevenue = 0;
