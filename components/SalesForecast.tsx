@@ -210,23 +210,17 @@ const SalesForecast: React.FC = () => {
       if (forecastItems.length > 0) {
         setPrevItems(forecastItems);
         safeSetItem(STORAGE_KEY_PREV_FORECAST, JSON.stringify(forecastItems));
-        forecastService.saveItems(forecastItems, 'previous').catch(err => console.error('이전 데이터 Supabase 저장 실패:', err));
         if (summary) {
           setPrevSummary(summary);
           safeSetItem(STORAGE_KEY_PREV_SUMMARY, JSON.stringify(summary));
-          forecastService.saveSummary(summary, 'previous').catch(err => console.error('이전 요약 Supabase 저장 실패:', err));
         }
       }
 
-      // Save items
+      // Save items & summary to state + localStorage
       setForecastItems(result.items);
       safeSetItem(STORAGE_KEY_FORECAST, JSON.stringify(result.items));
-      forecastService.saveItems(result.items, 'current').catch(err => console.error('매출계획 Supabase 저장 실패:', err));
-
-      // Save summary
       setSummary(result.summary);
       safeSetItem(STORAGE_KEY_FORECAST + '_summary', JSON.stringify(result.summary));
-      forecastService.saveSummary(result.summary, 'current').catch(err => console.error('요약 Supabase 저장 실패:', err));
 
       // Add upload history
       const newUpload: ForecastUpload = {
@@ -237,9 +231,38 @@ const SalesForecast: React.FC = () => {
       const updatedUploads = [newUpload, ...uploads];
       setUploads(updatedUploads);
       safeSetItem(STORAGE_KEY_UPLOADS, JSON.stringify(updatedUploads));
-      forecastService.saveUploads(updatedUploads).catch(err => console.error('업로드이력 Supabase 저장 실패:', err));
 
-      alert(`${result.items.length}개 품목 데이터가 로드되었습니다.\n연간 예상매출: ${formatWon(result.summary.totalRevenue)}`);
+      // Supabase 저장 (모두 await — 다른 기기에서 조회되도록)
+      const supabaseErrors: string[] = [];
+      if (isSupabaseConfigured()) {
+        // 이전 데이터 저장 (백그라운드 — 실패해도 계속)
+        if (forecastItems.length > 0) {
+          await forecastService.saveItems(forecastItems, 'previous').catch(() => {});
+          if (summary) await forecastService.saveSummary(summary, 'previous').catch(() => {});
+        }
+
+        // 현재 데이터 저장 (필수 — 실패 시 알림)
+        try { await forecastService.saveItems(result.items, 'current'); }
+        catch (e) { supabaseErrors.push('매출계획'); console.error('Supabase 매출계획 저장 실패:', e); }
+
+        try { await forecastService.saveSummary(result.summary, 'current'); }
+        catch (e) { supabaseErrors.push('요약'); console.error('Supabase 요약 저장 실패:', e); }
+
+        try { await forecastService.saveUploads(updatedUploads); }
+        catch (e) { supabaseErrors.push('업로드이력'); console.error('Supabase 업로드이력 저장 실패:', e); }
+      }
+
+      // 다른 탭/컴포넌트에 데이터 변경 알림
+      window.dispatchEvent(new CustomEvent('dashboard-data-updated', {
+        detail: { key: 'dashboard_forecastData', data: result.items },
+      }));
+
+      const msg = `${result.items.length}개 품목 데이터가 로드되었습니다.\n연간 예상매출: ${formatWon(result.summary.totalRevenue)}`;
+      if (supabaseErrors.length > 0) {
+        alert(`${msg}\n\n⚠️ 클라우드 저장 일부 실패: ${supabaseErrors.join(', ')}\n다른 기기에서 조회 안 될 수 있습니다.`);
+      } else {
+        alert(msg);
+      }
     } catch (err) {
       console.error('Forecast Excel parse error:', err);
       alert('파일 파싱 오류: ' + (err instanceof Error ? err.message : '알 수 없는 오류'));

@@ -2009,14 +2009,7 @@ export const forecastService = {
 
     if (!isSupabaseConfigured()) return;
 
-    // Delete existing summary for this version
-    const { error: deleteError } = await supabase!
-      .from('forecast_summary')
-      .delete()
-      .eq('version', version);
-
-    if (deleteError) console.error('forecast_summary delete error:', deleteError);
-
+    // null = 의도적 삭제 요청이 아니면 삭제하지 않음
     if (!data) return;
 
     const row = {
@@ -2031,6 +2024,14 @@ export const forecastService = {
       prev_revenue_totals: Array.isArray(data.prevRevenueTotals) ? data.prevRevenueTotals : null,
       revenue_diff: Array.isArray(data.revenueDiff) ? data.revenueDiff : null,
     };
+
+    // Delete existing summary for this version (only after validating new data)
+    const { error: deleteError } = await supabase!
+      .from('forecast_summary')
+      .delete()
+      .eq('version', version);
+
+    if (deleteError) console.error('forecast_summary delete error:', deleteError);
 
     const { error } = await supabase!
       .from('forecast_summary')
@@ -2074,6 +2075,9 @@ export const forecastService = {
 
     if (!isSupabaseConfigured()) return;
 
+    // Safety: don't delete if nothing to insert
+    if (data.length === 0) return;
+
     // Delete all and re-insert
     const { error: deleteError } = await supabase!
       .from('forecast_uploads')
@@ -2081,8 +2085,6 @@ export const forecastService = {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (deleteError) console.error('forecast_uploads delete error:', deleteError);
-
-    if (data.length === 0) return;
 
     const rows = data.map((item, idx) => ({
       upload_id: item.id || `upload_${Date.now()}_${idx}`,
