@@ -21,7 +21,7 @@ import {
   purchaseService, inventoryService, pnMappingService,
 } from '../services/supabaseService';
 import {
-  calcAllProductCosts, CostEngineResult, ProductCostRow, LeafMaterialRow, CostEngineSummary,
+  calcAllProductCosts, CostEngineResult, ProductCostRow, LeafMaterialRow, CostEngineSummary, ProductContribution,
 } from '../utils/bomCostEngine';
 
 // ============================================================

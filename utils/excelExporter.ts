@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import type { ProductInfoItem, PurchasePrice, OutsourcePrice, PaintMixRatio, MaterialPrice } from './standardMaterialParser';
 import type { BomMasterRecord, ReferenceInfoRecord, MaterialCodeRecord } from './bomMasterParser';
 import type { ItemRevenueRow } from './revenueDataParser';
+import type { LeafMaterialRow } from './bomCostEngine';
 
 /**
  * BOM 마스터 데이터를 MES 양식(mes_bom양식.xlsx) 형태로 다운로드
@@ -219,4 +220,29 @@ export function downloadItemRevenue(data: ItemRevenueRow[]) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '품목매출현황');
   saveWorkbook(wb, '품목매출현황.xlsx');
+}
+
+/** (9) 소요량 산출근거 다운로드 */
+export function downloadRequiredQtyBreakdown(material: LeafMaterialRow) {
+  const { productBreakdown } = material;
+  if (!productBreakdown || productBreakdown.length === 0) return;
+
+  const headers = [
+    '자재코드', '자재명', '단위', '제품코드', '제품명', '단위소요량',
+    ...Array.from({ length: 12 }, (_, i) => `${i + 1}월`),
+    '합계',
+  ];
+  const rows = productBreakdown.map(c => [
+    material.materialCode, material.materialName, material.unit,
+    c.productPn, c.productName,
+    Math.round(c.qtyPerUnit * 10000) / 10000,
+    ...c.monthlyQty.map(q => q > 0 ? Math.round(q) : ''),
+    Math.round(c.totalQty),
+  ]);
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '소요량근거');
+  const date = new Date().toISOString().slice(0, 10);
+  saveWorkbook(wb, `소요량근거_${material.materialCode}_${date}.xlsx`);
 }

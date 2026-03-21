@@ -52,6 +52,15 @@ export interface ProductCostRow {
   source: string;          // 가격 출처 요약
 }
 
+/** 제품별 소요량 분해 (산출근거) */
+export interface ProductContribution {
+  productPn: string;       // 제품 P/N (BOM 루트)
+  productName: string;     // 제품명
+  qtyPerUnit: number;      // 제품 1EA당 자재 소요량
+  monthlyQty: number[];    // 12개월 소요량 (= qtyPerUnit * forecast)
+  totalQty: number;        // 합계
+}
+
 /** MRP용 리프 자재 집계 */
 export interface LeafMaterialRow {
   materialCode: string;
@@ -63,6 +72,7 @@ export interface LeafMaterialRow {
   totalCost: number;
   supplier: string;
   parentProducts: string[];
+  productBreakdown: ProductContribution[];
 }
 
 export interface CostEngineSummary {
@@ -385,7 +395,7 @@ function collectLeafMaterials(
   priceData: PriceData,
   refInfoMap: Map<string, ReferenceInfoRecord>,
   paintMixMap: Map<string, PaintMixRatio>,
-  materialAgg: Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>,
+  materialAgg: Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string; contributions: Map<string, { qtyPerUnit: number; monthlyQty: number[] }> }>,
 ): void {
   const { materialTypeMap, matNameMap } = priceData;
 
@@ -510,24 +520,44 @@ function collectLeafMaterials(
     }
 
     // ── 집계 ──
+    const rootNorm = normalizePn(rootPn);
     const existing = materialAgg.get(aggCode);
     if (existing) {
       for (let m = 0; m < 12; m++) {
         existing.monthlyQty[m] += qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
       }
-      existing.parents.add(normalizePn(rootPn));
+      existing.parents.add(rootNorm);
+      // 제품별 소요량 추적
+      const contrib = existing.contributions.get(rootNorm);
+      if (contrib) {
+        contrib.qtyPerUnit += qtyPerRoot * qtyMultiplier;
+        for (let m = 0; m < 12; m++) {
+          contrib.monthlyQty[m] += qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
+        }
+      } else {
+        const cmq = new Array(12).fill(0);
+        for (let m = 0; m < 12; m++) {
+          cmq[m] = qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
+        }
+        existing.contributions.set(rootNorm, { qtyPerUnit: qtyPerRoot * qtyMultiplier, monthlyQty: cmq });
+      }
     } else {
       const mq = new Array(12).fill(0);
+      const cmq = new Array(12).fill(0);
       for (let m = 0; m < 12; m++) {
         mq[m] = qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
+        cmq[m] = mq[m];
       }
+      const contributions = new Map<string, { qtyPerUnit: number; monthlyQty: number[] }>();
+      contributions.set(rootNorm, { qtyPerUnit: qtyPerRoot * qtyMultiplier, monthlyQty: cmq });
       materialAgg.set(aggCode, {
         name: resolvedName,
         type: matType,
         monthlyQty: mq,
         unitPrice: aggPrice,
-        parents: new Set([normalizePn(rootPn)]),
+        parents: new Set([rootNorm]),
         supplier,
+        contributions,
       });
     }
   }
@@ -640,7 +670,8 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
     return null;
   }
 
-  const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string }>();
+  const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string; contributions: Map<string, { qtyPerUnit: number; monthlyQty: number[] }> }>();
+  const productNameMap = new Map<string, string>(); // bomParent → 제품명
 
   // Forecast-driven product list (forecast 순회 → BOM parent 매칭)
   const products: ProductCostRow[] = [];
@@ -684,6 +715,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
 
     // MRP용 리프 자재 수집
     if (bomParent && materialCost > 0 && fc.monthlyQty.some(q => q > 0)) {
+      productNameMap.set(normalizePn(bomParent), fc.partName || '');
       collectLeafMaterials(bomParent, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
     }
 
@@ -719,6 +751,20 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   const leafMaterials: LeafMaterialRow[] = [];
   for (const [code, agg] of materialAgg) {
     const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
+    // 제품별 분해 (ProductContribution[])
+    const breakdown: ProductContribution[] = [];
+    for (const [pn, contrib] of agg.contributions) {
+      const cTotal = contrib.monthlyQty.reduce((s, q) => s + q, 0);
+      breakdown.push({
+        productPn: pn,
+        productName: productNameMap.get(pn) || pn,
+        qtyPerUnit: contrib.qtyPerUnit,
+        monthlyQty: contrib.monthlyQty,
+        totalQty: cTotal,
+      });
+    }
+    breakdown.sort((a, b) => b.totalQty - a.totalQty);
+
     leafMaterials.push({
       materialCode: code,
       materialName: agg.name,
@@ -729,6 +775,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       totalCost: totalQty * agg.unitPrice,
       supplier: agg.supplier,
       parentProducts: Array.from(agg.parents),
+      productBreakdown: breakdown,
     });
   }
   leafMaterials.sort((a, b) => b.totalCost - a.totalCost);

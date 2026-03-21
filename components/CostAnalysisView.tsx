@@ -2,10 +2,11 @@
  * CostAnalysisView — 원가분석 통합 워크벤치 v4
  * 이슈 #1~#9 고도화: byType정확화, 전체정렬, 수율계산, MRP발주, RESIN/PAINT뷰
  */
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useCostAnalysis, CostAnalysisData, ProductCostRow, LeafMaterialRow } from '../hooks/useCostAnalysis';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
-import { downloadPurchaseOrder } from '../utils/excelExporter';
+import { downloadPurchaseOrder, downloadRequiredQtyBreakdown } from '../utils/excelExporter';
+import type { ProductContribution } from '../utils/bomCostEngine';
 
 type AnalysisMode = 'standard' | 'product' | 'yield' | 'mrp';
 
@@ -450,6 +451,80 @@ interface YieldRow extends LeafMaterialRow {
   yieldRate: number;
 }
 
+/** 소요량 산출근거 팝업 셀 */
+const RequiredQtyCell: React.FC<{
+  row: YieldRow;
+  selectedMonth: number;
+}> = ({ row, selectedMonth }) => {
+  const [show, setShow] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  const open = useCallback(() => {
+    clearTimeout(hideTimer.current);
+    setShow(true);
+  }, []);
+  const close = useCallback(() => {
+    hideTimer.current = setTimeout(() => setShow(false), 200);
+  }, []);
+
+  const breakdown = row.productBreakdown || [];
+  const hasBreakdown = breakdown.length > 0;
+
+  return (
+    <td className="px-3 py-1.5 text-right font-mono relative"
+      onMouseEnter={hasBreakdown ? open : undefined}
+      onMouseLeave={hasBreakdown ? close : undefined}>
+      <span className={hasBreakdown ? 'border-b border-dashed border-slate-400 cursor-default' : ''}>
+        {Math.round(row.requiredQty).toLocaleString()}
+      </span>
+      {show && hasBreakdown && (
+        <div className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-2xl p-3 min-w-[420px] max-h-[320px] overflow-y-auto text-[11px]"
+          onMouseEnter={open} onMouseLeave={close}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-bold text-slate-200">소요량 산출근거 — {row.materialName}</span>
+            <button onClick={() => downloadRequiredQtyBreakdown(row)}
+              className="px-2 py-0.5 bg-indigo-500 hover:bg-indigo-400 rounded text-[10px] font-bold text-white flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              Excel
+            </button>
+          </div>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-600 text-slate-400">
+                <th className="text-left py-1 pr-2">제품코드</th>
+                <th className="text-left py-1 pr-2">제품명</th>
+                <th className="text-right py-1 pr-2">단위소요량</th>
+                <th className="text-right py-1 pr-2">{selectedMonth === -1 ? '소요량' : `${selectedMonth + 1}월`}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.map(c => {
+                const qty = selectedMonth === -1 ? c.totalQty : (c.monthlyQty[selectedMonth] || 0);
+                return (
+                  <tr key={c.productPn} className="border-b border-slate-700/50 hover:bg-slate-700/50">
+                    <td className="py-1 pr-2 font-mono text-indigo-300">{c.productPn}</td>
+                    <td className="py-1 pr-2 truncate max-w-[140px] text-slate-300" title={c.productName}>{c.productName}</td>
+                    <td className="py-1 pr-2 text-right font-mono text-slate-300">
+                      {c.qtyPerUnit < 0.01 ? c.qtyPerUnit.toFixed(4) : c.qtyPerUnit < 1 ? c.qtyPerUnit.toFixed(3) : c.qtyPerUnit.toFixed(2)}
+                    </td>
+                    <td className="py-1 pr-2 text-right font-mono font-bold text-white">{Math.round(qty).toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-slate-500 font-bold text-indigo-300">
+                <td className="py-1" colSpan={3}>합계 ({breakdown.length}건)</td>
+                <td className="py-1 pr-2 text-right font-mono">{Math.round(row.requiredQty).toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </td>
+  );
+};
+
 const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { costResult, selectedMonth, setSelectedMonth, purchaseData } = data;
   const [sortKey, setSortKey] = useState<YieldSortKey>('totalCost');
@@ -581,7 +656,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
                 </td>
                 <td className="px-3 py-1.5 text-slate-500 truncate max-w-[120px]" title={m.supplier}>{m.supplier || '-'}</td>
-                <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.requiredQty).toLocaleString()}</td>
+                <RequiredQtyCell row={m} selectedMonth={selectedMonth} />
                 <td className="px-3 py-1.5 text-right font-mono">{m.inboundQty > 0 ? Math.round(m.inboundQty).toLocaleString() : '-'}</td>
                 <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-amber-600' : m.diff < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                   {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diff > 0 ? '+' : '') + Math.round(m.diff).toLocaleString() : '-'}
