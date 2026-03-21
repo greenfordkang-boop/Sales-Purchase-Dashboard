@@ -6,7 +6,6 @@ import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useCostAnalysis, CostAnalysisData, ProductCostRow, LeafMaterialRow } from '../hooks/useCostAnalysis';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { downloadPurchaseOrder, downloadRequiredQtyBreakdown } from '../utils/excelExporter';
-import type { ProductContribution } from '../utils/bomCostEngine';
 
 type AnalysisMode = 'standard' | 'product' | 'yield' | 'mrp';
 
@@ -451,7 +450,7 @@ interface YieldRow extends LeafMaterialRow {
   yieldRate: number;
 }
 
-/** 소요량 산출근거 팝업 셀 */
+/** 소요량 산출근거 팝업 셀 (자재수율 패널) */
 const RequiredQtyCell: React.FC<{
   row: YieldRow;
   selectedMonth: number;
@@ -701,6 +700,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const [viewMode, setViewMode] = useState<MRPViewMode>('material');
   const [typeFilter, setTypeFilter] = useState<string>('전체');
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
+  const [expandedMaterials, setExpandedMaterials] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<MRPSortKey>('totalCost');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
@@ -820,9 +820,32 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 
   const pageData = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+  const toggleMaterial = (code: string) => {
+    setExpandedMaterials(prev => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code); else next.add(code);
+      return next;
+    });
+  };
+
+  const toggleAllMaterials = () => {
+    if (expandedMaterials.size === pageData.length) {
+      setExpandedMaterials(new Set());
+    } else {
+      setExpandedMaterials(new Set(pageData.map(m => m.materialCode)));
+    }
+  };
+
   // 자재별/RESIN/PAINT 뷰 렌더링
   const renderMaterialTable = () => (
     <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200">
+        <span className="text-xs font-bold text-slate-600">{filtered.length}개 자재</span>
+        <button onClick={toggleAllMaterials}
+          className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-500 hover:bg-slate-200">
+          {expandedMaterials.size === pageData.length ? '전체 접기' : '전체 펼치기'}
+        </button>
+      </div>
       <table className="w-full text-xs">
         <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
           <SortTh field="materialCode" label="자재코드" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
@@ -841,27 +864,75 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           <SortTh field="totalCost" label="금액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
         </tr></thead>
         <tbody>
-          {pageData.map(m => (
-            <tr key={m.materialCode} className="border-b border-slate-50 hover:bg-slate-50">
-              <td className="px-2 py-1.5 font-mono text-indigo-600 whitespace-nowrap sticky left-0 bg-white">{m.materialCode}</td>
-              <td className="px-2 py-1.5 min-w-[200px]" title={m.materialName}>
-                <span className="block truncate max-w-[200px]">{m.materialName}</span>
-              </td>
-              <td className="px-2 py-1.5 text-center">
-                <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
-              </td>
-              <td className="px-2 py-1.5 text-right font-mono text-slate-500">{Math.round(m.unitPrice).toLocaleString()}</td>
-              {m.monthlyQty.map((q, i) => (
-                <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
-              ))}
-              <td className="px-2 py-1.5 text-right font-mono font-bold">{Math.round(m.totalQty).toLocaleString()}</td>
-              <td className="px-2 py-1.5 text-right font-mono text-slate-500">{m.currentStock > 0 ? Math.round(m.currentStock).toLocaleString() : '-'}</td>
-              <td className={`px-2 py-1.5 text-right font-mono font-bold ${m.orderQty > 0 ? 'text-red-600' : 'text-slate-400'}`}>
-                {m.orderQty > 0 ? Math.round(m.orderQty).toLocaleString() : '-'}
-              </td>
-              <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
-            </tr>
-          ))}
+          {pageData.map(m => {
+            const isExpanded = expandedMaterials.has(m.materialCode);
+            const breakdown = m.productBreakdown || [];
+            const hasBreakdown = breakdown.length > 0;
+            return (
+              <React.Fragment key={m.materialCode}>
+                <tr className={`border-b border-slate-50 ${hasBreakdown ? 'hover:bg-indigo-50/50 cursor-pointer' : 'hover:bg-slate-50'} transition-colors`}
+                  onClick={hasBreakdown ? () => toggleMaterial(m.materialCode) : undefined}>
+                  <td className="px-2 py-1.5 font-mono text-indigo-600 whitespace-nowrap sticky left-0 bg-white">
+                    {hasBreakdown && <span className={`inline-block w-3.5 text-indigo-400 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                    {m.materialCode}
+                  </td>
+                  <td className="px-2 py-1.5 min-w-[200px]" title={m.materialName}>
+                    <span className="block truncate max-w-[200px]">{m.materialName}</span>
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <span className={`px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono text-slate-500">{Math.round(m.unitPrice).toLocaleString()}</td>
+                  {m.monthlyQty.map((q, i) => (
+                    <td key={i} className="px-1.5 py-1.5 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                  ))}
+                  <td className="px-2 py-1.5 text-right font-mono font-bold">{Math.round(m.totalQty).toLocaleString()}</td>
+                  <td className="px-2 py-1.5 text-right font-mono text-slate-500">{m.currentStock > 0 ? Math.round(m.currentStock).toLocaleString() : '-'}</td>
+                  <td className={`px-2 py-1.5 text-right font-mono font-bold ${m.orderQty > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                    {m.orderQty > 0 ? Math.round(m.orderQty).toLocaleString() : '-'}
+                  </td>
+                  <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
+                </tr>
+                {isExpanded && breakdown.map(c => (
+                  <tr key={c.productPn} className="border-b border-slate-50 bg-indigo-50/30 hover:bg-indigo-50/60">
+                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-indigo-50/30">
+                      <span className="font-mono text-violet-600 text-[10px]">{c.productPn}</span>
+                    </td>
+                    <td className="px-2 py-1 text-slate-500 text-[10px] truncate max-w-[200px]" title={c.productName}>
+                      {c.productName}
+                      <span className="ml-1.5 text-slate-400">@{c.qtyPerUnit < 1 ? c.qtyPerUnit.toFixed(3) : c.qtyPerUnit.toFixed(2)}/{m.unit}</span>
+                    </td>
+                    <td className="px-2 py-1"></td>
+                    <td className="px-2 py-1"></td>
+                    {c.monthlyQty.map((q, i) => (
+                      <td key={i} className="px-1.5 py-1 text-right font-mono text-[10px] text-slate-500">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
+                    ))}
+                    <td className="px-2 py-1 text-right font-mono text-[10px] font-bold text-slate-600">{Math.round(c.totalQty).toLocaleString()}</td>
+                    <td className="px-2 py-1" colSpan={3}></td>
+                  </tr>
+                ))}
+                {isExpanded && breakdown.length > 0 && (
+                  <tr className="border-b border-indigo-200 bg-indigo-50/20">
+                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-indigo-50/20 text-[10px] text-indigo-500 font-bold" colSpan={2}>
+                      {breakdown.length}개 제품 투입
+                    </td>
+                    <td colSpan={2}></td>
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const mSum = breakdown.reduce((s, c) => s + (c.monthlyQty[i] || 0), 0);
+                      return <td key={i} className="px-1.5 py-1 text-right font-mono text-[10px] text-indigo-500 font-bold">{mSum > 0 ? Math.round(mSum).toLocaleString() : ''}</td>;
+                    })}
+                    <td className="px-2 py-1 text-right font-mono text-[10px] font-bold text-indigo-600">{Math.round(breakdown.reduce((s, c) => s + c.totalQty, 0)).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center" colSpan={3}>
+                      <button onClick={(e) => { e.stopPropagation(); downloadRequiredQtyBreakdown(m); }}
+                        className="text-indigo-500 hover:text-indigo-700" title="산출근거 다운로드">
+                        <svg className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
       <Pagination page={page} setPage={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
