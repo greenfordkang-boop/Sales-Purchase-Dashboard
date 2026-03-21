@@ -789,11 +789,46 @@ const BomReviewView: React.FC = () => {
         }
       }
 
+      // ── Virtual RESIN node (사출자작품 리프에 원재료 표시) ──
+      if (node.level > 0 && ref) {
+        const hasResinChild = newChildren.some(c => /RESIN_/.test(c.pn) || /원재료/.test(c.name));
+        if (!hasResinChild) {
+          const rawCodes = [ref.rawMaterialCode1, ref.rawMaterialCode2].filter(Boolean) as string[];
+          for (const raw of rawCodes) {
+            const rawNorm = normalizePn(raw);
+            const matType = priceData.materialTypeMap.get(rawNorm) || '';
+            if (/PAINT|도료/i.test(matType)) continue;
+            const rp = priceData.matPriceMap.get(rawNorm);
+            if (rp && rp > 0 && ref.netWeight && ref.netWeight > 0) {
+              const rawName = priceData.matNameMap.get(rawNorm) || raw;
+              const cavity = (ref.cavity && ref.cavity > 0) ? ref.cavity : 1;
+              const wpe = ref.netWeight + (ref.runnerWeight || 0) / cavity;
+              const kgPerEa = wpe * (1 + (ref.lossRate || 0) / 100) / 1000;
+              newChildren.push({
+                pn: `RESIN_${code}`,
+                name: `원재료 ${rawName} (${raw})`,
+                level: node.level + 1,
+                qty: node.qty,
+                unitQty: 1,
+                partType: '원재료',
+                supplier: '',
+                children: [],
+                processType: '사출',
+                supplyType: '',
+                netWeight: ref.netWeight || undefined,
+                cavity: ref.cavity || undefined,
+              });
+              break;
+            }
+          }
+        }
+      }
+
       return { ...node, children: newChildren };
     }
 
     return enrich(forwardTree);
-  }, [forwardTree, forwardMap, refInfoMap, getPaintInfo]);
+  }, [forwardTree, forwardMap, refInfoMap, getPaintInfo, priceData]);
 
   // --- BOM Total Cost ---
   const { bomTotal, stdTotal } = useMemo(() => {
