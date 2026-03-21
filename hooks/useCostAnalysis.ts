@@ -22,7 +22,9 @@ import {
 } from '../services/supabaseService';
 import {
   calcAllProductCosts, CostEngineResult, ProductCostRow, LeafMaterialRow, CostEngineSummary, ProductContribution,
+  buildPriceData, buildRefInfoMap,
 } from '../utils/bomCostEngine';
+import { verifyResinMaterial, printVerificationReport } from '../utils/mrpVerifier';
 
 // ============================================================
 // Types
@@ -228,6 +230,39 @@ export function useCostAnalysis(): CostAnalysisData {
       return null;
     }
   }, [forecast, bomRecords, refInfo, materialCodes, purchasePrices, outsourcePrices, paintMixRatios, itemStandardCosts, productCodes, itemRevenue, pnMapping, selectedMonth]);
+
+  // 검증 유틸: 브라우저 콘솔에서 window.__verifyMRP('RESIN코드') 호출
+  useMemo(() => {
+    if (!costResult) return;
+    const priceData = buildPriceData(materialCodes, purchasePrices, outsourcePrices, itemStandardCosts);
+    const refInfoMap = buildRefInfoMap(refInfo);
+    (window as any).__verifyMRP = (code?: string) => {
+      if (!code) {
+        // RESIN 목록 출력
+        const resins = costResult.leafMaterials
+          .filter(m => m.materialType === 'RESIN')
+          .sort((a, b) => b.totalCost - a.totalCost)
+          .slice(0, 20);
+        console.log('RESIN 자재 목록 (Top 20):');
+        console.table(resins.map(m => ({
+          코드: m.materialCode,
+          자재명: m.materialName,
+          단가: Math.round(m.unitPrice),
+          총소요량: Math.round(m.monthlyQty.reduce((s, q) => s + q, 0)),
+          금액: Math.round(m.totalCost),
+          제품수: m.productBreakdown?.length || 0,
+        })));
+        console.log('사용법: __verifyMRP("자재코드") 로 상세 검증');
+        return;
+      }
+      const report = verifyResinMaterial(
+        code, costResult, bomRecords, refInfoMap, priceData.matPriceMap, priceData.materialTypeMap,
+      );
+      printVerificationReport(report);
+      return report;
+    };
+    console.log('[MRP검증] window.__verifyMRP() 준비 완료. 인수 없이 호출하면 RESIN 목록 표시.');
+  }, [costResult, bomRecords, refInfo, materialCodes, purchasePrices, outsourcePrices, itemStandardCosts]);
 
   return {
     loading, costResult, forecastSummary,
