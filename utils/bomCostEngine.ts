@@ -447,51 +447,65 @@ function collectLeafMaterials(
     let qtyMultiplier = 1;        // EA → 원재료 단위(kg) 변환 계수
 
     if (matType === 'RESIN' && ri) {
+      // rawMaterialCode 중 RESIN 유형 코드 찾기 (가격 유무와 무관)
       for (const raw of rawCodes) {
         const rawNorm = normalizePn(raw);
         const rawMt = materialTypeMap.get(rawNorm) || '';
-        if (/paint|도료/i.test(rawMt)) continue; // 도료코드 skip
-        const rp = priceData.matPriceMap.get(rawNorm);
-        if (rp && rp > 0) {
+        if (/paint|도료/i.test(rawMt)) continue;
+        // materialTypeMap 또는 matPriceMap 또는 matNameMap에 존재하면 원재료 코드
+        if (materialTypeMap.has(rawNorm) || priceData.matPriceMap.has(rawNorm) || matNameMap.has(rawNorm)) {
           aggCode = rawNorm;
           resolvedName = matNameMap.get(rawNorm) || raw;
-          aggPrice = rp; // 원/kg
-          const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
-          const wpe = (ri.netWeight || 0) + (ri.runnerWeight || 0) / cavity;
-          qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000; // EA → kg
-          supplier = priceData.supplierMap.get(rawNorm) || '';
+          const rawRi = refInfoMap.get(rawNorm);
+          supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
+          // 가격·수량 변환 (데이터 있는 경우)
+          const rp = priceData.matPriceMap.get(rawNorm);
+          if (rp && rp > 0 && ri.netWeight) {
+            aggPrice = rp;
+            const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+            const wpe = ri.netWeight + (ri.runnerWeight || 0) / cavity;
+            qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000;
+          }
           break;
         }
       }
     } else if (matType === 'PAINT' && ri) {
+      // rawMaterialCode 중 PAINT/도료 유형 코드 찾기 (paintMixMap 유무와 무관)
       for (const raw of rawCodes) {
         const rawNorm = normalizePn(raw);
+        const rawMt = materialTypeMap.get(rawNorm) || '';
+        const isPaintCode = /paint|도료|도장|경화제|희석제/i.test(rawMt);
         const mix = paintMixMap.get(rawNorm);
+        if (!isPaintCode && !mix) continue;
+        aggCode = rawNorm;
+        resolvedName = mix?.paintName || matNameMap.get(rawNorm) || raw;
+        const rawRi = refInfoMap.get(rawNorm);
+        supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
+        // 배합비 데이터 있으면 가격·수량 변환
         if (mix) {
-          aggCode = rawNorm;
-          resolvedName = mix.paintName || raw;
           const mixCostPerKg =
             (mix.mainRatio / 100) * mix.mainPrice +
             (mix.hardenerRatio / 100) * mix.hardenerPrice +
             (mix.thinnerRatio / 100) * mix.thinnerPrice;
-          aggPrice = mixCostPerKg; // 원/kg
+          aggPrice = mixCostPerKg;
           const paintIntake = ri.paintIntake || 0;
-          qtyMultiplier = paintIntake > 0 ? 1 / paintIntake : 0; // EA → kg
-          supplier = priceData.supplierMap.get(rawNorm) || '';
-          break;
+          qtyMultiplier = paintIntake > 0 ? 1 / paintIntake : 0;
         }
+        break;
       }
     }
 
-    // ── 구매/외주: 기존 방식 ──
+    // ── 구매/외주 또는 원재료 미해석: 기존 방식 ──
     if (!resolvedName) {
       resolvedName = matNameMap.get(aggCode) || ri?.itemName || pn;
     }
     if (!supplier) {
-      supplier = ri?.supplier || priceData.supplierMap.get(code) || '';
-    }
-    if (!supplier && (source === '사출' || source === '도장')) {
-      supplier = '자작';
+      // RESIN/PAINT는 외주업체가 아닌 원재료 공급업체를 찾아야 함
+      if (matType === 'RESIN' || matType === 'PAINT') {
+        supplier = priceData.supplierMap.get(code) || '';
+      } else {
+        supplier = ri?.supplier || priceData.supplierMap.get(code) || '';
+      }
     }
 
     // ── 집계 ──
