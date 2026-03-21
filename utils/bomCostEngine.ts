@@ -456,53 +456,76 @@ function collectLeafMaterials(
     let aggPrice = price;         // 단가
     let qtyMultiplier = 1;        // EA → 원재료 단위(kg) 변환 계수
 
-    if (matType === 'RESIN' && ri) {
-      // rawMaterialCode 중 RESIN 유형 코드 찾기 (가격 유무와 무관)
+    // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
+    const selfIsRawMaterial = materialTypeMap.has(code);
+
+    if (matType === 'RESIN' && ri && !selfIsRawMaterial) {
+      // ── BOM 부품의 rawCode를 통한 RESIN 집계 ──
+      // EA→kg 변환(netWeight)이 가능한 경우만 원재료로 집계
+      let resinResolved = false;
       for (const raw of rawCodes) {
         const rawNorm = normalizePn(raw);
         const rawMt = materialTypeMap.get(rawNorm) || '';
         if (/paint|도료/i.test(rawMt)) continue;
-        // materialTypeMap 또는 matPriceMap 또는 matNameMap에 존재하면 원재료 코드
         if (materialTypeMap.has(rawNorm) || priceData.matPriceMap.has(rawNorm) || matNameMap.has(rawNorm)) {
-          aggCode = rawNorm;
-          resolvedName = matNameMap.get(rawNorm) || raw;
-          const rawRi = refInfoMap.get(rawNorm);
-          supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
-          // 가격·수량 변환 (데이터 있는 경우)
           const rp = priceData.matPriceMap.get(rawNorm);
-          if (rp && rp > 0 && ri.netWeight) {
+          if (rp && rp > 0 && ri.netWeight && ri.netWeight > 0) {
+            aggCode = rawNorm;
+            resolvedName = matNameMap.get(rawNorm) || raw;
+            const rawRi = refInfoMap.get(rawNorm);
+            supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
             aggPrice = rp;
             const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
             const wpe = ri.netWeight + (ri.runnerWeight || 0) / cavity;
             qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000;
+            resinResolved = true;
           }
           break;
         }
       }
-    } else if (matType === 'PAINT' && ri) {
-      // rawMaterialCode 중 PAINT/도료 유형 코드 찾기 (paintMixMap 유무와 무관)
+      // netWeight 없어 변환 불가 → 구매부품으로 유지 (1EA=1kg 오류 방지)
+      if (!resinResolved) {
+        matType = source === '외주' ? '외주' : '구매';
+      }
+    } else if (matType === 'RESIN' && ri && selfIsRawMaterial) {
+      // 코드 자체가 재질코드 (원재료 직접 BOM 사용) → 변환 불필요, 가격만 확인
+      const rp = priceData.matPriceMap.get(code);
+      if (rp && rp > 0) aggPrice = rp;
+      resolvedName = matNameMap.get(code) || ri?.itemName || pn;
+    } else if (matType === 'PAINT' && ri && !selfIsRawMaterial) {
+      // ── BOM 부품의 rawCode를 통한 PAINT 집계 ──
+      let paintResolved = false;
       for (const raw of rawCodes) {
         const rawNorm = normalizePn(raw);
         const rawMt = materialTypeMap.get(rawNorm) || '';
         const isPaintCode = /paint|도료|도장|경화제|희석제/i.test(rawMt);
         const mix = paintMixMap.get(rawNorm);
         if (!isPaintCode && !mix) continue;
-        aggCode = rawNorm;
-        resolvedName = mix?.paintName || matNameMap.get(rawNorm) || raw;
-        const rawRi = refInfoMap.get(rawNorm);
-        supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
-        // 배합비 데이터 있으면 가격·수량 변환
-        if (mix) {
+        // 배합비 데이터 + paintIntake 있을 때만 변환
+        if (mix && ri.paintIntake && ri.paintIntake > 0) {
+          aggCode = rawNorm;
+          resolvedName = mix.paintName || matNameMap.get(rawNorm) || raw;
+          const rawRi = refInfoMap.get(rawNorm);
+          supplier = priceData.supplierMap.get(rawNorm) || rawRi?.supplier || '';
           const mixCostPerKg =
             (mix.mainRatio / 100) * mix.mainPrice +
             (mix.hardenerRatio / 100) * mix.hardenerPrice +
             (mix.thinnerRatio / 100) * mix.thinnerPrice;
           aggPrice = mixCostPerKg;
-          const paintIntake = ri.paintIntake || 0;
-          qtyMultiplier = paintIntake > 0 ? 1 / paintIntake : 0;
+          qtyMultiplier = 1 / ri.paintIntake;
+          paintResolved = true;
         }
         break;
       }
+      // paintIntake 없어 변환 불가 → 구매부품으로 유지
+      if (!paintResolved) {
+        matType = source === '외주' ? '외주' : '구매';
+      }
+    } else if (matType === 'PAINT' && ri && selfIsRawMaterial) {
+      // 코드 자체가 도료코드 → 변환 불필요
+      const rp = priceData.matPriceMap.get(code);
+      if (rp && rp > 0) aggPrice = rp;
+      resolvedName = matNameMap.get(code) || ri?.itemName || pn;
     }
 
     // ── 구매/외주 또는 원재료 미해석: 기존 방식 ──
