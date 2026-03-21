@@ -371,7 +371,9 @@ function getNodePrice(pn, priceData, refInfoMap, paintMixMap) {
   const pp = purchaseMap.get(code);
   if (pp && pp > 0) {
     if (ri && /외주/.test(ri.supplyType || '')) {
-      const op = outsourceMap.get(code) || 0;
+      const op = outsourceMap.get(code)
+        || (ri.customerPn ? outsourceMap.get(normalizePn(ri.customerPn)) : 0)
+        || 0;
       return { price: Math.max(0, pp - op), source: op > 0 ? '외주' : '구매' };
     }
     return { price: pp, source: '구매' };

@@ -292,7 +292,11 @@ export function getNodePrice(
   const pp = purchaseMap.get(code);
   if (pp && pp > 0) {
     if (ri && /외주/.test(ri.supplyType || '')) {
-      const op = outsourceMap.get(code) || 0;
+      // outsourceMap: item_code + customerPn 모두 등록됨
+      // BOM코드(code)로 못 찾으면 refInfo의 customerPn으로 재시도
+      const op = outsourceMap.get(code)
+        || (ri.customerPn ? outsourceMap.get(normalizePn(ri.customerPn)) : 0)
+        || 0;
       return { price: Math.max(0, pp - op), source: op > 0 ? '외주' : '구매' };
     }
     return { price: pp, source: '구매' };
