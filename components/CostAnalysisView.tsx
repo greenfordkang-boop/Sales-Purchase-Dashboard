@@ -738,18 +738,21 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     ? (costResult.mrpMaterials || [])
     : leafMaterials;
 
-  // MRP 데이터 (현재고 + 발주량 + 구입처 보강)
+  // MRP 데이터 (현재고 + 발주량 + 구입처 보강 — selectedMonth 반영)
   const mrpAll = useMemo(() => {
     return mrpSource.map(m => {
       const code = normCode(m.materialCode);
-      const totalQty = m.monthlyQty.reduce((s, q) => s + q, 0);
+      const totalQty = selectedMonth === -1
+        ? m.monthlyQty.reduce((s, q) => s + q, 0)
+        : (m.monthlyQty[selectedMonth] || 0);
+      const totalCost = totalQty * m.unitPrice;
       const currentStock = inventoryMap.get(code) || 0;
       const orderQty = Math.max(0, totalQty - currentStock);
       // 구입처: 입고실적(실제 납품업체) > 엔진 결과 > 미지정
       const supplier = purchaseSupplierMap.get(code) || m.supplier || '';
-      return { ...m, supplier, totalQty, currentStock, orderQty } as MRPRow;
+      return { ...m, supplier, totalQty, totalCost, currentStock, orderQty } as MRPRow;
     });
-  }, [mrpSource, inventoryMap, purchaseSupplierMap]);
+  }, [mrpSource, inventoryMap, purchaseSupplierMap, selectedMonth]);
 
   // 유형 필터 + 뷰모드 필터
   const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];
