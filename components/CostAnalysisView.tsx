@@ -733,9 +733,14 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     return map;
   }, [inventoryItems]);
 
+  // MRP 데이터 소스: RESIN/PAINT 탭은 full-depth mrpMaterials, 그 외는 leafMaterials
+  const mrpSource = (viewMode === 'resin' || viewMode === 'paint')
+    ? (costResult.mrpMaterials || [])
+    : leafMaterials;
+
   // MRP 데이터 (현재고 + 발주량 + 구입처 보강)
   const mrpAll = useMemo(() => {
-    return leafMaterials.map(m => {
+    return mrpSource.map(m => {
       const code = normCode(m.materialCode);
       const totalQty = m.monthlyQty.reduce((s, q) => s + q, 0);
       const currentStock = inventoryMap.get(code) || 0;
@@ -744,7 +749,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       const supplier = purchaseSupplierMap.get(code) || m.supplier || '';
       return { ...m, supplier, totalQty, currentStock, orderQty } as MRPRow;
     });
-  }, [leafMaterials, inventoryMap, purchaseSupplierMap]);
+  }, [mrpSource, inventoryMap, purchaseSupplierMap]);
 
   // 유형 필터 + 뷰모드 필터
   const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];

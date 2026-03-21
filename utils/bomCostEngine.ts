@@ -88,6 +88,7 @@ export interface CostEngineResult {
   products: ProductCostRow[];
   summary: CostEngineSummary;
   leafMaterials: LeafMaterialRow[];
+  mrpMaterials: LeafMaterialRow[];  // RESIN/PAINT full-depth walk (중간노드 가격 무시)
 }
 
 // ============================================================
@@ -635,6 +636,160 @@ function collectLeafMaterials(
 }
 
 // ============================================================
+// 8b. collectDeepRawMaterials — RESIN/PAINT full-depth walk (MRP 전용)
+//     중간 노드에 구매단가가 있어도 항상 BOM 리프까지 재귀하여
+//     RESIN/PAINT 원재료만 집계 (기존 collectLeafMaterials의 shallow 문제 해결)
+// ============================================================
+
+type MrpAggEntry = {
+  name: string;
+  type: string;
+  monthlyQty: number[];
+  unitPrice: number;
+  parents: Set<string>;
+  supplier: string;
+  contributions: Map<string, { qtyPerUnit: number; monthlyQty: number[] }>;
+};
+
+function collectDeepRawMaterials(
+  rootPn: string,
+  monthlyQty: number[],
+  forwardMap: Map<string, BomRecord[]>,
+  priceData: PriceData,
+  refInfoMap: Map<string, ReferenceInfoRecord>,
+  paintMixMap: Map<string, PaintMixRatio>,
+  mrpAgg: Map<string, MrpAggEntry>,
+): void {
+  const { materialTypeMap, matNameMap, matPriceMap } = priceData;
+
+  const isResinType = (mt: string) => /resin|수지|사출/i.test(mt);
+  const isPaintType = (mt: string) => /paint|도료|도장|경화제|희석제/i.test(mt);
+
+  function addToMrpAgg(
+    aggCode: string, name: string, type: 'RESIN' | 'PAINT',
+    qtyPerRoot: number, qtyMult: number, price: number, supplier: string,
+  ) {
+    const rootNorm = normalizePn(rootPn);
+    const existing = mrpAgg.get(aggCode);
+    if (existing) {
+      for (let m = 0; m < 12; m++) {
+        existing.monthlyQty[m] += qtyPerRoot * qtyMult * (monthlyQty[m] || 0);
+      }
+      existing.parents.add(rootNorm);
+      const contrib = existing.contributions.get(rootNorm);
+      if (contrib) {
+        contrib.qtyPerUnit += qtyPerRoot * qtyMult;
+        for (let m = 0; m < 12; m++) {
+          contrib.monthlyQty[m] += qtyPerRoot * qtyMult * (monthlyQty[m] || 0);
+        }
+      } else {
+        const cmq = new Array(12).fill(0);
+        for (let m = 0; m < 12; m++) cmq[m] = qtyPerRoot * qtyMult * (monthlyQty[m] || 0);
+        existing.contributions.set(rootNorm, { qtyPerUnit: qtyPerRoot * qtyMult, monthlyQty: cmq });
+      }
+    } else {
+      const mq = new Array(12).fill(0);
+      const cmq = new Array(12).fill(0);
+      for (let m = 0; m < 12; m++) {
+        mq[m] = qtyPerRoot * qtyMult * (monthlyQty[m] || 0);
+        cmq[m] = mq[m];
+      }
+      const contributions = new Map<string, { qtyPerUnit: number; monthlyQty: number[] }>();
+      contributions.set(rootNorm, { qtyPerUnit: qtyPerRoot * qtyMult, monthlyQty: cmq });
+      mrpAgg.set(aggCode, {
+        name, type, monthlyQty: mq, unitPrice: price,
+        parents: new Set([rootNorm]), supplier, contributions,
+      });
+    }
+  }
+
+  function deepWalk(pn: string, qtyPerRoot: number, visited: Set<string>): void {
+    const code = normalizePn(pn);
+    if (visited.has(code)) return;
+    visited.add(code);
+
+    const children = forwardMap.get(code) || [];
+
+    if (children.length === 0) {
+      // 리프 노드
+      const selfIsRawMaterial = materialTypeMap.has(code);
+      const ri = refInfoMap.get(code);
+
+      if (selfIsRawMaterial) {
+        // 코드 자체가 재질코드 (원재료 직접 BOM 사용)
+        const mt = materialTypeMap.get(code) || '';
+        const rp = matPriceMap.get(code) || 0;
+        const name = matNameMap.get(code) || ri?.itemName || pn;
+        const supplier = priceData.supplierMap.get(code) || '';
+        if (isResinType(mt)) {
+          addToMrpAgg(code, name, 'RESIN', qtyPerRoot, 1, rp, supplier);
+        } else if (isPaintType(mt)) {
+          addToMrpAgg(code, name, 'PAINT', qtyPerRoot, 1, rp, supplier);
+        }
+      } else if (ri) {
+        // refInfo의 rawCode를 통한 간접 참조
+        const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+
+        // RESIN 시도
+        for (const raw of rawCodes) {
+          const rawNorm = normalizePn(raw);
+          const rawMt = materialTypeMap.get(rawNorm) || '';
+          if (isPaintType(rawMt)) continue; // PAINT 코드는 RESIN에서 스킵
+          if (isResinType(rawMt) && ri.netWeight && ri.netWeight > 0) {
+            const rp = matPriceMap.get(rawNorm) || 0;
+            const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+            const wpe = ri.netWeight + (ri.runnerWeight || 0) / cavity;
+            const qtyMult = wpe * (1 + (ri.lossRate || 0) / 100) / 1000;
+            const name = matNameMap.get(rawNorm) || raw;
+            const supplier = priceData.supplierMap.get(rawNorm) || '';
+            addToMrpAgg(rawNorm, name, 'RESIN', qtyPerRoot, qtyMult, rp, supplier);
+            break;
+          }
+        }
+
+        // PAINT 시도
+        for (const raw of rawCodes) {
+          const rawNorm = normalizePn(raw);
+          const rawMt = materialTypeMap.get(rawNorm) || '';
+          if (!isPaintType(rawMt)) continue;
+          let mix = paintMixMap.get(rawNorm);
+          if (!mix && /^P/.test(raw.trim().toUpperCase())) {
+            const sCode = normalizePn('S' + raw.trim().substring(1));
+            mix = paintMixMap.get(sCode);
+          }
+          if (mix && ri.paintIntake && ri.paintIntake > 0) {
+            const mixCostPerKg =
+              (mix.mainRatio / 100) * mix.mainPrice +
+              (mix.hardenerRatio / 100) * mix.hardenerPrice +
+              (mix.thinnerRatio / 100) * mix.thinnerPrice;
+            const name = mix.paintName || matNameMap.get(rawNorm) || raw;
+            const supplier = priceData.supplierMap.get(rawNorm) || '';
+            addToMrpAgg(rawNorm, name, 'PAINT', qtyPerRoot, 1 / ri.paintIntake, mixCostPerKg, supplier);
+            break;
+          }
+        }
+      }
+
+      visited.delete(code);
+      return;
+    }
+
+    // 비리프: 항상 자식으로 재귀 (중간노드 가격 무시!)
+    for (const child of children) {
+      deepWalk(child.childPn, qtyPerRoot * child.qty, visited);
+    }
+    visited.delete(code);
+  }
+
+  // 루트의 자식부터 시작
+  const rootChildren = forwardMap.get(normalizePn(rootPn)) || [];
+  const visited = new Set<string>();
+  for (const child of rootChildren) {
+    deepWalk(child.childPn, child.qty, visited);
+  }
+}
+
+// ============================================================
 // 9. calcAllProductCosts — 전체 forecast 제품 원가 산출 (메인 함수)
 // ============================================================
 
@@ -735,6 +890,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
 
   const materialAgg = new Map<string, { name: string; type: string; monthlyQty: number[]; unitPrice: number; parents: Set<string>; supplier: string; contributions: Map<string, { qtyPerUnit: number; monthlyQty: number[] }> }>();
+  const mrpAgg = new Map<string, MrpAggEntry>(); // RESIN/PAINT full-depth walk 전용
   const productNameMap = new Map<string, string>(); // bomParent → 제품명
 
   // Forecast-driven product list (forecast 순회 → BOM parent 매칭)
@@ -781,6 +937,12 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
     if (bomParent && materialCost > 0 && fc.monthlyQty.some(q => q > 0)) {
       productNameMap.set(normalizePn(bomParent), fc.partName || '');
       collectLeafMaterials(bomParent, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, materialAgg);
+    }
+
+    // MRP RESIN/PAINT: full-depth walk (materialCost 조건 완화 — BOM만 있으면 수집)
+    if (bomParent && fc.monthlyQty.some(q => q > 0)) {
+      productNameMap.set(normalizePn(bomParent), fc.partName || '');
+      collectDeepRawMaterials(bomParent, fc.monthlyQty, forwardMap, priceData, refInfoMap, paintMixMap, mrpAgg);
     }
 
     // 출처 판별
@@ -844,6 +1006,37 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
   leafMaterials.sort((a, b) => b.totalCost - a.totalCost);
 
+  // MRP Materials (RESIN/PAINT full-depth) 결과 구성
+  const mrpMaterials: LeafMaterialRow[] = [];
+  for (const [code, agg] of mrpAgg) {
+    const totalQty = agg.monthlyQty.reduce((s, q) => s + q, 0);
+    const breakdown: ProductContribution[] = [];
+    for (const [pn, contrib] of agg.contributions) {
+      const cTotal = contrib.monthlyQty.reduce((s, q) => s + q, 0);
+      breakdown.push({
+        productPn: pn,
+        productName: productNameMap.get(pn) || pn,
+        qtyPerUnit: contrib.qtyPerUnit,
+        monthlyQty: contrib.monthlyQty,
+        totalQty: cTotal,
+      });
+    }
+    breakdown.sort((a, b) => b.totalQty - a.totalQty);
+    mrpMaterials.push({
+      materialCode: code,
+      materialName: agg.name,
+      materialType: agg.type,
+      unit: agg.type === 'RESIN' ? 'kg' : agg.type === 'PAINT' ? 'L' : 'EA',
+      monthlyQty: agg.monthlyQty,
+      unitPrice: agg.unitPrice,
+      totalCost: totalQty * agg.unitPrice,
+      supplier: agg.supplier,
+      parentProducts: Array.from(agg.parents),
+      productBreakdown: breakdown,
+    });
+  }
+  mrpMaterials.sort((a, b) => b.totalCost - a.totalCost);
+
   // byType 결과 — leafMaterials 기반 집계 (정확한 materialType 사용)
   const leafTypeAmounts = new Map<string, number>();
   for (const lm of leafMaterials) {
@@ -864,5 +1057,6 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
       byType,
     },
     leafMaterials,
+    mrpMaterials,
   };
 }
