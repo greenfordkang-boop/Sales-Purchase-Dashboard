@@ -500,10 +500,11 @@ function collectLeafMaterials(
       resolvedName = matNameMap.get(aggCode) || ri?.itemName || pn;
     }
     if (!supplier) {
-      // RESIN/PAINT는 외주업체가 아닌 원재료 공급업체를 찾아야 함
       if (matType === 'RESIN' || matType === 'PAINT') {
-        supplier = priceData.supplierMap.get(code) || '';
+        // RESIN/PAINT: BOM 부품코드의 supplier는 외주업체이므로 사용하지 않음
+        // → 구입처는 CostAnalysisView에서 입고실적(purchaseData) 기반으로 보강
       } else {
+        // 구매/외주: BOM 기준정보 supplier가 1순위
         supplier = ri?.supplier || priceData.supplierMap.get(code) || '';
       }
     }

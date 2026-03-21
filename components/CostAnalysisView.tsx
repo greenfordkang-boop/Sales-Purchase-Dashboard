@@ -469,20 +469,23 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     setPage(0);
   };
 
-  // 입고 실적 맵 구성
-  const inboundMap = useMemo(() => {
-    const map = new Map<string, number[]>();
+  // 입고 실적 맵 + 구입처 맵 구성 (실제 입고 데이터 기반)
+  const { inboundMap, purchaseSupplierMap } = useMemo(() => {
+    const iMap = new Map<string, number[]>();
+    const sMap = new Map<string, string>();
     for (const p of purchaseData) {
       const code = normCode(p.itemCode);
       if (!code) continue;
+      // 구입처: 최초 등장 업체 사용
+      if (p.supplier && !sMap.has(code)) sMap.set(code, p.supplier);
       const monthStr = p.month?.replace(/[^0-9]/g, '') || '';
       const monthIdx = parseInt(monthStr) - 1;
       if (monthIdx < 0 || monthIdx > 11) continue;
-      const existing = map.get(code) || new Array(12).fill(0);
+      const existing = iMap.get(code) || new Array(12).fill(0);
       existing[monthIdx] += p.qty;
-      map.set(code, existing);
+      iMap.set(code, existing);
     }
-    return map;
+    return { inboundMap: iMap, purchaseSupplierMap: sMap };
   }, [purchaseData]);
 
   // 수율 데이터 계산
@@ -498,7 +501,9 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         : inbound[selectedMonth] || 0;
       const diff = inboundQty - requiredQty;
       const yieldRate = inboundQty > 0 ? (requiredQty / inboundQty) * 100 : 0;
-      return { ...m, requiredQty, inboundQty, diff, yieldRate };
+      // 구입처: 엔진 결과 > 입고실적 > 미지정
+      const supplier = m.supplier || purchaseSupplierMap.get(code) || '';
+      return { ...m, supplier, requiredQty, inboundQty, diff, yieldRate };
     });
 
     rows.sort((a, b) => {
@@ -617,7 +622,7 @@ const VIEW_TABS: { id: MRPViewMode; label: string }[] = [
 ];
 
 const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
-  const { costResult, inventoryItems, selectedMonth, setSelectedMonth } = data;
+  const { costResult, inventoryItems, purchaseData, selectedMonth, setSelectedMonth } = data;
   const [viewMode, setViewMode] = useState<MRPViewMode>('material');
   const [typeFilter, setTypeFilter] = useState<string>('전체');
   const [expandedSuppliers, setExpandedSuppliers] = useState<Set<string>>(new Set());
@@ -633,6 +638,16 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { leafMaterials, summary } = costResult;
   const totalCost = leafMaterials.reduce((s, m) => s + m.totalCost, 0);
 
+  // 입고 실적에서 구입처 맵 구성
+  const purchaseSupplierMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of (purchaseData || [])) {
+      const code = normCode(p.itemCode);
+      if (code && p.supplier && !map.has(code)) map.set(code, p.supplier);
+    }
+    return map;
+  }, [purchaseData]);
+
   // 현재고 맵
   const inventoryMap = useMemo(() => {
     const map = new Map<string, number>();
@@ -643,16 +658,17 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     return map;
   }, [inventoryItems]);
 
-  // MRP 데이터 (현재고 + 발주량 포함)
+  // MRP 데이터 (현재고 + 발주량 + 구입처 보강)
   const mrpAll = useMemo(() => {
     return leafMaterials.map(m => {
       const code = normCode(m.materialCode);
       const totalQty = m.monthlyQty.reduce((s, q) => s + q, 0);
       const currentStock = inventoryMap.get(code) || 0;
       const orderQty = Math.max(0, totalQty - currentStock);
-      return { ...m, totalQty, currentStock, orderQty } as MRPRow;
+      const supplier = m.supplier || purchaseSupplierMap.get(code) || '';
+      return { ...m, supplier, totalQty, currentStock, orderQty } as MRPRow;
     });
-  }, [leafMaterials, inventoryMap]);
+  }, [leafMaterials, inventoryMap, purchaseSupplierMap]);
 
   // 유형 필터 + 뷰모드 필터
   const types = ['전체', ...Array.from(new Set(leafMaterials.map(m => m.materialType)))];
