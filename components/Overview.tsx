@@ -9,7 +9,7 @@ import { INITIAL_REVENUE_CSV } from '../data/initialRevenueData';
 import { INITIAL_PARTS_CSV, INITIAL_MATERIAL_CSV } from '../data/initialPurchaseData';
 import { downloadCSV } from '../utils/csvExport';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { revenueService } from '../services/supabaseService';
+import { revenueService, purchaseService } from '../services/supabaseService';
 
 const MONTHS = [
   { value: 'all', label: '전체 (누적)' },
@@ -73,22 +73,30 @@ const Overview: React.FC = () => {
         salesItems = storedSales ? JSON.parse(storedSales) : parseRevenueCSV(INITIAL_REVENUE_CSV, 2024);
       }
 
-      // 2. Load Purchase Data from localStorage
+      // 2. Load Purchase Data - Supabase 우선, 없으면 localStorage
       let purchaseItems: any[] = [];
       try {
-        const storedPurchase = localStorage.getItem('dashboard_purchaseData');
-        if (storedPurchase) {
-          purchaseItems = JSON.parse(storedPurchase);
-        } else {
-          const parts = parsePartsCSV(INITIAL_PARTS_CSV);
-          const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
-          purchaseItems = [...parts, ...materials];
+        if (isSupabaseConfigured()) {
+          const supabaseData = await purchaseService.getAll();
+          if (supabaseData && supabaseData.length > 0) {
+            purchaseItems = supabaseData;
+            safeSetItem('dashboard_purchaseData', JSON.stringify(supabaseData));
+          }
+        }
+        if (purchaseItems.length === 0) {
+          const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+          if (storedPurchase) {
+            purchaseItems = JSON.parse(storedPurchase);
+          } else {
+            const parts = parsePartsCSV(INITIAL_PARTS_CSV);
+            const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
+            purchaseItems = [...parts, ...materials];
+          }
         }
       } catch (e) {
         console.error('Failed to load purchase:', e);
-        const parts = parsePartsCSV(INITIAL_PARTS_CSV);
-        const materials = parseMaterialCSV(INITIAL_MATERIAL_CSV);
-        purchaseItems = [...parts, ...materials];
+        const storedPurchase = localStorage.getItem('dashboard_purchaseData');
+        purchaseItems = storedPurchase ? JSON.parse(storedPurchase) : [...parsePartsCSV(INITIAL_PARTS_CSV), ...parseMaterialCSV(INITIAL_MATERIAL_CSV)];
       }
 
       // Diagnostic logging for data sync verification
