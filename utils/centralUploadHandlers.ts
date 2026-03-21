@@ -35,6 +35,7 @@ import {
   outsourceInjPriceService,
   purchasePriceService,
   productInfoService,
+  pnMappingService,
 } from '../services/supabaseService';
 
 export interface UploadResult {
@@ -190,18 +191,23 @@ export async function uploadMaterialMaster(file: File): Promise<UploadResult> {
     if (mappings.length === 0) mappings = parsePnMappingFromExcel(buffer);
     if (mappings.length === 0) return { success: false, count: 0, message: '품번 매핑 파싱 실패' };
 
-    // 기존 매핑과 병합
-    const existingRaw = localStorage.getItem('dashboard_pnMapping');
-    if (existingRaw) {
-      try {
-        const existing = JSON.parse(existingRaw);
-        const map = new Map(existing.map((m: any) => [m.internalCode, m]));
-        mappings.forEach(m => map.set(m.internalCode, m));
-        mappings = Array.from(map.values()) as typeof mappings;
-      } catch { /* ignore */ }
+    // 기존 매핑과 병합 (Supabase 또는 localStorage에서)
+    let existing: typeof mappings = [];
+    if (isSupabaseConfigured()) {
+      try { existing = await pnMappingService.getAll(); } catch { /* ignore */ }
+    } else {
+      const existingRaw = localStorage.getItem('dashboard_pnMapping');
+      if (existingRaw) try { existing = JSON.parse(existingRaw); } catch { /* ignore */ }
+    }
+    if (existing.length > 0) {
+      const map = new Map(existing.map((m: any) => [m.internalCode, m]));
+      mappings.forEach(m => map.set(m.internalCode, m));
+      mappings = Array.from(map.values()) as typeof mappings;
     }
 
-    safeSetItem('dashboard_pnMapping', JSON.stringify(mappings));
+    // Supabase + localStorage 양쪽 저장
+    if (isSupabaseConfigured()) await pnMappingService.saveAll(mappings);
+    else safeSetItem('dashboard_pnMapping', JSON.stringify(mappings));
     dispatchUpdate({ key: 'dashboard_pnMapping', data: mappings });
     return { success: true, count: mappings.length, message: `${mappings.length}건 매핑 저장` };
   } catch (e: any) {

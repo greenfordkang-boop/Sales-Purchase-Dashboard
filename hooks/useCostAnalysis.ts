@@ -18,7 +18,7 @@ import {
   referenceInfoService, materialCodeService,
   purchasePriceService, outsourceInjPriceService, paintMixRatioService,
   itemStandardCostService, productCodeService,
-  purchaseService, inventoryService,
+  purchaseService, inventoryService, pnMappingService,
 } from '../services/supabaseService';
 import {
   calcAllProductCosts, CostEngineResult, ProductCostRow, LeafMaterialRow, CostEngineSummary,
@@ -98,7 +98,7 @@ export function useCostAnalysis(): CostAnalysisData {
       setLoading(true);
       try {
         if (isSupabaseConfigured()) {
-          const [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes] =
+          const [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes, pnRes] =
             await Promise.allSettled([
               forecastService.getItems('current'),
               bomMasterService.getAll(),
@@ -112,14 +112,15 @@ export function useCostAnalysis(): CostAnalysisData {
               productCodeService.getAll(),
               purchaseService.getAll(),
               inventoryService.getAll(),
+              pnMappingService.getAll(),
             ]);
 
           const val = <T>(r: PromiseSettledResult<T[]>): T[] =>
             r.status === 'fulfilled' ? r.value : [];
 
           // 실패한 서비스 로그
-          const names = ['forecast', 'bomMaster', 'itemRevenue', 'refInfo', 'materialCodes', 'purchasePrices', 'outsourcePrices', 'paintMixRatios', 'itemStandardCosts', 'productCodes', 'purchase', 'inventory'];
-          [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes].forEach((r, i) => {
+          const names = ['forecast', 'bomMaster', 'itemRevenue', 'refInfo', 'materialCodes', 'purchasePrices', 'outsourcePrices', 'paintMixRatios', 'itemStandardCosts', 'productCodes', 'purchase', 'inventory', 'pnMapping'];
+          [fcRes, bomRes, revRes, riRes, mcRes, ppRes, opRes, pmRes, iscRes, pcRes, purchRes, invRes, pnRes].forEach((r, i) => {
             if (r.status === 'rejected') console.error(`[원가분석] ${names[i]} 로드 실패:`, r.reason);
           });
 
@@ -147,8 +148,9 @@ export function useCostAnalysis(): CostAnalysisData {
             setInventoryItems(flat);
           }
 
-          // pnMapping은 localStorage에만 저장 (자재마스터 업로드 시 저장됨)
-          setPnMapping(safeParseJson<PnMapping[]>('dashboard_pnMapping', []));
+          // pnMapping: Supabase에서 로드 (fallback: localStorage)
+          const pnData = val(pnRes) as PnMapping[];
+          setPnMapping(pnData.length > 0 ? pnData : safeParseJson<PnMapping[]>('dashboard_pnMapping', []));
         } else {
           setForecast(safeParseJson('dashboard_forecastData', []));
           setBomRecords(safeParseJson('dashboard_bomData', []));

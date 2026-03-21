@@ -10,7 +10,7 @@ import { InventoryItem } from '../utils/inventoryDataParser';
 import { CRItem } from '../utils/crDataParser';
 import { RFQItem } from '../utils/rfqDataParser';
 import { ForecastItem, ForecastSummary, ForecastUpload } from '../utils/salesForecastParser';
-import { BomRecord, normalizePn } from '../utils/bomDataParser';
+import { BomRecord, PnMapping, normalizePn } from '../utils/bomDataParser';
 import { CIDetailItem } from '../utils/ciDataParser';
 import {
   BomMasterRecord,
@@ -3622,5 +3622,63 @@ export const reviewStatusService = {
       updated_at: new Date().toISOString(),
     }));
     await insertInBatches('bom_review_status', rows, 500, 'item_code');
+  },
+};
+
+// ============================================
+// pnMappingService — 자재마스터 (품번 매핑) 영구 저장
+// ============================================
+
+export const pnMappingService = {
+  async getAll(): Promise<PnMapping[]> {
+    if (!isSupabaseConfigured() || isTableMissing('pn_mapping')) {
+      const stored = localStorage.getItem('dashboard_pnMapping');
+      return stored ? JSON.parse(stored) : [];
+    }
+
+    try {
+      const data = await fetchAllRows('pn_mapping', 'customer_pn');
+      return data.map((row: any) => ({
+        customerPn: row.customer_pn || '',
+        internalCode: row.internal_code || '',
+        partName: row.part_name || '',
+        rawMaterialCode1: row.raw_material_code1 || undefined,
+        rawMaterialCode2: row.raw_material_code2 || undefined,
+        supplyType: row.supply_type || undefined,
+        processType: row.process_type || undefined,
+        purchaseUnitPrice: Number(row.purchase_unit_price) || undefined,
+        materialCost: Number(row.material_cost) || undefined,
+        injectionCost: Number(row.injection_cost) || undefined,
+        paintCost: Number(row.paint_cost) || undefined,
+      }));
+    } catch (error: any) {
+      checkTableError(error, 'pn_mapping');
+      console.error('[pnMapping] 로드 실패:', error);
+      const stored = localStorage.getItem('dashboard_pnMapping');
+      return stored ? JSON.parse(stored) : [];
+    }
+  },
+
+  async saveAll(mappings: PnMapping[]): Promise<void> {
+    safeSetItem('dashboard_pnMapping', JSON.stringify(mappings));
+
+    if (!isSupabaseConfigured() || isTableMissing('pn_mapping')) return;
+
+    const rows = mappings.map(m => ({
+      customer_pn: m.customerPn,
+      internal_code: m.internalCode,
+      part_name: m.partName || '',
+      raw_material_code1: m.rawMaterialCode1 || null,
+      raw_material_code2: m.rawMaterialCode2 || null,
+      supply_type: m.supplyType || null,
+      process_type: m.processType || null,
+      purchase_unit_price: m.purchaseUnitPrice || 0,
+      material_cost: m.materialCost || 0,
+      injection_cost: m.injectionCost || 0,
+      paint_cost: m.paintCost || 0,
+      updated_at: new Date().toISOString(),
+    }));
+
+    await insertInBatches('pn_mapping', rows, 500, 'customer_pn,internal_code');
   },
 };
