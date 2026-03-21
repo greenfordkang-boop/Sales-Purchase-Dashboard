@@ -55,7 +55,7 @@ async function loadAllData() {
   console.log('📥 Supabase 데이터 로드 시작...\n');
 
   const [
-    fcRaw, bomRaw, riRaw, mcRaw, ppRaw, opRaw, pmRaw, iscRaw, pcRaw, pnRaw, irvRaw,
+    fcRaw, bomRaw, riRaw, mcRaw, ppRaw, opRaw, pmRaw, iscRaw, pcRaw, pnRaw, irvRaw, purchRaw,
   ] = await Promise.all([
     fetchAllRows('forecast_data', 'no', '&version=eq.current'),
     fetchAllRows('bom_master', 'id'),
@@ -68,6 +68,7 @@ async function loadAllData() {
     fetchAllRows('product_code_master', 'product_code'),
     fetchAllRows('pn_mapping', 'customer_pn'),
     fetchAllRows('item_revenue_data', 'id'),
+    fetchAllRows('purchase_data', 'id'),
   ]);
 
   console.log(`  forecast_data: ${fcRaw.length}건`);
@@ -81,6 +82,7 @@ async function loadAllData() {
   console.log(`  product_code_master: ${pcRaw.length}건`);
   console.log(`  pn_mapping: ${pnRaw.length}건`);
   console.log(`  item_revenue_data: ${irvRaw.length}건`);
+  console.log(`  purchase_data: ${purchRaw.length}건`);
 
   // Transform to engine-compatible format
   const forecast = fcRaw.map(r => {
@@ -212,10 +214,27 @@ async function loadAllData() {
     partName: r.part_name || '',
   }));
 
+  // purchase_data (입고실적)
+  const purchaseData = purchRaw.map(r => ({
+    itemCode: r.item_code || '',
+    itemName: r.item_name || '',
+    type: r.type || '',
+    category: r.category || '',
+    supplier: r.supplier || '',
+    unit: r.unit || '',
+    qty: Number(r.qty) || 0,
+    unitPrice: Number(r.unit_price) || 0,
+    amount: Number(r.amount) || 0,
+    month: r.month || '',
+    year: Number(r.year) || 0,
+    date: r.date || '',
+  }));
+
   return {
     forecast, bomRecords, refInfo, materialCodes,
     purchasePrices, outsourcePrices, paintMixRatios,
     itemStandardCosts, productCodes, pnMapping,
+    purchaseData,
   };
 }
 
@@ -488,20 +507,25 @@ function collectLeafMaterials(rootPn, monthlyQty, forwardMap, priceData, refInfo
     // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
     const selfIsRawMaterial = materialTypeMap.has(code);
 
-    // matType 결정: source(가격산출방식)를 최우선으로, mt는 보조 판별용
+    // matType 결정:
+    // RESIN: mt 기반으로 넓게 (사출/외주사출 모두 — MRP)
+    // PAINT: source='도장'만 (자체도장). 외주도장은 완성품 단가에 포함
     let matType = '구매';
     if (selfIsRawMaterial) {
       if (/resin|수지|사출/i.test(mt)) { matType = 'RESIN'; _dbgResinFound++; }
       else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    } else if (source === '구매') {
+      matType = '구매';
+    } else if (/resin|수지|사출/i.test(mt)) {
+      matType = 'RESIN'; _dbgResinFound++;
     } else if (source === '사출') {
       matType = 'RESIN'; _dbgResinFound++;
     } else if (source === '도장') {
       matType = 'PAINT';
     } else if (source === '외주') {
       matType = '외주';
-    } else if (source === '재질' || source === '표준') {
-      if (/resin|수지|사출/i.test(mt)) { matType = 'RESIN'; _dbgResinFound++; }
-      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    } else if (/paint|도료|도장|경화제|희석제/i.test(mt)) {
+      matType = 'PAINT';
     }
 
     let aggCode = code;
@@ -677,6 +701,7 @@ async function main() {
     forecast, bomRecords, refInfo, materialCodes,
     purchasePrices, outsourcePrices, paintMixRatios,
     itemStandardCosts, productCodes, pnMapping,
+    purchaseData,
   } = data;
 
   console.log('\n🔧 Map 구축 중...');
@@ -1256,6 +1281,138 @@ async function main() {
     console.log(`  → 제품 재료비(EA당)와 MRP 소요금액(kg단가×소요량) 간 불일치 가능`);
   } else {
     console.log(`  ✅ 모든 RESIN rawCode가 1번 또는 2번에 위치 — 탐색 범위 이슈 없음`);
+  }
+
+  // ============================================================
+  // 전체심도 MRP RESIN vs 실제 입고 비교
+  // ============================================================
+  console.log(`\n${'='.repeat(80)}`);
+  console.log('📦 전체심도 MRP RESIN vs 실제 입고 비교');
+  console.log('='.repeat(80));
+
+  // 1) 전체심도 BOM 워크: 중간노드 가격 무시, 항상 리프까지 전개
+  const resinCodes = new Set();
+  for (const [code, mt] of priceData.materialTypeMap.entries()) {
+    if (/resin|수지|사출/i.test(mt)) resinCodes.add(code);
+  }
+
+  // RESIN 코드별 집계 { qty: number[], totalQty: number, price: number }
+  const mrpResin = new Map();
+
+  for (const fc of forecast) {
+    const partNo = normalizePn(fc.partNo);
+    const newPartNo = normalizePn(fc.newPartNo || '');
+    let bomParent = '';
+    if (forwardMap.has(partNo)) bomParent = partNo;
+    else if (newPartNo && forwardMap.has(newPartNo)) bomParent = newPartNo;
+    else if (custToInternal.has(partNo) && forwardMap.has(custToInternal.get(partNo))) bomParent = custToInternal.get(partNo);
+    else if (newPartNo && custToInternal.has(newPartNo) && forwardMap.has(custToInternal.get(newPartNo))) bomParent = custToInternal.get(newPartNo);
+    if (!bomParent) continue;
+
+    function walkDeep(pn, qtyPerRoot, visited) {
+      const code = normalizePn(pn);
+      if (visited.has(code)) return;
+      visited.add(code);
+
+      const children = forwardMap.get(code) || [];
+      if (children.length === 0) {
+        // 리프: RESIN rawCode + netWeight 확인
+        const ri = refInfoMap.get(code);
+        if (ri) {
+          const rawCds = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean).map(normalizePn);
+          for (const raw of rawCds) {
+            if (!resinCodes.has(raw)) continue;
+            const rp = priceData.matPriceMap.get(raw) || 0;
+            if (ri.netWeight && ri.netWeight > 0) {
+              const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+              const wpe = ri.netWeight + (ri.runnerWeight || 0) / cavity;
+              const qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000;
+              const qtyPerUnit = qtyPerRoot * qtyMultiplier;
+
+              if (!mrpResin.has(raw)) mrpResin.set(raw, { name: priceData.matNameMap.get(raw) || raw, qty: Array(12).fill(0), totalQty: 0, price: rp });
+              const agg = mrpResin.get(raw);
+              for (let m = 0; m < 12; m++) {
+                const mQty = qtyPerUnit * (Number(fc.monthlyQty[m]) || 0);
+                agg.qty[m] += mQty;
+                agg.totalQty += mQty;
+              }
+              break; // first RESIN rawCode only
+            }
+          }
+        }
+        visited.delete(code);
+        return;
+      }
+
+      // 비-리프: 항상 자식으로 전개 (중간노드 가격 무시)
+      for (const child of children) {
+        walkDeep(child.childPn, qtyPerRoot * child.qty, visited);
+      }
+      visited.delete(code);
+    }
+    walkDeep(bomParent, 1, new Set());
+  }
+
+  // MRP 결과 정리
+  const mrpSorted = [...mrpResin.entries()].sort((a, b) => b[1].totalQty - a[1].totalQty);
+  const mrpTotalQty = mrpSorted.reduce((s, [, v]) => s + v.totalQty, 0);
+  const mrpTotalCost = mrpSorted.reduce((s, [, v]) => s + v.totalQty * v.price, 0);
+
+  console.log(`\n  [전체심도 MRP RESIN]`);
+  console.log(`  RESIN 코드 수: ${mrpSorted.length}`);
+  console.log(`  총소요량: ${Math.round(mrpTotalQty).toLocaleString()} kg`);
+  console.log(`  총소요금액: ₩${Math.round(mrpTotalCost).toLocaleString()} (단가 기준)`);
+
+  // 2) 실제 입고와 비교
+  const purchMonths = new Set();
+  const actualByCode = new Map();
+  for (const pr of purchaseData) {
+    if (pr.year !== 2026) continue;
+    const code = normalizePn(pr.itemCode);
+    if (!resinCodes.has(code)) continue;
+    purchMonths.add(pr.month);
+    if (!actualByCode.has(code)) actualByCode.set(code, { name: pr.itemName, qty: 0, amount: 0 });
+    const a = actualByCode.get(code);
+    a.qty += pr.qty;
+    a.amount += pr.amount;
+  }
+  const nMonths = purchMonths.size || 1;
+  const actualTotalQty = [...actualByCode.values()].reduce((s, v) => s + v.qty, 0);
+  const actualTotalAmt = [...actualByCode.values()].reduce((s, v) => s + v.amount, 0);
+  const annualActualQty = Math.round(actualTotalQty / nMonths * 12);
+  const annualActualAmt = Math.round(actualTotalAmt / nMonths * 12);
+
+  console.log(`\n  [2026년 실제 RESIN 입고] (${[...purchMonths].sort().join(', ')} = ${nMonths}개월)`);
+  console.log(`  3개월 실적: ${Math.round(actualTotalQty).toLocaleString()} kg / ₩${Math.round(actualTotalAmt).toLocaleString()}`);
+  console.log(`  연간 환산:  ${annualActualQty.toLocaleString()} kg / ₩${annualActualAmt.toLocaleString()}`);
+
+  console.log(`\n  [비교 요약]`);
+  console.log(`  ${'─'.repeat(60)}`);
+  console.log(`  ${'구분'.padEnd(20)} ${'소요량(kg)'.padStart(14)} ${'금액(₩)'.padStart(18)} ${'비율'.padStart(8)}`);
+  console.log(`  ${'─'.repeat(60)}`);
+  console.log(`  ${'엔진(기존)'.padEnd(18)} ${Math.round(totalResinQty).toLocaleString().padStart(14)} ${('₩'+Math.round(totalResinCost).toLocaleString()).padStart(18)} ${(annualActualQty > 0 ? (totalResinQty / annualActualQty * 100).toFixed(0) : '-').padStart(7)}%`);
+  console.log(`  ${'전체심도 MRP'.padEnd(18)} ${Math.round(mrpTotalQty).toLocaleString().padStart(14)} ${('₩'+Math.round(mrpTotalCost).toLocaleString()).padStart(18)} ${(annualActualQty > 0 ? (mrpTotalQty / annualActualQty * 100).toFixed(0) : '-').padStart(7)}%`);
+  console.log(`  ${'실제입고(연환산)'.padEnd(18)} ${annualActualQty.toLocaleString().padStart(14)} ${('₩'+annualActualAmt.toLocaleString()).padStart(18)} ${'100'.padStart(7)}%`);
+  console.log(`  ${'─'.repeat(60)}`);
+
+  // 3) 코드별 비교 (Top 15)
+  console.log(`\n  [RESIN 코드별 비교] (MRP vs 실제입고, Top 15)`);
+  console.log(`  ${'코드'.padEnd(12)} ${'MRP(kg)'.padStart(10)} ${'실제(kg/년)'.padStart(12)} ${'차이%'.padStart(8)} ${'명칭'}`);
+  console.log(`  ${'─'.repeat(70)}`);
+  for (const [code, mrp] of mrpSorted.slice(0, 15)) {
+    const act = actualByCode.get(code);
+    const annualAct = act ? Math.round(act.qty / nMonths * 12) : 0;
+    const diffPct = annualAct > 0 ? ((mrp.totalQty - annualAct) / annualAct * 100).toFixed(0) : 'N/A';
+    console.log(`  ${code.padEnd(12)} ${Math.round(mrp.totalQty).toLocaleString().padStart(10)} ${annualAct.toLocaleString().padStart(12)} ${String(diffPct === 'N/A' ? diffPct : diffPct + '%').padStart(8)} ${mrp.name.substring(0, 35)}`);
+  }
+
+  // 실제 입고에는 있지만 MRP에 없는 코드
+  const onlyInActual = [...actualByCode.entries()].filter(([code]) => !mrpResin.has(code)).sort((a, b) => b[1].amount - a[1].amount);
+  if (onlyInActual.length > 0) {
+    console.log(`\n  [실제 입고에만 있는 RESIN] (MRP 미추적 ${onlyInActual.length}건)`);
+    for (const [code, v] of onlyInActual.slice(0, 10)) {
+      console.log(`    ${code}: ${Math.round(v.qty / nMonths * 12).toLocaleString()}kg/년 / ₩${Math.round(v.amount / nMonths * 12).toLocaleString()}/년 (${v.name})`);
+    }
   }
 
   console.log(`\n${'='.repeat(80)}`);

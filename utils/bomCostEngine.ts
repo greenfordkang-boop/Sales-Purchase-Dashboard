@@ -472,27 +472,26 @@ function collectLeafMaterials(
     // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
     const selfIsRawMaterial = materialTypeMap.has(code);
 
-    // matType 결정: source(가격산출방식)를 최우선으로, mt는 보조 판별용
-    // source='사출' → 사출원가 계산됨 → 반드시 RESIN (mt가 paint여도 무시)
-    // source='도장' → 도장원가 계산됨 → 반드시 PAINT
-    // source='구매' → 완성품 구매 → 원재료 변환 불필요
+    // matType 결정:
+    // RESIN: mt 기반으로 넓게 잡음 (사출/외주사출 모두 — MRP 소요량 추적)
+    // PAINT: source='도장'만 (자체도장). 외주도장은 완성품 단가에 도료비 포함
     let matType = '구매';
     if (selfIsRawMaterial) {
-      // 코드 자체가 원재료 → materialType 기준 분류
       if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
       else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    } else if (source === '구매') {
+      matType = '구매';
+    } else if (/resin|수지|사출/i.test(mt)) {
+      matType = 'RESIN';     // rawCode에 RESIN → RESIN (사출/외주/재질/표준 모두)
     } else if (source === '사출') {
-      matType = 'RESIN';
+      matType = 'RESIN';     // 사출공식 가격이나 mt≠RESIN → 여전히 RESIN
     } else if (source === '도장') {
-      matType = 'PAINT';
+      matType = 'PAINT';     // 자체도장 → PAINT 원재료 추적
     } else if (source === '외주') {
-      matType = '외주';
-    } else if (source === '재질' || source === '표준') {
-      // 가격소스만으로 판별 불가 → mt 기준 분류
-      if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
-      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+      matType = '외주';      // 외주 (도장/기타) → mt=PAINT여도 외주 유지
+    } else if (/paint|도료|도장|경화제|희석제/i.test(mt)) {
+      matType = 'PAINT';     // 나머지 (재질/표준) + mt=PAINT
     }
-    // source === '구매' || source === '' → matType stays '구매'
 
     // ── RESIN/PAINT: 실제 원재료 코드 기준으로 집계 ──
     let aggCode = code;           // 집계 키 (기본: BOM 코드)
