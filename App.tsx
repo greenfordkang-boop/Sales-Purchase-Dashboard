@@ -311,10 +311,10 @@ const App: React.FC = () => {
   // 로딩 화면
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-[#0d0d0d]">
         <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-slate-400">세션 확인 중...</p>
+          <div className="animate-spin w-8 h-8 border-2 border-white/20 border-t-white rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600 text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -323,31 +323,34 @@ const App: React.FC = () => {
   // 로그인 화면
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6">
-        <div className="w-full max-w-md bg-white/5 backdrop-blur-xl p-10 rounded-3xl border border-white/10 shadow-2xl">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">신성오토텍</h1>
-            <p className={`${isBomReviewMode ? 'text-violet-400' : 'text-emerald-400'} text-sm font-medium tracking-wide`}>
-              {isSignUpMode ? '계정 등록' : isBomReviewMode ? 'BOM 검토 시스템' : '영업/구매 대시보드'}
+      <div className="min-h-screen flex items-center justify-center bg-[#0d0d0d] p-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-10">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <span className="text-sm font-bold text-[#0d0d0d]">SS</span>
+            </div>
+            <h1 className="text-xl font-semibold text-white mb-1 tracking-tight">Shinsung Autotech</h1>
+            <p className="text-gray-500 text-[13px] font-medium">
+              {isSignUpMode ? 'Create Account' : isBomReviewMode ? 'BOM Review System' : 'Sales & Purchase Dashboard'}
             </p>
           </div>
 
-          <form onSubmit={isSignUpMode ? handleSignUp : handleLogin} className="space-y-4">
+          <form onSubmit={isSignUpMode ? handleSignUp : handleLogin} className="space-y-3">
             {isSignUpMode && (
               <input
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="이름 (선택사항)"
-                className="w-full bg-white/10 border border-white/20 rounded-xl p-4 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-gray-600 outline-none focus:border-white/30 transition-colors"
               />
             )}
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="이메일 주소"
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-4 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="이메일"
+              className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-gray-600 outline-none focus:border-white/30 transition-colors"
               required
             />
             <input
@@ -355,20 +358,20 @@ const App: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder={isSignUpMode ? '비밀번호 (6자 이상)' : '비밀번호'}
-              className="w-full bg-white/10 border border-white/20 rounded-xl p-4 text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              className="w-full bg-white/[0.06] border border-white/10 rounded-xl px-4 py-3.5 text-[14px] text-white placeholder-gray-600 outline-none focus:border-white/30 transition-colors"
               required
             />
 
             {loginError && (
-              <p className="text-rose-400 text-sm text-center">{loginError}</p>
+              <p className="text-rose-400 text-[13px] text-center">{loginError}</p>
             )}
 
             <button
               type="submit"
               disabled={loginLoading}
-              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 disabled:opacity-50 py-4 rounded-xl font-bold text-lg text-white transition-all shadow-lg"
+              className="w-full bg-white hover:bg-gray-100 disabled:opacity-50 py-3.5 rounded-xl font-semibold text-[14px] text-[#0d0d0d] transition-all mt-2"
             >
-              {loginLoading ? '처리 중...' : isSignUpMode ? '계정 생성' : '시스템 접속'}
+              {loginLoading ? '처리 중...' : isSignUpMode ? '계정 생성' : '로그인'}
             </button>
           </form>
 
@@ -378,15 +381,11 @@ const App: React.FC = () => {
                 setIsSignUpMode(!isSignUpMode);
                 setLoginError('');
               }}
-              className="text-slate-400 hover:text-white text-sm transition-colors"
+              className="text-gray-600 hover:text-gray-400 text-[13px] transition-colors"
             >
-              {isSignUpMode ? '← 로그인으로 돌아가기' : '계정 등록 →'}
+              {isSignUpMode ? '로그인으로 돌아가기' : '계정 등록'}
             </button>
           </div>
-
-          <p className="mt-6 text-center text-slate-600 text-xs">
-            🔒 Supabase Auth 보안 인증
-          </p>
         </div>
       </div>
     );
@@ -638,32 +637,30 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f4f7f9] overflow-x-hidden">
-      {/* Navigation Bar */}
-      <nav className="bg-slate-900 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-[100] border-b border-slate-800">
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-3">
-            <div className="flex gap-0.5">
-              <div className="w-1 h-4 bg-emerald-400 rounded-full opacity-70"></div>
-              <div className="w-1 h-5 bg-emerald-500 rounded-full"></div>
-              <div className="w-1 h-4 bg-emerald-400 rounded-full opacity-70"></div>
+    <div className="min-h-screen flex flex-col bg-[#f8f9fa] overflow-x-hidden">
+      {/* Navigation Bar — McKinsey/Apple minimal */}
+      <nav className="bg-[#0d0d0d] text-white px-8 py-0 flex items-center justify-between sticky top-0 z-[100]">
+        <div className="flex items-center gap-10">
+          <div className="flex items-center gap-3 py-3">
+            <div className="w-7 h-7 bg-white rounded-lg flex items-center justify-center">
+              <span className="text-[10px] font-bold text-[#0d0d0d] leading-none">SS</span>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-white tracking-tight leading-none">신성오토텍</h1>
-              <p className={`text-[10px] ${isBomReviewMode ? 'text-violet-400' : 'text-emerald-400'} font-medium tracking-wider`}>
+              <h1 className="text-[13px] font-semibold text-white tracking-tight leading-none">SHINSUNG AUTOTECH</h1>
+              <p className={`text-[10px] ${isBomReviewMode ? 'text-violet-400' : 'text-gray-500'} font-medium tracking-[0.15em]`}>
                 {isBomReviewMode ? 'BOM REVIEW' : 'SALES & PURCHASE'}
               </p>
             </div>
           </div>
-          <div className="flex gap-1 items-center">
+          <div className="flex items-center h-full">
             {MAIN_TABS.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                className={`px-5 py-4 text-[13px] font-medium transition-all relative ${
                   activeTab === tab.id
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-slate-400 hover:bg-slate-800'
+                    ? 'text-white nav-tab-active'
+                    : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 {tab.label}
@@ -672,54 +669,53 @@ const App: React.FC = () => {
             {!isBomReviewMode && (
               <button
                 onClick={() => setShowUploader(true)}
-                className="px-4 py-2 rounded-lg text-sm font-semibold transition-all text-emerald-400 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-400/50"
+                className="ml-2 px-4 py-1.5 text-[12px] font-medium text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-full transition-all"
               >
-                업로더
+                Upload
               </button>
             )}
             {isAdmin(currentUser?.email) && (
               <button
                 onClick={() => setActiveTab('admin')}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                className={`ml-2 px-4 py-1.5 text-[12px] font-medium rounded-full transition-all ${
                   activeTab === 'admin'
-                    ? 'bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg'
-                    : 'bg-gradient-to-r from-red-600/20 to-red-700/20 text-red-400 hover:from-red-600/30 hover:to-red-700/30'
+                    ? 'bg-white text-[#0d0d0d]'
+                    : 'text-gray-500 hover:text-white border border-gray-700 hover:border-gray-500'
                 }`}
               >
-                👑 관리자
+                Admin
               </button>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <SyncStatus />
           <button
             onClick={() => setShowGuide(true)}
-            className="text-slate-400 hover:text-emerald-400 transition-colors p-1.5 rounded-lg hover:bg-slate-800"
+            className="text-gray-500 hover:text-white transition-colors"
             title="사용설명서"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
-          <span className="text-xs text-slate-400 font-medium">
+          <span className="text-[12px] text-gray-500 font-medium">
             {userProfile?.display_name || currentUser?.email?.split('@')[0]}
-            {isAdmin(currentUser?.email) && ' (관리자)'}
           </span>
           <button
             onClick={() => handleLogout(false)}
-            className="text-slate-400 hover:text-rose-500 transition-colors p-2"
+            className="text-gray-500 hover:text-white transition-colors"
             title="로그아웃"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7" />
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
             </svg>
           </button>
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 max-w-[1600px] mx-auto w-full">
+      <main className="flex-1 px-8 py-8 max-w-[1440px] mx-auto w-full">
         <div className="space-y-6">
           <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
             {activeTab === DashboardTab.OVERVIEW && <Overview />}
@@ -742,8 +738,10 @@ const App: React.FC = () => {
         <UploaderModal isOpen={showUploader} onClose={() => setShowUploader(false)} />
       </Suspense>
 
-      <footer className="py-6 px-10 text-center text-slate-400 text-xs font-medium">
-        신성오토텍 {isBomReviewMode ? 'BOM 검토 시스템' : '영업/구매 대시보드'} v2.0.0 (Supabase Auth) | 최종 업데이트: {new Date().toLocaleDateString()}
+      <footer className="py-8 px-10 text-center">
+        <p className="text-[11px] text-gray-400 font-medium tracking-wide">
+          Shinsung Autotech &middot; {isBomReviewMode ? 'BOM Review' : 'Sales & Purchase'} Dashboard
+        </p>
       </footer>
     </div>
   );

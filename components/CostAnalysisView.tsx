@@ -497,7 +497,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         ? inbound.reduce((s, q) => s + q, 0)
         : inbound[selectedMonth] || 0;
       const diff = inboundQty - requiredQty;
-      const yieldRate = requiredQty > 0 ? (inboundQty / requiredQty) * 100 : 0;
+      const yieldRate = inboundQty > 0 ? (requiredQty / inboundQty) * 100 : 0;
       return { ...m, requiredQty, inboundQty, diff, yieldRate };
     });
 
@@ -578,7 +578,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                 <td className="px-3 py-1.5 text-slate-500 truncate max-w-[120px]" title={m.supplier}>{m.supplier || '-'}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.requiredQty).toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right font-mono">{m.inboundQty > 0 ? Math.round(m.inboundQty).toLocaleString() : '-'}</td>
-                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-emerald-600' : m.diff < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-amber-600' : m.diff < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                   {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diff > 0 ? '+' : '') + Math.round(m.diff).toLocaleString() : '-'}
                 </td>
                 <td className={`px-3 py-1.5 text-right font-mono ${m.yieldRate >= 100 ? 'text-emerald-600' : m.yieldRate > 0 ? 'text-amber-600' : 'text-slate-400'}`}>

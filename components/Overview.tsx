@@ -245,39 +245,38 @@ const Overview: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Header Summary */}
-      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="text-left">
-          <h2 className="text-3xl font-black text-slate-800">영업/구매실 대시보드</h2>
+    <div className="space-y-6">
+      {/* Header — clean, minimal */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-2">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Overview</h2>
+          <p className="text-[13px] text-gray-400 mt-0.5">영업/구매 종합현황</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* 월 선택 드롭다운 */}
+        <div className="flex items-center gap-2">
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:bg-slate-100 transition-colors"
+            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 focus:outline-none focus:border-gray-400 cursor-pointer hover:border-gray-300 transition-colors"
           >
             {MONTHS.map(m => (
               <option key={m.value} value={m.value}>{m.label}</option>
             ))}
           </select>
-          {/* 연도 선택 드롭다운 */}
           <select
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer hover:bg-slate-100 transition-colors"
+            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-[13px] font-medium text-gray-700 focus:outline-none focus:border-gray-400 cursor-pointer hover:border-gray-300 transition-colors"
           >
-            <option value={2024}>2024년</option>
-            <option value={2025}>2025년</option>
-            <option value={2026}>2026년</option>
+            <option value={2024}>2024</option>
+            <option value={2025}>2025</option>
+            <option value={2026}>2026</option>
           </select>
           <button
               onClick={handleDownload}
-              className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+              className="text-gray-400 hover:text-gray-600 flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors text-[13px] font-medium"
           >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              데이터 엑셀 다운로드
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+              Export
           </button>
         </div>
       </div>
@@ -321,60 +320,55 @@ const Overview: React.FC = () => {
       {/* Charts Section */}
       <div className="grid grid-cols-1 gap-6">
 
-        {/* Top Chart: Sales vs Purchase Only */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="font-black text-slate-800 flex items-center gap-2">
-              <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
-              영업(Sales) vs 구매(Purchase) 금액 추이 (년간)
-              {selectedMonth !== 'all' && (
-                <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
-                  {parseInt(selectedMonth)}월 선택됨
-                </span>
-              )}
-            </h3>
-            <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">단위: 원</span>
+        {/* Top Chart: Sales vs Purchase */}
+        <div className="bg-white p-8 rounded-2xl border border-gray-100">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h3 className="text-[15px] font-semibold text-gray-900">Sales vs Purchase</h3>
+              <p className="text-[12px] text-gray-400 mt-0.5">영업 매출 / 구매 매입 월별 추이{selectedMonth !== 'all' ? ` — ${parseInt(selectedMonth)}월` : ''}</p>
+            </div>
+            <span className="text-[11px] text-gray-400">Unit: KRW</span>
           </div>
-          <div className="h-[400px] w-full">
+          <div className="h-[380px] w-full">
             <ResponsiveContainer minWidth={0} width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <ComposedChart data={chartData} margin={{ top: 20, right: 10, bottom: 10, left: 10 }}>
+                <CartesianGrid strokeDasharray="0" vertical={false} stroke="#f3f4f6" />
                 <XAxis
                     dataKey="month"
                     axisLine={false}
                     tickLine={false}
-                    tick={{fontSize: 12, fontWeight: 700, fill: '#64748b'}}
+                    tick={{fontSize: 11, fontWeight: 500, fill: '#9ca3af'}}
                 />
                 <YAxis
                     axisLine={false}
                     tickLine={false}
-                    tick={{fontSize: 11, fill: '#94a3b8'}}
+                    tick={{fontSize: 11, fill: '#d1d5db'}}
                     tickFormatter={(val) => `${(val/100000000).toFixed(0)}억`}
                 />
                 <Tooltip
-                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ borderRadius: '10px', border: '1px solid #f3f4f6', boxShadow: '0 4px 20px rgb(0 0 0 / 0.08)', fontSize: '13px' }}
                   formatter={(value: number) => `₩${value.toLocaleString()}`}
-                  cursor={{ fill: '#f8fafc' }}
+                  cursor={{ fill: 'rgba(0,0,0,0.02)' }}
                 />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
+                <Legend iconType="circle" iconSize={6} wrapperStyle={{ paddingTop: '16px', fontSize: '12px', fontWeight: 500, color: '#6b7280' }} />
 
-                <Bar name="영업 매출액" dataKey="sales" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
-                  <LabelList dataKey="sales" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 700, fill: '#3b82f6' }} />
+                <Bar name="Sales" dataKey="sales" fill="#1a1a2e" radius={[3, 3, 0, 0]} barSize={24}>
+                  <LabelList dataKey="sales" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#6b7280' }} />
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`sales-${index}`}
-                      fill={selectedMonth === 'all' || entry.monthKey === selectedMonth ? '#3b82f6' : '#e2e8f0'}
-                      opacity={selectedMonth === 'all' || entry.monthKey === selectedMonth ? 1 : 0.4}
+                      fill={selectedMonth === 'all' || entry.monthKey === selectedMonth ? '#1a1a2e' : '#e5e7eb'}
+                      opacity={selectedMonth === 'all' || entry.monthKey === selectedMonth ? 1 : 0.5}
                     />
                   ))}
                 </Bar>
-                <Bar name="구매 매입액" dataKey="purchase" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={30}>
-                  <LabelList dataKey="purchase" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 700, fill: '#f43f5e' }} />
+                <Bar name="Purchase" dataKey="purchase" fill="#d1d5db" radius={[3, 3, 0, 0]} barSize={24}>
+                  <LabelList dataKey="purchase" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#9ca3af' }} />
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`purchase-${index}`}
-                      fill={selectedMonth === 'all' || entry.monthKey === selectedMonth ? '#f43f5e' : '#e2e8f0'}
-                      opacity={selectedMonth === 'all' || entry.monthKey === selectedMonth ? 1 : 0.4}
+                      fill={selectedMonth === 'all' || entry.monthKey === selectedMonth ? '#d1d5db' : '#f3f4f6'}
+                      opacity={selectedMonth === 'all' || entry.monthKey === selectedMonth ? 1 : 0.5}
                     />
                   ))}
                 </Bar>
@@ -383,39 +377,39 @@ const Overview: React.FC = () => {
           </div>
         </div>
 
-        {/* Bottom Chart: Purchase Material Ratio (Line Chart) */}
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
-            <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
-              <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
-              월별 매입재료비율 (Purchase Material Ratio)
-              {selectedMonth !== 'all' && (
-                <span className="ml-2 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-bold rounded-full">
-                  {parseInt(selectedMonth)}월: {chartData[parseInt(selectedMonth) - 1]?.ratio || 0}%
-                </span>
-              )}
-            </h3>
-            <div className="h-[300px] w-full">
+        {/* Bottom Chart: Purchase Material Ratio */}
+        <div className="bg-white p-8 rounded-2xl border border-gray-100">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h3 className="text-[15px] font-semibold text-gray-900">Cost Ratio</h3>
+                <p className="text-[12px] text-gray-400 mt-0.5">
+                  월별 매입재료비율
+                  {selectedMonth !== 'all' ? ` — ${parseInt(selectedMonth)}월: ${chartData[parseInt(selectedMonth) - 1]?.ratio || 0}%` : ''}
+                </p>
+              </div>
+            </div>
+            <div className="h-[280px] w-full">
                 <ResponsiveContainer minWidth={0} width="100%" height="100%">
-                    <ComposedChart data={chartData} margin={{ top: 30, right: 30, left: 10, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 700, fill: '#64748b'}} />
+                    <ComposedChart data={chartData} margin={{ top: 30, right: 20, left: 10, bottom: 10 }}>
+                        <CartesianGrid strokeDasharray="0" vertical={false} stroke="#f3f4f6" />
+                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 11, fontWeight: 500, fill: '#9ca3af'}} />
                         <YAxis
                             axisLine={false}
                             tickLine={false}
-                            tick={{fontSize: 11, fill: '#94a3b8'}}
+                            tick={{fontSize: 11, fill: '#d1d5db'}}
                             unit="%"
                             domain={[0, 100]}
                         />
                         <Tooltip
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                            contentStyle={{ borderRadius: '10px', border: '1px solid #f3f4f6', boxShadow: '0 4px 20px rgb(0 0 0 / 0.08)', fontSize: '13px' }}
                             formatter={(value: number) => `${value}%`}
                         />
                         <Line
                             type="monotone"
                             dataKey="ratio"
-                            name="매입비율"
-                            stroke="#f59e0b"
-                            strokeWidth={3}
+                            name="Cost Ratio"
+                            stroke="#1a1a2e"
+                            strokeWidth={2}
                             dot={(props: any) => {
                               const { cx, cy, payload } = props;
                               const isSelected = selectedMonth !== 'all' && payload.monthKey === selectedMonth;
@@ -423,31 +417,29 @@ const Overview: React.FC = () => {
                                 <circle
                                   cx={cx}
                                   cy={cy}
-                                  r={isSelected ? 10 : 5}
-                                  fill={isSelected ? '#f59e0b' : '#f59e0b'}
-                                  stroke={isSelected ? '#fff' : '#fff'}
-                                  strokeWidth={isSelected ? 4 : 2}
-                                  style={{ filter: isSelected ? 'drop-shadow(0 0 8px rgba(245, 158, 11, 0.6))' : 'none' }}
+                                  r={isSelected ? 6 : 3}
+                                  fill={isSelected ? '#1a1a2e' : '#1a1a2e'}
+                                  stroke="#fff"
+                                  strokeWidth={isSelected ? 3 : 2}
                                 />
                               );
                             }}
-                            activeDot={{r: 7}}
+                            activeDot={{r: 5, fill: '#1a1a2e', stroke: '#fff', strokeWidth: 2}}
                         >
                             <LabelList
                                 dataKey="ratio"
                                 position="top"
                                 offset={10}
                                 formatter={(value: number) => `${value.toFixed(1)}%`}
-                                style={{ fill: '#d97706', fontSize: '11px', fontWeight: 'bold' }}
+                                style={{ fill: '#6b7280', fontSize: '10px', fontWeight: 600 }}
                             />
                         </Line>
-                        {/* 선택된 월 강조 바 */}
                         {selectedMonth !== 'all' && (
-                          <Bar dataKey="ratio" barSize={40} opacity={0.15} radius={[4, 4, 0, 0]}>
+                          <Bar dataKey="ratio" barSize={40} opacity={0.08} radius={[3, 3, 0, 0]}>
                             {chartData.map((entry, index) => (
                               <Cell
                                 key={`highlight-${index}`}
-                                fill={entry.monthKey === selectedMonth ? '#f59e0b' : 'transparent'}
+                                fill={entry.monthKey === selectedMonth ? '#1a1a2e' : 'transparent'}
                               />
                             ))}
                           </Bar>

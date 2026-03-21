@@ -446,6 +446,28 @@ function collectLeafMaterials(
       supplier = '신성오토텍(자작)';
     }
 
+    // 자재명 결정: 실제 구매할 원재료명 표시
+    // 1) BOM 코드로 직접 matNameMap 조회
+    let resolvedName = matNameMap.get(code) || '';
+    // 2) 실패 시 refInfo의 rawMaterialCode1~4로 matNameMap 재조회
+    if (!resolvedName && ri) {
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+      for (const raw of rawCodes) {
+        const rawName = matNameMap.get(normalizePn(raw));
+        if (rawName) { resolvedName = rawName; break; }
+      }
+    }
+    // 3) PAINT: paintMixMap에서 더 정확한 페인트명 조회
+    if (matType === 'PAINT' && ri) {
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+      for (const raw of rawCodes) {
+        const mix = paintMixMap.get(normalizePn(raw));
+        if (mix?.paintName) { resolvedName = mix.paintName; break; }
+      }
+    }
+    // 4) 최종 폴백: 기준정보 품명 → BOM 품번
+    if (!resolvedName) resolvedName = ri?.itemName || pn;
+
     const existing = materialAgg.get(code);
     if (existing) {
       for (let m = 0; m < 12; m++) {
@@ -458,7 +480,7 @@ function collectLeafMaterials(
         mq[m] = qtyPerRoot * (monthlyQty[m] || 0);
       }
       materialAgg.set(code, {
-        name: matNameMap.get(code) || ri?.itemName || pn,
+        name: resolvedName,
         type: matType,
         monthlyQty: mq,
         unitPrice: price,
