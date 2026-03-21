@@ -477,7 +477,7 @@ const RequiredQtyCell: React.FC<{
         {Math.round(row.requiredQty).toLocaleString()}
       </span>
       {show && hasBreakdown && (
-        <div className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-2xl p-3 min-w-[420px] max-h-[320px] overflow-y-auto text-[11px]"
+        <div className="absolute z-[100] right-0 top-full mt-1 bg-slate-800 text-white rounded-xl shadow-2xl p-3 min-w-[560px] max-h-[320px] overflow-y-auto text-[11px]"
           onMouseEnter={open} onMouseLeave={close}>
           <div className="flex items-center justify-between mb-2">
             <span className="font-bold text-slate-200">소요량 산출근거 — {row.materialName}</span>
@@ -493,12 +493,16 @@ const RequiredQtyCell: React.FC<{
                 <th className="text-left py-1 pr-2">제품코드</th>
                 <th className="text-left py-1 pr-2">제품명</th>
                 <th className="text-right py-1 pr-2">단위소요량</th>
+                <th className="text-right py-1 pr-2 text-slate-500">×</th>
+                <th className="text-right py-1 pr-2">계획수량</th>
+                <th className="text-right py-1 pr-2 text-slate-500">=</th>
                 <th className="text-right py-1 pr-2">{selectedMonth === -1 ? '소요량' : `${selectedMonth + 1}월`}</th>
               </tr>
             </thead>
             <tbody>
               {breakdown.map(c => {
                 const qty = selectedMonth === -1 ? c.totalQty : (c.monthlyQty[selectedMonth] || 0);
+                const planQty = c.qtyPerUnit > 0 ? Math.round(qty / c.qtyPerUnit) : 0;
                 return (
                   <tr key={c.productPn} className="border-b border-slate-700/50 hover:bg-slate-700/50">
                     <td className="py-1 pr-2 font-mono text-indigo-300">{c.productPn}</td>
@@ -506,6 +510,9 @@ const RequiredQtyCell: React.FC<{
                     <td className="py-1 pr-2 text-right font-mono text-slate-300">
                       {c.qtyPerUnit < 0.01 ? c.qtyPerUnit.toFixed(4) : c.qtyPerUnit < 1 ? c.qtyPerUnit.toFixed(3) : c.qtyPerUnit.toFixed(2)}
                     </td>
+                    <td className="py-1 pr-2 text-right text-slate-500">×</td>
+                    <td className="py-1 pr-2 text-right font-mono text-amber-300">{planQty.toLocaleString()}</td>
+                    <td className="py-1 pr-2 text-right text-slate-500">=</td>
                     <td className="py-1 pr-2 text-right font-mono font-bold text-white">{Math.round(qty).toLocaleString()}</td>
                   </tr>
                 );
@@ -513,7 +520,12 @@ const RequiredQtyCell: React.FC<{
             </tbody>
             <tfoot>
               <tr className="border-t border-slate-500 font-bold text-indigo-300">
-                <td className="py-1" colSpan={3}>합계 ({breakdown.length}건)</td>
+                <td className="py-1" colSpan={4}>합계 ({breakdown.length}건)</td>
+                <td className="py-1 pr-2 text-right font-mono">{breakdown.reduce((s, c) => {
+                  const qty = selectedMonth === -1 ? c.totalQty : (c.monthlyQty[selectedMonth] || 0);
+                  return s + (c.qtyPerUnit > 0 ? Math.round(qty / c.qtyPerUnit) : 0);
+                }, 0).toLocaleString()}</td>
+                <td className="py-1 pr-2"></td>
                 <td className="py-1 pr-2 text-right font-mono">{Math.round(row.requiredQty).toLocaleString()}</td>
               </tr>
             </tfoot>
