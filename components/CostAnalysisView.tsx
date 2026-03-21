@@ -501,8 +501,8 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         : inbound[selectedMonth] || 0;
       const diff = inboundQty - requiredQty;
       const yieldRate = inboundQty > 0 ? (requiredQty / inboundQty) * 100 : 0;
-      // 구입처: 엔진 결과 > 입고실적 > 미지정
-      const supplier = m.supplier || purchaseSupplierMap.get(code) || '';
+      // 구입처: 입고실적(실제 납품업체) > 엔진 결과 > 미지정
+      const supplier = purchaseSupplierMap.get(code) || m.supplier || '';
       return { ...m, supplier, requiredQty, inboundQty, diff, yieldRate };
     });
 
@@ -665,7 +665,8 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       const totalQty = m.monthlyQty.reduce((s, q) => s + q, 0);
       const currentStock = inventoryMap.get(code) || 0;
       const orderQty = Math.max(0, totalQty - currentStock);
-      const supplier = m.supplier || purchaseSupplierMap.get(code) || '';
+      // 구입처: 입고실적(실제 납품업체) > 엔진 결과 > 미지정
+      const supplier = purchaseSupplierMap.get(code) || m.supplier || '';
       return { ...m, supplier, totalQty, currentStock, orderQty } as MRPRow;
     });
   }, [leafMaterials, inventoryMap, purchaseSupplierMap]);
