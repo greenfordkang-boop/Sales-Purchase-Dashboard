@@ -285,11 +285,25 @@ function buildRefInfoMap(refInfo) {
   return map;
 }
 
-function buildPaintMixMap(paintMixRatios) {
+function buildPaintMixMap(paintMixRatios, priceData) {
   const map = new Map();
   for (const pmr of paintMixRatios) {
-    map.set(normalizePn(pmr.paintCode), pmr);
-    if (pmr.mainCode) map.set(normalizePn(pmr.mainCode), pmr);
+    let enriched = pmr;
+    if (priceData && (pmr.mainPrice === 0 || pmr.hardenerPrice === 0 || pmr.thinnerPrice === 0)) {
+      const lookup = (code) => {
+        if (!code) return 0;
+        const c = normalizePn(code);
+        return priceData.matPriceMap.get(c) || priceData.purchaseMap.get(c) || 0;
+      };
+      enriched = {
+        ...pmr,
+        mainPrice: pmr.mainPrice > 0 ? pmr.mainPrice : lookup(pmr.mainCode),
+        hardenerPrice: pmr.hardenerPrice > 0 ? pmr.hardenerPrice : lookup(pmr.hardenerCode),
+        thinnerPrice: pmr.thinnerPrice > 0 ? pmr.thinnerPrice : lookup(pmr.thinnerCode),
+      };
+    }
+    map.set(normalizePn(enriched.paintCode), enriched);
+    if (enriched.mainCode) map.set(normalizePn(enriched.mainCode), enriched);
   }
   return map;
 }
@@ -367,8 +381,10 @@ function getNodePrice(pn, priceData, refInfoMap, paintMixMap) {
   const { matPriceMap, materialTypeMap, purchaseMap, outsourceMap, stdMap } = priceData;
   const ri = refInfoMap.get(code);
 
-  // 1) 구매단가
-  const pp = purchaseMap.get(code);
+  // 1) 구매단가 (BOM코드 → customerPn fallback)
+  const pp = purchaseMap.get(code)
+    || (ri && ri.customerPn ? purchaseMap.get(normalizePn(ri.customerPn)) : 0)
+    || 0;
   if (pp && pp > 0) {
     if (ri && /외주/.test(ri.supplyType || '')) {
       const op = outsourceMap.get(code)
@@ -407,8 +423,10 @@ function getNodePrice(pn, priceData, refInfoMap, paintMixMap) {
   const dp = matPriceMap.get(code);
   if (dp && dp > 0) return { price: dp, source: '재질' };
 
-  // 4) 표준
-  const std = stdMap.get(code);
+  // 4) 표준 (BOM코드 → customerPn fallback)
+  const std = stdMap.get(code)
+    || (ri && ri.customerPn ? stdMap.get(normalizePn(ri.customerPn)) : 0)
+    || 0;
   if (std && std > 0) return { price: std, source: '표준' };
 
   return { price: 0, source: '' };
@@ -466,24 +484,31 @@ function collectLeafMaterials(rootPn, monthlyQty, forwardMap, priceData, refInfo
         if (rawMt) { mt = rawMt; break; }
       }
     }
-    let matType = '구매';
-    if (/resin|수지|사출/i.test(mt)) { matType = 'RESIN'; _dbgResinFound++; }
-    else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
-    else if (source === '사출') { matType = 'RESIN'; _dbgResinFound++; }
-    else if (source === '도장') matType = 'PAINT';
-    else if (source === '외주') matType = '외주';
 
-    // 디버그 출력 (필요시 주석 해제)
-    // if (_dbgCalls <= 5) console.log(`  [addToAgg#${_dbgCalls}] code=${code}, source=${source}, mt="${mt}", matType=${matType}, rawCodes=[${rawCodes.join(',')}], ri=${!!ri}`);
+    // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
+    const selfIsRawMaterial = materialTypeMap.has(code);
+
+    // matType 결정: source(가격산출방식)를 최우선으로, mt는 보조 판별용
+    let matType = '구매';
+    if (selfIsRawMaterial) {
+      if (/resin|수지|사출/i.test(mt)) { matType = 'RESIN'; _dbgResinFound++; }
+      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    } else if (source === '사출') {
+      matType = 'RESIN'; _dbgResinFound++;
+    } else if (source === '도장') {
+      matType = 'PAINT';
+    } else if (source === '외주') {
+      matType = '외주';
+    } else if (source === '재질' || source === '표준') {
+      if (/resin|수지|사출/i.test(mt)) { matType = 'RESIN'; _dbgResinFound++; }
+      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    }
 
     let aggCode = code;
     let resolvedName = '';
     let supplier = '';
     let aggPrice = price;
     let qtyMultiplier = 1;
-
-    // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
-    const selfIsRawMaterial = materialTypeMap.has(code);
 
     if (matType === 'RESIN' && ri && !selfIsRawMaterial) {
       // BOM 부품의 rawCode를 통한 RESIN 집계 — EA→kg 변환이 가능한 경우만
@@ -656,7 +681,7 @@ async function main() {
 
   console.log('\n🔧 Map 구축 중...');
   const priceData = buildPriceData(materialCodes, purchasePrices, outsourcePrices, itemStandardCosts);
-  const paintMixMap = buildPaintMixMap(paintMixRatios);
+  const paintMixMap = buildPaintMixMap(paintMixRatios, priceData);
   const refInfoMap = buildRefInfoMap(refInfo);
   const forwardMap = buildForwardMap(bomRecords);
 
@@ -1155,6 +1180,44 @@ async function main() {
   console.log(`\n  [유형별 재료비]`);
   for (const [type, amount] of [...typeAmounts.entries()].sort((a, b) => b[1] - a[1])) {
     console.log(`    ${type}: ₩${Math.round(amount).toLocaleString()} (${(totalMaterial > 0 ? amount / totalMaterial * 100 : 0).toFixed(1)}%)`);
+  }
+
+  // ── PAINT 상세 진단 ──
+  const paintMaterials = leafMaterials.filter(m => m.materialType === 'PAINT')
+    .sort((a, b) => b.totalCost - a.totalCost);
+  if (paintMaterials.length > 0) {
+    console.log(`\n  [PAINT 상세 진단] (${paintMaterials.length}건)`);
+    console.log(`  ${'─'.repeat(70)}`);
+    // Top 15 PAINT by cost
+    for (const pm of paintMaterials.slice(0, 15)) {
+      const totalQty = pm.monthlyQty.reduce((s, q) => s + q, 0);
+      console.log(`    ${pm.materialCode} (${pm.materialName || '?'})`);
+      console.log(`      단가=₩${Math.round(pm.unitPrice).toLocaleString()} | 총소요=${totalQty.toFixed(1)}kg | 금액=₩${Math.round(pm.totalCost).toLocaleString()}`);
+      // 이 자재를 사용하는 제품 중 source별 분포 확인
+      const contributions = pm.productBreakdown || [];
+      if (contributions.length > 0) {
+        console.log(`      제품수: ${contributions.length} | 상위: ${contributions.slice(0, 3).map(c => `${c.productPn}(${c.totalQty.toFixed(1)}kg)`).join(', ')}`);
+      }
+    }
+    // source 분석: 각 PAINT 자재의 원래 부품들이 어떤 source로 분류되었는지
+    console.log(`\n  [PAINT 원인 분석]`);
+    // paintIntake 분포 확인
+    const paintIntakes = [];
+    for (const ri of refInfo) {
+      if (ri.paintIntake && ri.paintIntake > 0) {
+        paintIntakes.push({ code: normalizePn(ri.itemCode), intake: ri.paintIntake });
+      }
+    }
+    console.log(`    paintIntake > 0인 부품: ${paintIntakes.length}건`);
+    paintIntakes.sort((a, b) => a.intake - b.intake);
+    if (paintIntakes.length > 0) {
+      console.log(`    paintIntake 범위: ${paintIntakes[0].intake} ~ ${paintIntakes[paintIntakes.length - 1].intake}`);
+      console.log(`    paintIntake < 10: ${paintIntakes.filter(p => p.intake < 10).length}건 (= 1EA당 > 0.1kg 도료 사용)`);
+      // 매우 낮은 paintIntake 표시
+      for (const pi of paintIntakes.filter(p => p.intake < 5).slice(0, 10)) {
+        console.log(`      ${pi.code}: paintIntake=${pi.intake} → 1/${pi.intake}=${(1/pi.intake).toFixed(4)} kg/EA`);
+      }
+    }
   }
 
   // ── getNodePrice rawCode 범위 이슈 전체 스캔 ──

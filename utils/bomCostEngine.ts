@@ -163,11 +163,29 @@ export function buildPriceData(
 // 2. PaintMixMap 구축
 // ============================================================
 
-export function buildPaintMixMap(paintMixRatios: PaintMixRatio[]): Map<string, PaintMixRatio> {
+export function buildPaintMixMap(
+  paintMixRatios: PaintMixRatio[],
+  priceData?: PriceData,
+): Map<string, PaintMixRatio> {
   const map = new Map<string, PaintMixRatio>();
   for (const pmr of paintMixRatios) {
-    map.set(normalizePn(pmr.paintCode), pmr);
-    if (pmr.mainCode) map.set(normalizePn(pmr.mainCode), pmr);
+    // 배합비 원료별 가격이 0이면 matPriceMap/purchaseMap에서 자동 보강
+    let enriched = pmr;
+    if (priceData && (pmr.mainPrice === 0 || pmr.hardenerPrice === 0 || pmr.thinnerPrice === 0)) {
+      const lookup = (code: string) => {
+        if (!code) return 0;
+        const c = normalizePn(code);
+        return priceData.matPriceMap.get(c) || priceData.purchaseMap.get(c) || 0;
+      };
+      enriched = {
+        ...pmr,
+        mainPrice: pmr.mainPrice > 0 ? pmr.mainPrice : lookup(pmr.mainCode),
+        hardenerPrice: pmr.hardenerPrice > 0 ? pmr.hardenerPrice : lookup(pmr.hardenerCode),
+        thinnerPrice: pmr.thinnerPrice > 0 ? pmr.thinnerPrice : lookup(pmr.thinnerCode),
+      };
+    }
+    map.set(normalizePn(enriched.paintCode), enriched);
+    if (enriched.mainCode) map.set(normalizePn(enriched.mainCode), enriched);
   }
   return map;
 }
@@ -288,8 +306,10 @@ export function getNodePrice(
   const { matPriceMap, materialTypeMap, purchaseMap, outsourceMap, stdMap } = priceData;
   const ri = refInfoMap.get(code);
 
-  // 1) 구매단가
-  const pp = purchaseMap.get(code);
+  // 1) 구매단가 (BOM코드 → refInfo customerPn fallback)
+  const pp = purchaseMap.get(code)
+    || (ri?.customerPn ? purchaseMap.get(normalizePn(ri.customerPn)) : 0)
+    || 0;
   if (pp && pp > 0) {
     if (ri && /외주/.test(ri.supplyType || '')) {
       // outsourceMap: item_code + customerPn 모두 등록됨
@@ -331,7 +351,9 @@ export function getNodePrice(
   if (dp && dp > 0) return { price: dp, source: '재질' };
 
   // 4) 표준재료비 (최후순위 — leaf만 사용, non-leaf에서는 caller가 판단)
-  const std = stdMap.get(code);
+  const std = stdMap.get(code)
+    || (ri?.customerPn ? stdMap.get(normalizePn(ri.customerPn)) : 0)
+    || 0;
   if (std && std > 0) return { price: std, source: '표준' };
 
   return { price: 0, source: '' };
@@ -446,12 +468,31 @@ function collectLeafMaterials(
         if (rawMt) { mt = rawMt; break; }
       }
     }
+
+    // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
+    const selfIsRawMaterial = materialTypeMap.has(code);
+
+    // matType 결정: source(가격산출방식)를 최우선으로, mt는 보조 판별용
+    // source='사출' → 사출원가 계산됨 → 반드시 RESIN (mt가 paint여도 무시)
+    // source='도장' → 도장원가 계산됨 → 반드시 PAINT
+    // source='구매' → 완성품 구매 → 원재료 변환 불필요
     let matType = '구매';
-    if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
-    else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
-    else if (source === '사출') matType = 'RESIN';
-    else if (source === '도장') matType = 'PAINT';
-    else if (source === '외주') matType = '외주';
+    if (selfIsRawMaterial) {
+      // 코드 자체가 원재료 → materialType 기준 분류
+      if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
+      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    } else if (source === '사출') {
+      matType = 'RESIN';
+    } else if (source === '도장') {
+      matType = 'PAINT';
+    } else if (source === '외주') {
+      matType = '외주';
+    } else if (source === '재질' || source === '표준') {
+      // 가격소스만으로 판별 불가 → mt 기준 분류
+      if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
+      else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
+    }
+    // source === '구매' || source === '' → matType stays '구매'
 
     // ── RESIN/PAINT: 실제 원재료 코드 기준으로 집계 ──
     let aggCode = code;           // 집계 키 (기본: BOM 코드)
@@ -459,9 +500,6 @@ function collectLeafMaterials(
     let supplier = '';
     let aggPrice = price;         // 단가
     let qtyMultiplier = 1;        // EA → 원재료 단위(kg) 변환 계수
-
-    // 부품 코드 자체가 재질코드인지 (= 원재료 직접 사용) vs rawCode를 통한 간접 참조
-    const selfIsRawMaterial = materialTypeMap.has(code);
 
     if (matType === 'RESIN' && ri && !selfIsRawMaterial) {
       // ── BOM 부품의 rawCode를 통한 RESIN 집계 ──
@@ -626,7 +664,7 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
 
   // Build maps (BomReviewView 동일)
   const priceData = buildPriceData(materialCodes, purchasePrices, outsourcePrices, itemStandardCosts);
-  const paintMixMap = buildPaintMixMap(paintMixRatios);
+  const paintMixMap = buildPaintMixMap(paintMixRatios, priceData);
   const refInfoMap = buildRefInfoMap(refInfo);
   const forwardMap = buildForwardMap(bomRecords);
 
