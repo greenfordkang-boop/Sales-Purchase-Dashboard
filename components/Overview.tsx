@@ -350,7 +350,8 @@ const Overview: React.FC = () => {
                 />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
 
-                <Bar name="영업 매출액" dataKey="sales" radius={[4, 4, 0, 0]} barSize={30}>
+                <Bar name="영업 매출액" dataKey="sales" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={30}>
+                  <LabelList dataKey="sales" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 700, fill: '#3b82f6' }} />
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`sales-${index}`}
@@ -359,7 +360,8 @@ const Overview: React.FC = () => {
                     />
                   ))}
                 </Bar>
-                <Bar name="구매 매입액" dataKey="purchase" radius={[4, 4, 0, 0]} barSize={30}>
+                <Bar name="구매 매입액" dataKey="purchase" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={30}>
+                  <LabelList dataKey="purchase" position="top" formatter={(v: number) => v > 0 ? `${(v/1e8).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 700, fill: '#f43f5e' }} />
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`purchase-${index}`}
