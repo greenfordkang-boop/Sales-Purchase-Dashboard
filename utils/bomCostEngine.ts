@@ -420,11 +420,13 @@ function collectLeafMaterials(
 
   function addToAgg(code: string, pn: string, qtyPerRoot: number, price: number, source: string) {
     const ri = refInfoMap.get(code);
-    // 1차: 직접 코드(재질코드)로 materialTypeMap 조회
+    const rawCodes = ri
+      ? [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[]
+      : [];
+
+    // ── matType 결정 ──
     let mt = materialTypeMap.get(code) || '';
-    // 2차: 원재료코드(refInfo)로 조회 — BOM 품번 ≠ 재질코드인 경우
-    if (!mt && ri) {
-      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+    if (!mt) {
       for (const raw of rawCodes) {
         const rawMt = materialTypeMap.get(normalizePn(raw));
         if (rawMt) { mt = rawMt; break; }
@@ -437,53 +439,78 @@ function collectLeafMaterials(
     else if (source === '도장') matType = 'PAINT';
     else if (source === '외주') matType = '외주';
 
-    // 업체명 결정: 기준정보 → 구매/외주 데이터 → 자작 자동지정
-    let supplier = ri?.supplier || '';
+    // ── RESIN/PAINT: 실제 원재료 코드 기준으로 집계 ──
+    let aggCode = code;           // 집계 키 (기본: BOM 코드)
+    let resolvedName = '';
+    let supplier = '';
+    let aggPrice = price;         // 단가
+    let qtyMultiplier = 1;        // EA → 원재료 단위(kg) 변환 계수
+
+    if (matType === 'RESIN' && ri) {
+      for (const raw of rawCodes) {
+        const rawNorm = normalizePn(raw);
+        const rawMt = materialTypeMap.get(rawNorm) || '';
+        if (/paint|도료/i.test(rawMt)) continue; // 도료코드 skip
+        const rp = priceData.matPriceMap.get(rawNorm);
+        if (rp && rp > 0) {
+          aggCode = rawNorm;
+          resolvedName = matNameMap.get(rawNorm) || raw;
+          aggPrice = rp; // 원/kg
+          const cavity = (ri.cavity && ri.cavity > 0) ? ri.cavity : 1;
+          const wpe = (ri.netWeight || 0) + (ri.runnerWeight || 0) / cavity;
+          qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000; // EA → kg
+          supplier = priceData.supplierMap.get(rawNorm) || '';
+          break;
+        }
+      }
+    } else if (matType === 'PAINT' && ri) {
+      for (const raw of rawCodes) {
+        const rawNorm = normalizePn(raw);
+        const mix = paintMixMap.get(rawNorm);
+        if (mix) {
+          aggCode = rawNorm;
+          resolvedName = mix.paintName || raw;
+          const mixCostPerKg =
+            (mix.mainRatio / 100) * mix.mainPrice +
+            (mix.hardenerRatio / 100) * mix.hardenerPrice +
+            (mix.thinnerRatio / 100) * mix.thinnerPrice;
+          aggPrice = mixCostPerKg; // 원/kg
+          const paintIntake = ri.paintIntake || 0;
+          qtyMultiplier = paintIntake > 0 ? 1 / paintIntake : 0; // EA → kg
+          supplier = priceData.supplierMap.get(rawNorm) || '';
+          break;
+        }
+      }
+    }
+
+    // ── 구매/외주: 기존 방식 ──
+    if (!resolvedName) {
+      resolvedName = matNameMap.get(aggCode) || ri?.itemName || pn;
+    }
     if (!supplier) {
-      supplier = priceData.supplierMap.get(code) || '';
+      supplier = ri?.supplier || priceData.supplierMap.get(code) || '';
     }
     if (!supplier && (source === '사출' || source === '도장')) {
-      supplier = '신성오토텍(자작)';
+      supplier = '자작';
     }
 
-    // 자재명 결정: 실제 구매할 원재료명 표시
-    // 1) BOM 코드로 직접 matNameMap 조회
-    let resolvedName = matNameMap.get(code) || '';
-    // 2) 실패 시 refInfo의 rawMaterialCode1~4로 matNameMap 재조회
-    if (!resolvedName && ri) {
-      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
-      for (const raw of rawCodes) {
-        const rawName = matNameMap.get(normalizePn(raw));
-        if (rawName) { resolvedName = rawName; break; }
-      }
-    }
-    // 3) PAINT: paintMixMap에서 더 정확한 페인트명 조회
-    if (matType === 'PAINT' && ri) {
-      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
-      for (const raw of rawCodes) {
-        const mix = paintMixMap.get(normalizePn(raw));
-        if (mix?.paintName) { resolvedName = mix.paintName; break; }
-      }
-    }
-    // 4) 최종 폴백: 기준정보 품명 → BOM 품번
-    if (!resolvedName) resolvedName = ri?.itemName || pn;
-
-    const existing = materialAgg.get(code);
+    // ── 집계 ──
+    const existing = materialAgg.get(aggCode);
     if (existing) {
       for (let m = 0; m < 12; m++) {
-        existing.monthlyQty[m] += qtyPerRoot * (monthlyQty[m] || 0);
+        existing.monthlyQty[m] += qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
       }
       existing.parents.add(normalizePn(rootPn));
     } else {
       const mq = new Array(12).fill(0);
       for (let m = 0; m < 12; m++) {
-        mq[m] = qtyPerRoot * (monthlyQty[m] || 0);
+        mq[m] = qtyPerRoot * qtyMultiplier * (monthlyQty[m] || 0);
       }
-      materialAgg.set(code, {
+      materialAgg.set(aggCode, {
         name: resolvedName,
         type: matType,
         monthlyQty: mq,
-        unitPrice: price,
+        unitPrice: aggPrice,
         parents: new Set([normalizePn(rootPn)]),
         supplier,
       });
