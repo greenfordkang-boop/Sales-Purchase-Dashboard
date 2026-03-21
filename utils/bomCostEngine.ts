@@ -774,7 +774,33 @@ function collectDeepRawMaterials(
       return;
     }
 
-    // 비리프: 항상 자식으로 재귀 (중간노드 가격 무시!)
+    // 비리프: 자체도장 노드이면 이 노드의 PAINT 수집 (외주도장은 제외)
+    const ri = refInfoMap.get(code);
+    if (ri && /도장/.test(ri.processType || '') && !/외주/.test(ri.supplyType || '')) {
+      const rawCodes = [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4].filter(Boolean) as string[];
+      for (const raw of rawCodes) {
+        const rawNorm = normalizePn(raw);
+        const rawMt = materialTypeMap.get(rawNorm) || '';
+        if (!isPaintType(rawMt)) continue;
+        let mix = paintMixMap.get(rawNorm);
+        if (!mix && /^P/.test(raw.trim().toUpperCase())) {
+          const sCode = normalizePn('S' + raw.trim().substring(1));
+          mix = paintMixMap.get(sCode);
+        }
+        if (mix && ri.paintIntake && ri.paintIntake > 0) {
+          const mixCostPerKg =
+            (mix.mainRatio / 100) * mix.mainPrice +
+            (mix.hardenerRatio / 100) * mix.hardenerPrice +
+            (mix.thinnerRatio / 100) * mix.thinnerPrice;
+          const name = mix.paintName || matNameMap.get(rawNorm) || raw;
+          const supplier = priceData.supplierMap.get(rawNorm) || '';
+          addToMrpAgg(rawNorm, name, 'PAINT', qtyPerRoot, 1 / ri.paintIntake, mixCostPerKg, supplier);
+          break;
+        }
+      }
+    }
+
+    // 자식으로 재귀 (RESIN 등 하위 원재료 수집)
     for (const child of children) {
       deepWalk(child.childPn, qtyPerRoot * child.qty, visited);
     }
