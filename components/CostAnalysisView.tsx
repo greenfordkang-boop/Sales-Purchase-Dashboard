@@ -4,6 +4,7 @@
  */
 import React, { useState, useMemo, useRef, useCallback } from 'react';
 import { useCostAnalysis, CostAnalysisData, ProductCostRow, LeafMaterialRow } from '../hooks/useCostAnalysis';
+import { normalizePn } from '../utils/bomDataParser';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { downloadPurchaseOrder, downloadRequiredQtyBreakdown } from '../utils/excelExporter';
 
@@ -32,7 +33,6 @@ const typeBadgeClass = (t: string) =>
   t === '외주' ? 'bg-blue-100 text-blue-700' :
   'bg-emerald-100 text-emerald-700';
 
-const normCode = (s: string) => s.trim().toUpperCase();
 
 // ============================================================
 // Shared: KPICard, EmptyState, MonthSelector, SortHeader, Pagination
@@ -560,10 +560,14 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     const iMap = new Map<string, number[]>();
     const sMap = new Map<string, string>();
     for (const p of purchaseData) {
-      const code = normCode(p.itemCode);
+      const code = normalizePn(p.itemCode);
       if (!code) continue;
-      // 구입처: 최초 등장 업체 사용
+      // 구입처: 최초 등장 업체 사용 (itemCode + customerPn 양방향)
       if (p.supplier && !sMap.has(code)) sMap.set(code, p.supplier);
+      if (p.supplier && p.customerPn) {
+        const custCode = normalizePn(p.customerPn);
+        if (custCode && !sMap.has(custCode)) sMap.set(custCode, p.supplier);
+      }
       const monthStr = p.month?.replace(/[^0-9]/g, '') || '';
       const monthIdx = parseInt(monthStr) - 1;
       if (monthIdx < 0 || monthIdx > 11) continue;
@@ -577,7 +581,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   // 수율 데이터 계산
   const yieldData = useMemo(() => {
     const rows: YieldRow[] = leafMaterials.map(m => {
-      const code = normCode(m.materialCode);
+      const code = normalizePn(m.materialCode);
       const inbound = inboundMap.get(code) || new Array(12).fill(0);
       const requiredQty = selectedMonth === -1
         ? m.monthlyQty.reduce((s, q) => s + q, 0)
@@ -725,12 +729,18 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const { leafMaterials, summary } = costResult;
   const totalCost = leafMaterials.reduce((s, m) => s + m.totalCost, 0);
 
-  // 입고 실적에서 구입처 맵 구성
+  // 입고 실적에서 구입처 맵 구성 (itemCode + customerPn 양방향 매핑)
   const purchaseSupplierMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of (purchaseData || [])) {
-      const code = normCode(p.itemCode);
-      if (code && p.supplier && !map.has(code)) map.set(code, p.supplier);
+      if (!p.supplier) continue;
+      const code = normalizePn(p.itemCode);
+      if (code && !map.has(code)) map.set(code, p.supplier);
+      // customerPn이 있으면 해당 코드로도 매핑
+      if (p.customerPn) {
+        const custCode = normalizePn(p.customerPn);
+        if (custCode && !map.has(custCode)) map.set(custCode, p.supplier);
+      }
     }
     return map;
   }, [purchaseData]);
@@ -739,7 +749,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const inventoryMap = useMemo(() => {
     const map = new Map<string, number>();
     for (const inv of inventoryItems) {
-      const code = normCode(inv.code);
+      const code = normalizePn(inv.code);
       if (code) map.set(code, (map.get(code) || 0) + inv.qty);
     }
     return map;
@@ -753,7 +763,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   // MRP 데이터 (현재고 + 발주량 + 구입처 보강 — selectedMonth 반영)
   const mrpAll = useMemo(() => {
     return mrpSource.map(m => {
-      const code = normCode(m.materialCode);
+      const code = normalizePn(m.materialCode);
       const totalQty = selectedMonth === -1
         ? m.monthlyQty.reduce((s, q) => s + q, 0)
         : (m.monthlyQty[selectedMonth] || 0);
