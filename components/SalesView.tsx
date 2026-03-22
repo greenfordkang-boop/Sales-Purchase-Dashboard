@@ -1251,70 +1251,14 @@ const SalesView: React.FC = () => {
             <p className="text-xs text-slate-400 mt-1">2024년 데이터</p>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
-          <div className="h-[400px] w-full">
-            <ResponsiveContainer minWidth={0} width="100%" height="100%">
-              <ComposedChart data={qtyChartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} />
-                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
-                <Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25}>
-                  <LabelList dataKey="plan" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
-                </Bar>
-                <Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25}>
-                  <LabelList dataKey="actual" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#10b981' }} />
-                </Bar>
-                <Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-8">
-            <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
-            {qtyListOpen && (
-              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
-                <table className="w-full text-xs text-left" style={qtyResize.getTableStyle()}>
-                  <colgroup>{qtyResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
-                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
-                    <tr>
-                        <SortableHeader label="고객사" sortKey="customer" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(0)} onResizeStart={e => qtyResize.startResize(0, e)} />
-                        <SortableHeader label="Model" sortKey="model" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(1)} onResizeStart={e => qtyResize.startResize(1, e)} />
-                        <SortableHeader label="품번" sortKey="partNo" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(2)} onResizeStart={e => qtyResize.startResize(2, e)} />
-                        <SortableHeader label="품명" sortKey="partName" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(3)} onResizeStart={e => qtyResize.startResize(3, e)} />
-                        <SortableHeader label="총계획" sortKey="totalPlan" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(4)} onResizeStart={e => qtyResize.startResize(4, e)} />
-                        <SortableHeader label="총실적" sortKey="totalActual" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(5)} onResizeStart={e => qtyResize.startResize(5, e)} />
-                        <SortableHeader label="달성률" sortKey="rate" align="center" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(6)} onResizeStart={e => qtyResize.startResize(6, e)} />
-                    </tr>
-                    <tr className="bg-slate-50"><th className="px-2 py-2"><input type="text" placeholder="고객사 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.customer} onChange={(e) => handleQtyFilterChange('customer', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="Model 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.model} onChange={(e) => handleQtyFilterChange('model', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품번 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partNo} onChange={(e) => handleQtyFilterChange('partNo', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품명 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partName} onChange={(e) => handleQtyFilterChange('partName', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="계획" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.plan} onChange={(e) => handleQtyFilterChange('plan', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="실적" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.actual} onChange={(e) => handleQtyFilterChange('actual', e.target.value)} /></th><th className="px-2 py-2"></th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredQtyItems.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
-                        <td colSpan={4} className="px-3 py-2 text-right">집계 ({filteredQtyItems.length}건)</td>
-                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td>
-                      </tr>
-                    )}
-                    {filteredQtyItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 font-mono text-slate-500">{item.partNo}</td><td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.partName}>{item.partName}</td><td className="px-4 py-3 text-right font-mono text-slate-500">{item.totalPlan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.totalActual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${item.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : item.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{item.rate.toFixed(1)}%</span></td></tr>))}
-                     {filteredQtyItems.length === 0 && (<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
-                  </tbody>
-                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td></tr></tfoot>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
 
         {/* =================================================================================
-            2. 고객사별 매출현황 (Customer Revenue Status) - CSV Uploader Section
+            1. 고객사별 매출현황 (Customer Revenue Status) - CSV Uploader Section
            ================================================================================= */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>2. 고객사별 매출현황</h3>
+              <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 고객사별 매출현황</h3>
               <p className="text-xs text-slate-500 mt-1">고객사별 월별 매출금액 및 수량 현황</p>
             </div>
             <div className="flex gap-3 items-center flex-wrap">
@@ -1545,6 +1489,62 @@ const SalesView: React.FC = () => {
                       </tr>
                     </tfoot>
                   )}
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>2. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
+          <div className="h-[400px] w-full">
+            <ResponsiveContainer minWidth={0} width="100%" height="100%">
+              <ComposedChart data={qtyChartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fontSize: 12, fontWeight: 500, fill: '#64748b'}} />
+                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
+                <Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25}>
+                  <LabelList dataKey="plan" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+                </Bar>
+                <Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25}>
+                  <LabelList dataKey="actual" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#10b981' }} />
+                </Bar>
+                <Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-8">
+            <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
+            {qtyListOpen && (
+              <div className="overflow-x-auto border border-slate-200 rounded-2xl">
+                <table className="w-full text-xs text-left" style={qtyResize.getTableStyle()}>
+                  <colgroup>{qtyResize.widths.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>
+                  <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                    <tr>
+                        <SortableHeader label="고객사" sortKey="customer" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(0)} onResizeStart={e => qtyResize.startResize(0, e)} />
+                        <SortableHeader label="Model" sortKey="model" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(1)} onResizeStart={e => qtyResize.startResize(1, e)} />
+                        <SortableHeader label="품번" sortKey="partNo" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(2)} onResizeStart={e => qtyResize.startResize(2, e)} />
+                        <SortableHeader label="품명" sortKey="partName" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(3)} onResizeStart={e => qtyResize.startResize(3, e)} />
+                        <SortableHeader label="총계획" sortKey="totalPlan" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(4)} onResizeStart={e => qtyResize.startResize(4, e)} />
+                        <SortableHeader label="총실적" sortKey="totalActual" align="right" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(5)} onResizeStart={e => qtyResize.startResize(5, e)} />
+                        <SortableHeader label="달성률" sortKey="rate" align="center" currentSort={qtySortConfig} onSort={handleQtySort} style={qtyResize.getHeaderStyle(6)} onResizeStart={e => qtyResize.startResize(6, e)} />
+                    </tr>
+                    <tr className="bg-slate-50"><th className="px-2 py-2"><input type="text" placeholder="고객사 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.customer} onChange={(e) => handleQtyFilterChange('customer', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="Model 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.model} onChange={(e) => handleQtyFilterChange('model', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품번 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partNo} onChange={(e) => handleQtyFilterChange('partNo', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="품명 검색" className="w-full p-1 border rounded text-xs font-normal" value={qtyFilter.partName} onChange={(e) => handleQtyFilterChange('partName', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="계획" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.plan} onChange={(e) => handleQtyFilterChange('plan', e.target.value)} /></th><th className="px-2 py-2"><input type="text" placeholder="실적" className="w-full p-1 border rounded text-xs font-normal text-right" value={qtyFilter.actual} onChange={(e) => handleQtyFilterChange('actual', e.target.value)} /></th><th className="px-2 py-2"></th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredQtyItems.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                        <td colSpan={4} className="px-3 py-2 text-right">집계 ({filteredQtyItems.length}건)</td>
+                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td>
+                      </tr>
+                    )}
+                    {filteredQtyItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 font-mono text-slate-500">{item.partNo}</td><td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.partName}>{item.partName}</td><td className="px-4 py-3 text-right font-mono text-slate-500">{item.totalPlan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.totalActual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${item.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : item.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{item.rate.toFixed(1)}%</span></td></tr>))}
+                     {filteredQtyItems.length === 0 && (<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td></tr></tfoot>
                 </table>
               </div>
             )}
