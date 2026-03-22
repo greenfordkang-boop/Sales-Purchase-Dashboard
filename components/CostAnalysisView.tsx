@@ -440,13 +440,14 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 // ============================================================
 // YieldPanel — 자재수율 (이슈 #3, #4, #5: 월필터+구입처+수율+전체+정렬)
 // ============================================================
-type YieldSortKey = 'materialCode' | 'materialName' | 'materialType' | 'supplier' | 'requiredQty' | 'inboundQty' | 'diff' | 'yieldRate' | 'unitPrice' | 'totalCost';
+type YieldSortKey = 'materialCode' | 'materialName' | 'materialType' | 'supplier' | 'requiredQty' | 'inboundQty' | 'diff' | 'yieldRate' | 'unitPrice' | 'totalCost' | 'diffCost';
 const YIELD_STR_KEYS: YieldSortKey[] = ['materialCode', 'materialName', 'materialType', 'supplier'];
 
 interface YieldRow extends LeafMaterialRow {
   requiredQty: number;
   inboundQty: number;
   diff: number;
+  diffCost: number;
   yieldRate: number;
 }
 
@@ -593,7 +594,8 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       const yieldRate = inboundQty > 0 ? (requiredQty / inboundQty) * 100 : 0;
       // 구입처: 입고실적(실제 납품업체) > 엔진 결과 > 미지정
       const supplier = purchaseSupplierMap.get(code) || m.supplier || '';
-      return { ...m, supplier, requiredQty, inboundQty, diff, yieldRate };
+      const diffCost = diff * m.unitPrice;
+      return { ...m, supplier, requiredQty, inboundQty, diff, diffCost, yieldRate };
     });
 
     rows.sort((a, b) => {
@@ -661,6 +663,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             <SortTh field="yieldRate" label="수율%" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh field="unitPrice" label="단가" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
             <SortTh field="totalCost" label="소요금액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+            <SortTh field="diffCost" label="초과/부족액" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
           </tr></thead>
           <tbody>
             {pageData.map(m => (
@@ -681,6 +684,9 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                 </td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.unitPrice).toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
+                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diffCost > 0 ? 'text-amber-600' : m.diffCost < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                  {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diffCost > 0 ? '+' : '') + fmt(m.diffCost) : '-'}
+                </td>
               </tr>
             ))}
           </tbody>
