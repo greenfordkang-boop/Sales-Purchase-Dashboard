@@ -608,18 +608,12 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     return rows;
   }, [leafMaterials, inboundMap, selectedMonth, sortKey, sortDir]);
 
-  // 유형별 소요금액
-  const byType = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const m of yieldData) {
-      map.set(m.materialType, (map.get(m.materialType) || 0) + m.totalCost);
-    }
-    return Array.from(map.entries())
-      .map(([name, value]) => ({ name, value, color: TYPE_COLORS[name] || '#94a3b8' }))
-      .sort((a, b) => b.value - a.value);
-  }, [yieldData]);
+  // 유형별 소요금액 — summary.byType 사용 (표준재료비 패널과 일치)
+  const byType = useMemo(() =>
+    summary.byType.map(s => ({ name: s.name, value: s.amount, color: TYPE_COLORS[s.name] || '#94a3b8' })),
+  [summary.byType]);
 
-  const totalCost = yieldData.reduce((s, m) => s + m.totalCost, 0);
+  const totalCost = summary.totalMaterial;
   const pageData = yieldData.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
