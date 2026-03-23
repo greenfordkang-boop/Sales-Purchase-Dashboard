@@ -135,8 +135,8 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
     if (s.status === 'idle') return null;
     if (s.status === 'uploading') {
       return (
-        <span className="flex items-center gap-1 text-blue-600 text-[11px]" data-upload-status="uploading">
-          <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+        <span className="inline-flex items-center gap-0.5 text-blue-600 text-[9px]" data-upload-status="uploading">
+          <svg className="w-2.5 h-2.5 animate-spin" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
             <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
           </svg>
@@ -146,18 +146,18 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
     }
     if (s.status === 'success') {
       return (
-        <span className="flex items-center gap-1 text-emerald-600 text-[11px] font-medium" data-upload-status="success">
-          <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+        <span className="inline-flex items-center gap-0.5 text-emerald-600 text-[9px] font-medium whitespace-nowrap" data-upload-status="success">
+          <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
           {s.message}
-          {s.completedAt && <span className="text-gray-400 font-normal ml-0.5">{formatTime(s.completedAt)}</span>}
+          {s.completedAt && <span className="text-slate-400 font-normal">{formatTime(s.completedAt)}</span>}
         </span>
       );
     }
     return (
-      <span className="flex items-center gap-1 text-rose-500 text-[11px] font-medium" data-upload-status="error" title={s.message}>
-        <svg className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+      <span className="inline-flex items-center gap-0.5 text-rose-500 text-[9px] font-medium whitespace-nowrap" data-upload-status="error" title={s.message}>
+        <svg className="w-2.5 h-2.5 shrink-0" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
         {s.message}
-        {s.completedAt && <span className="text-rose-300 font-normal ml-0.5">{formatTime(s.completedAt)}</span>}
+        {s.completedAt && <span className="text-rose-300 font-normal">{formatTime(s.completedAt)}</span>}
       </span>
     );
   };
@@ -235,7 +235,7 @@ const UploaderModal: React.FC<Props> = ({ isOpen, onClose }) => {
         onChange={onFileChange(id, handler)}
         data-uploader-input={id}
       />
-      <span className="flex-1 min-w-0 truncate text-right">
+      <span className="flex-1 min-w-0 text-right">
         <StatusBadge id={id} />
       </span>
     </div>
