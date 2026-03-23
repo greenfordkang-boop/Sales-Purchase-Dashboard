@@ -514,8 +514,8 @@ function collectLeafMaterials(
         const rawMt = materialTypeMap.get(rawNorm) || '';
         if (/paint|도료/i.test(rawMt)) continue;
         if (materialTypeMap.has(rawNorm) || priceData.matPriceMap.has(rawNorm) || matNameMap.has(rawNorm)) {
-          const rp = priceData.matPriceMap.get(rawNorm);
-          if (rp && rp > 0 && ri.netWeight && ri.netWeight > 0) {
+          const rp = priceData.matPriceMap.get(rawNorm) || 0;
+          if (rp > 0 && ri.netWeight && ri.netWeight > 0) {
             aggCode = rawNorm;
             resolvedName = matNameMap.get(rawNorm) || raw;
             const rawRi = refInfoMap.get(rawNorm);
@@ -525,8 +525,9 @@ function collectLeafMaterials(
             const wpe = ri.netWeight + (ri.runnerWeight || 0) / cavity;
             qtyMultiplier = wpe * (1 + (ri.lossRate || 0) / 100) / 1000;
             resinResolved = true;
+            break;
           }
-          break;
+          // 이 rawCode는 가격 없음 → 다음 rawCode 시도 (break 하지 않음)
         }
       }
       // netWeight 없어 변환 불가 → 구매부품으로 유지 (1EA=1kg 오류 방지)
@@ -1067,12 +1068,18 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
   mrpMaterials.sort((a, b) => b.totalCost - a.totalCost);
 
-  // byType 결과 — leafMaterials 기반 집계 (정확한 materialType 사용)
-  const leafTypeAmounts = new Map<string, number>();
+  // byType 결과 — RESIN/PAINT는 mrpMaterials(deep walk)에서, 나머지는 leafMaterials에서
+  // leafMaterials의 shallow walk는 구매단가가 있는 중간노드에서 멈춰
+  // 그 아래 사출부품의 RESIN 소요량이 누락됨 → deep walk(mrpMaterials)로 보정
+  const byTypeMap = new Map<string, number>();
   for (const lm of leafMaterials) {
-    leafTypeAmounts.set(lm.materialType, (leafTypeAmounts.get(lm.materialType) || 0) + lm.totalCost);
+    if (lm.materialType === 'RESIN' || lm.materialType === 'PAINT') continue;
+    byTypeMap.set(lm.materialType, (byTypeMap.get(lm.materialType) || 0) + lm.totalCost);
   }
-  const byType = Array.from(leafTypeAmounts.entries())
+  for (const mm of mrpMaterials) {
+    byTypeMap.set(mm.materialType, (byTypeMap.get(mm.materialType) || 0) + mm.totalCost);
+  }
+  const byType = Array.from(byTypeMap.entries())
     .map(([name, amount]) => ({ name, amount }))
     .sort((a, b) => b.amount - a.amount);
 
