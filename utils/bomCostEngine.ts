@@ -1068,20 +1068,28 @@ export function calcAllProductCosts(params: CalcAllParams): CostEngineResult {
   }
   mrpMaterials.sort((a, b) => b.totalCost - a.totalCost);
 
-  // byType 결과 — RESIN/PAINT는 mrpMaterials(deep walk)에서, 나머지는 leafMaterials에서
-  // leafMaterials의 shallow walk는 구매단가가 있는 중간노드에서 멈춰
-  // 그 아래 사출부품의 RESIN 소요량이 누락됨 → deep walk(mrpMaterials)로 보정
-  const byTypeMap = new Map<string, number>();
-  for (const lm of leafMaterials) {
-    if (lm.materialType === 'RESIN' || lm.materialType === 'PAINT') continue;
-    byTypeMap.set(lm.materialType, (byTypeMap.get(lm.materialType) || 0) + lm.totalCost);
-  }
-  for (const mm of mrpMaterials) {
-    byTypeMap.set(mm.materialType, (byTypeMap.get(mm.materialType) || 0) + mm.totalCost);
-  }
-  const byType = Array.from(byTypeMap.entries())
-    .map(([name, amount]) => ({ name, amount }))
-    .sort((a, b) => b.amount - a.amount);
+  // byType 결과 — 총재료비 = RESIN + PAINT + 외주 + 구매 (정합성 보장)
+  // RESIN/PAINT: mrpMaterials(deep walk) — BOM 전체 재귀하여 실제 원재료 소요량
+  // 외주: leafMaterials 기준
+  // 구매: 잔여분 (= 총재료비 - RESIN - PAINT - 외주)
+  const mrpResinTotal = mrpMaterials
+    .filter(m => m.materialType === 'RESIN')
+    .reduce((sum, m) => sum + m.totalCost, 0);
+  const mrpPaintTotal = mrpMaterials
+    .filter(m => m.materialType === 'PAINT')
+    .reduce((sum, m) => sum + m.totalCost, 0);
+  const leafOutsourceTotal = leafMaterials
+    .filter(lm => lm.materialType === '외주')
+    .reduce((sum, lm) => sum + lm.totalCost, 0);
+  const purchaseRemainder = Math.max(0, totalMaterial - mrpResinTotal - mrpPaintTotal - leafOutsourceTotal);
+
+  const byType = [
+    { name: 'RESIN', amount: mrpResinTotal },
+    { name: 'PAINT', amount: mrpPaintTotal },
+    { name: '구매', amount: purchaseRemainder },
+    { name: '외주', amount: leafOutsourceTotal },
+  ].filter(t => t.amount > 0)
+   .sort((a, b) => b.amount - a.amount);
 
   return {
     products,
