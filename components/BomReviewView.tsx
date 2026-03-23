@@ -768,8 +768,12 @@ const BomReviewView: React.FC = () => {
         }
       }
 
-      // ── Virtual paint node (외주도장은 제외: 구매단가 사용) ──
-      const isOutsourcePaint = ref && /외주/.test(ref.supplyType || '') && /도장/.test(ref.processType || '');
+      // ── Virtual paint node (도장 자작인 경우에만 표시) ──
+      const isPaintProcess = ref && /도장/.test(ref.processType || '');
+      const isOutsourcePaint = isPaintProcess && (
+        /외주/.test(ref!.supplyType || '') ||
+        (node.supplier && node.supplier !== '' && !/자작/.test(node.supplier))
+      );
       const paintInfo = !isOutsourcePaint ? getPaintInfo(node.pn) : null;
       if (paintInfo && paintInfo.costPerEa > 0) {
         const hasPaintChild = newChildren.some(c => /PAINT_/.test(c.pn) || /도장재료/.test(c.name));

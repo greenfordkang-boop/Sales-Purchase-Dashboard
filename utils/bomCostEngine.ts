@@ -481,7 +481,11 @@ function collectLeafMaterials(
       if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
       else if (/paint|도료|도장|경화제|희석제/i.test(mt)) matType = 'PAINT';
     } else if (source === '구매') {
-      matType = '구매';
+      // 구매단가가 있어도 rawCode가 RESIN이면 RESIN으로 분류
+      // → 사출공식(netWeight×재질단가)으로 순수 원재료 소요량 추적
+      // (netWeight 없으면 아래 resin resolution에서 '구매'로 복원)
+      if (/resin|수지|사출/i.test(mt)) matType = 'RESIN';
+      else matType = '구매';
     } else if (/resin|수지|사출/i.test(mt)) {
       matType = 'RESIN';     // rawCode에 RESIN → RESIN (사출/외주/재질/표준 모두)
     } else if (source === '사출') {

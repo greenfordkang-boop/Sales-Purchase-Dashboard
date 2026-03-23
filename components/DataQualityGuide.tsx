@@ -114,6 +114,28 @@ const DataQualityGuide: React.FC = () => {
         matTypeMap.set(normalizePn(mc.materialCode), mc.materialType || '');
       }
 
+      // ── BOM 체인 Set 구성 (forecast 관련 품목만 필터링용) ──
+      const bomForwardMap = new Map<string, string[]>();
+      for (const r of masterRecords) {
+        const parent = normalizePn(r.parentPn);
+        const existing = bomForwardMap.get(parent) || [];
+        existing.push(normalizePn(r.childPn));
+        bomForwardMap.set(parent, existing);
+      }
+      const bomChainSet = new Set<string>();
+      const walkBom = (pn: string, visited: Set<string>) => {
+        if (visited.has(pn)) return;
+        visited.add(pn);
+        bomChainSet.add(pn);
+        for (const child of (bomForwardMap.get(pn) || [])) walkBom(child, visited);
+      };
+      for (const f of forecastData) {
+        const pn = normalizePn(f.newPartNo || f.partNo);
+        const internalPn = custToInternal.get(pn) || pn;
+        walkBom(pn, new Set());
+        if (internalPn !== pn) walkBom(internalPn, new Set());
+      }
+
       // ── Analysis ──
       const missingStdCost: IssueItem[] = [];
       const missingBom: IssueItem[] = [];
@@ -123,11 +145,12 @@ const DataQualityGuide: React.FC = () => {
         const hasStd = stdCostSet.has(pn) || stdCostSet.has(custToInternal.get(pn) || '');
         const hasBom = bomParentSet.has(pn) || bomParentSet.has(custToInternal.get(pn) || '');
 
-        if (!hasStd) {
+        // BOM이 있으면 BOM원가로 산출 가능 → 표준재료비 없어도 문제 아님
+        if (!hasStd && !hasBom) {
           missingStdCost.push({
             partNo: f.partNo, newPartNo: f.newPartNo, customer: f.customer,
             model: f.model, partName: f.partName, category: f.category,
-            detail: hasBom ? 'BOM 있음 (BOM 원가만 반영)' : 'BOM도 없음 (원가 산출 불가)',
+            detail: '재료비 데이터 없음 (BOM도 없음)',
           });
         }
         if (!hasBom) {
@@ -139,9 +162,10 @@ const DataQualityGuide: React.FC = () => {
         }
       }
 
-      // 기준정보 누락 (순중량/원재료코드)
+      // 기준정보 누락 (forecast BOM 체인에 있는 품목만)
       const missingRefInfo: IssueItem[] = [];
       for (const ri of refInfo) {
+        if (!bomChainSet.has(normalizePn(ri.itemCode))) continue;
         const issues: string[] = [];
         const isSelfMade = /자가|사출|도장|도금|인쇄|증착|레이저/i.test(ri.processType || '');
         if (!isSelfMade) continue;
@@ -163,10 +187,19 @@ const DataQualityGuide: React.FC = () => {
         }
       }
 
-      // 재질단가 갱신 필요
+      // 사용 중인 원재료코드 Set (forecast BOM 체인 기준)
+      const usedMaterialCodes = new Set<string>();
+      for (const ri of refInfo) {
+        if (!bomChainSet.has(normalizePn(ri.itemCode))) continue;
+        for (const raw of [ri.rawMaterialCode1, ri.rawMaterialCode2, ri.rawMaterialCode3, ri.rawMaterialCode4]) {
+          if (raw) usedMaterialCodes.add(normalizePn(raw));
+        }
+      }
+
+      // 재질단가 갱신 필요 (실제 사용 중인 재질만)
       const materialIssues: IssueItem[] = [];
       for (const mc of materialCodes) {
-        if (mc.currentPrice <= 0) {
+        if (mc.currentPrice <= 0 && usedMaterialCodes.has(normalizePn(mc.materialCode))) {
           materialIssues.push({
             partNo: mc.materialCode, newPartNo: '',
             customer: mc.materialType || '', model: mc.materialCategory || '',
@@ -180,12 +213,14 @@ const DataQualityGuide: React.FC = () => {
       const result: IssueSection[] = [
         {
           id: 'stdCost',
-          title: '표준재료비(EA단가) 미등록 제품',
+          title: 'BOM+표준재료비 모두 없는 제품',
           icon: '1',
-          severity: 'critical',
-          programFix: 'DB item_standard_cost 자동 반영 로직 추가 완료. 재료비.xlsx 업로드 시 자동 적용됩니다.',
-          description: '표준재료비가 등록되지 않은 제품은 BOM 전개 기반 원재료비만 반영되어 도장/도금/인쇄 가공비가 누락됩니다.',
-          impact: `${missingStdCost.length}개 제품이 정확한 재료비 산출 불가 → 실제보다 30~70% 과소 산출`,
+          severity: missingStdCost.length > 0 ? 'critical' : 'info',
+          programFix: 'BOM이 있는 제품은 BOM 원가엔진으로 자동 산출됩니다. BOM도 표준재료비도 없는 제품만 표시합니다.',
+          description: 'BOM 전개도 불가하고 표준재료비(EA단가)도 없는 제품입니다. 원가를 전혀 산출할 수 없습니다.',
+          impact: missingStdCost.length > 0
+            ? `${missingStdCost.length}개 제품 원가 산출 불가`
+            : '모든 제품이 BOM 또는 표준재료비로 커버됨',
           userAction: [
             '아래 "누락 목록 다운로드" 클릭하여 대상 제품 확인',
             'ERP에서 해당 제품의 EA당 표준재료비(수지비+도장비+구매비) 확인',
@@ -199,21 +234,21 @@ const DataQualityGuide: React.FC = () => {
         },
         {
           id: 'paintCost',
-          title: '도장재료비 미산입 (프로그램 수정 완료)',
+          title: '도장량(paintQty) 미입력 품목',
           icon: '2',
-          severity: 'warning',
-          programFix: '기준정보의 paintQty(도장량) + 재질단가를 이용해 도장재료비를 자동 산입하도록 수정 완료.',
-          description: '도장 공정 제품의 BOM에는 사출 원재료만 포함되어, 도장재료비(PAINT)가 누락되었습니다. 프로그램 수정으로 기준정보의 도장량 데이터를 활용해 자동 계산합니다.',
-          impact: '도장 제품의 재료비가 실제보다 50~90% 과소 산출되던 문제 해소',
+          severity: missingRefInfo.filter(r => r.detail?.includes('도장량')).length > 0 ? 'warning' : 'info',
+          programFix: '도장량이 입력된 품목은 배합비율 기반으로 도장재료비를 자동 산출합니다.',
+          description: 'Forecast BOM 체인 내 도장 공정 품목 중 도장량(paintQty)이 미입력된 품목입니다. 도장량이 없으면 도장재료비를 산출할 수 없습니다.',
+          impact: `${missingRefInfo.filter(r => r.detail?.includes('도장량')).length}개 도장 품목의 도장재료비 산출 불가`,
           userAction: [
             '기준정보에 도장량(paintQty1~4) 값이 입력되어 있는지 확인',
-            '미입력 품목은 아래 "원인 4: 기준정보 누락" 항목에서 확인 후 업데이트',
-            '도장량 단위: g (그램) 기준',
+            '아래 "기준정보 누락" 항목에서 확인 후 업데이트',
+            '도장량 단위: 개취수량 (EA/kg)',
           ],
           uploadTarget: '구매관리 > 기준정보',
           csvColumns: [],
           items: missingRefInfo.filter(r => r.detail?.includes('도장량')),
-          total: refInfo.filter(r => /도장/i.test(r.processType || '')).length,
+          total: refInfo.filter(r => /도장/i.test(r.processType || '') && bomChainSet.has(normalizePn(r.itemCode))).length,
         },
         {
           id: 'bom',
@@ -240,8 +275,8 @@ const DataQualityGuide: React.FC = () => {
           icon: '4',
           severity: 'warning',
           programFix: null,
-          description: '순중량(NET중량)이 0이거나 원재료코드가 미등록인 품목입니다. ₩/kg 단가를 EA 단가로 변환할 수 없어 재료비 산출이 실패합니다.',
-          impact: `${missingRefInfo.length}개 품목의 원재료비 변환 불가`,
+          description: 'Forecast BOM 체인 내 자가공정(사출/도장 등) 품목 중 순중량/원재료코드/도장량이 누락된 품목입니다.',
+          impact: `${missingRefInfo.length}개 품목의 원재료비 변환 불가 (Forecast 관련 품목만)`,
           userAction: [
             '아래 "누락 목록 다운로드" 클릭',
             'ERP 기준정보에서 순중량(g), 원재료코드, 도장량(g) 확인',
@@ -251,7 +286,7 @@ const DataQualityGuide: React.FC = () => {
           uploadTarget: '구매관리 > 기준정보',
           csvColumns: ['품목코드', '고객P/N', '품목명', '공정유형', '누락항목'],
           items: missingRefInfo,
-          total: refInfo.length,
+          total: refInfo.filter(r => bomChainSet.has(normalizePn(r.itemCode))).length,
         },
         {
           id: 'matPrice',
@@ -259,10 +294,10 @@ const DataQualityGuide: React.FC = () => {
           icon: '5',
           severity: materialIssues.length > 0 ? 'warning' : 'info',
           programFix: null,
-          description: '재질코드(RESIN/PAINT)의 현재 단가가 최신인지 확인이 필요합니다. 단가가 0원인 재질은 해당 자재를 사용하는 모든 제품의 원가가 과소 산출됩니다.',
+          description: 'Forecast BOM 체인에서 실제 사용 중인 재질코드 중 단가가 0원인 항목입니다. 해당 재질을 사용하는 제품의 원가가 과소 산출됩니다.',
           impact: materialIssues.length > 0
-            ? `${materialIssues.length}개 재질코드 단가 0원`
-            : `전체 ${materialCodes.length}개 재질코드 단가 등록 완료 (최신 여부 확인 필요)`,
+            ? `${materialIssues.length}개 사용 중 재질코드 단가 0원 (전체 ${materialCodes.length}개 중 사용 ${usedMaterialCodes.size}개)`
+            : `사용 중인 ${usedMaterialCodes.size}개 재질 단가 모두 등록됨`,
           userAction: [
             '구매관리 > 재질단가 관리에서 현재 단가 목록 확인',
             '구매처 견적서/계약서 기반으로 최신 단가와 비교',
@@ -272,7 +307,7 @@ const DataQualityGuide: React.FC = () => {
           uploadTarget: '구매관리 > 재질단가',
           csvColumns: ['재질코드', '재질분류', '재질명', '비고'],
           items: materialIssues,
-          total: materialCodes.length,
+          total: usedMaterialCodes.size,
         },
         {
           id: 'revenue',
