@@ -23,30 +23,25 @@ const fmt = (n: number) => {
   return Math.round(n).toLocaleString();
 };
 
-const TYPE_COLORS: Record<string, string> = { RESIN: '#6366f1', PAINT: '#f59e0b', '구매': '#10b981', '외주': '#ef4444', '사출': '#8b5cf6', '도장': '#f97316' };
+const TYPE_COLORS: Record<string, string> = { RESIN: '#334155', PAINT: '#cbd5e1', '구매': '#2563eb', '외주': '#64748b', '사출': '#334155', '도장': '#94a3b8' };
 
 const typeBadgeClass = (t: string) =>
-  t === 'RESIN' ? 'bg-indigo-100 text-indigo-700' :
-  t === '사출' ? 'bg-violet-100 text-violet-700' :
-  t === 'PAINT' ? 'bg-amber-100 text-amber-700' :
-  t === '도장' ? 'bg-orange-100 text-orange-700' :
-  t === '외주' ? 'bg-blue-100 text-blue-700' :
-  'bg-emerald-100 text-emerald-700';
+  t === 'RESIN' ? 'bg-slate-100 text-slate-700' :
+  t === '사출' ? 'bg-slate-100 text-slate-700' :
+  t === 'PAINT' ? 'bg-slate-100 text-slate-700' :
+  t === '도장' ? 'bg-slate-100 text-slate-700' :
+  t === '외주' ? 'bg-slate-100 text-slate-700' :
+  'bg-slate-100 text-slate-700';
 
 
 // ============================================================
 // Shared: KPICard, EmptyState, MonthSelector, SortHeader, Pagination
 // ============================================================
-const KPICard: React.FC<{ label: string; value: string; sub?: string; color?: string }> = ({ label, value, sub, color = 'slate' }) => {
-  const colorMap: Record<string, string> = {
-    indigo: 'border-indigo-200 bg-indigo-50', violet: 'border-violet-200 bg-violet-50',
-    amber: 'border-amber-200 bg-amber-50', emerald: 'border-emerald-200 bg-emerald-50',
-    red: 'border-red-200 bg-red-50', slate: 'border-slate-200 bg-slate-50',
-  };
+const KPICard: React.FC<{ label: string; value: string; sub?: string; color?: string }> = ({ label, value, sub }) => {
   return (
-    <div className={`rounded-xl border p-3 ${colorMap[color] || colorMap.slate}`}>
+    <div className="rounded-xl border p-3 border-slate-100 bg-slate-50">
       <div className="text-[10px] font-bold text-slate-500">{label}</div>
-      <div className="text-base font-black text-slate-800 mt-0.5">{value}</div>
+      <div className="text-base font-bold text-slate-800 mt-0.5">{value}</div>
       {sub && <div className="text-[10px] text-slate-400 mt-0.5">{sub}</div>}
     </div>
   );
@@ -59,12 +54,12 @@ const EmptyState: React.FC<{ message: string }> = ({ message }) => (
 const MonthSelector: React.FC<{ selectedMonth: number; setSelectedMonth: (m: number) => void }> = ({ selectedMonth, setSelectedMonth }) => (
   <div className="flex items-center gap-1 flex-wrap">
     <button onClick={() => setSelectedMonth(-1)}
-      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === -1 ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
       전체
     </button>
     {Array.from({ length: 12 }, (_, i) => (
       <button key={i} onClick={() => setSelectedMonth(i)}
-        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+        className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${selectedMonth === i ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
         {i + 1}월
       </button>
     ))}
@@ -75,7 +70,7 @@ function SortTh<K extends string>({ field, label, sortKey, sortDir, onSort, alig
   field: K; label: string; sortKey: K; sortDir: string; onSort: (k: K) => void; align?: string;
 }) {
   return (
-    <th className={`px-3 py-2 text-${align} cursor-pointer hover:text-indigo-600 select-none whitespace-nowrap`}
+    <th className={`px-3 py-2 text-${align} cursor-pointer hover:text-blue-600 select-none whitespace-nowrap`}
       onClick={() => onSort(field)}>
       {label} {sortKey === field ? (sortDir === 'desc' ? '▼' : '▲') : ''}
     </th>
@@ -107,17 +102,17 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
 
   if (loading) {
     return (
-      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-2xl p-4 border border-indigo-100 animate-pulse">
-        <div className="h-6 bg-indigo-200 rounded w-1/3 mb-2" />
-        <div className="h-4 bg-indigo-100 rounded w-2/3" />
+      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 animate-pulse">
+        <div className="h-6 bg-slate-200 rounded w-1/3 mb-2" />
+        <div className="h-4 bg-slate-100 rounded w-2/3" />
       </div>
     );
   }
 
   if (!forecastSummary) {
     return (
-      <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
-        <div className="flex items-center gap-2 text-amber-700">
+      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+        <div className="flex items-center gap-2 text-slate-500">
           <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.268 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
           <span className="text-sm font-bold">매출계획 데이터가 없습니다. 영업현황 &gt; 매출계획에서 업로드해주세요.</span>
         </div>
@@ -135,30 +130,30 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
   const progressRate = s.totalRevenue > 0 ? (ytdRevenue / s.totalRevenue * 100) : 0;
 
   return (
-    <div className="bg-gradient-to-r from-indigo-50 via-blue-50 to-violet-50 rounded-2xl p-5 border border-indigo-100">
+    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
       <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4 justify-between">
         <div className="flex items-center gap-5 flex-wrap">
           <div>
-            <div className="text-[10px] text-indigo-500 font-bold">매출(BOM매칭)</div>
-            <div className="text-lg font-black text-indigo-800">{fmt(matchedRevenue > 0 ? matchedRevenue : s.totalRevenue)}</div>
+            <div className="text-[10px] text-slate-500 font-bold">매출(BOM매칭)</div>
+            <div className="text-lg font-bold text-slate-800">{fmt(matchedRevenue > 0 ? matchedRevenue : s.totalRevenue)}</div>
             {matchedRevenue > 0 && matchedRevenue < s.totalRevenue && (
               <div className="text-[9px] text-slate-400">전체 {fmt(s.totalRevenue)}</div>
             )}
           </div>
-          <div className="w-px h-8 bg-indigo-200" />
+          <div className="w-px h-8 bg-slate-200" />
           {summary && (
             <>
               <div>
-                <div className="text-[10px] text-violet-500 font-bold">표준재료비</div>
-                <div className="text-base font-black text-violet-700">{fmt(summary.totalMaterial)}</div>
+                <div className="text-[10px] text-slate-500 font-bold">표준재료비</div>
+                <div className="text-base font-bold text-slate-800">{fmt(summary.totalMaterial)}</div>
               </div>
               <div>
                 <div className="text-[10px] text-slate-500 font-bold">재료비율</div>
-                <div className={`text-sm font-bold ${materialRatio > 50 ? 'text-red-600' : materialRatio > 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <div className={`text-sm font-bold ${materialRatio > 50 ? 'text-rose-500' : materialRatio > 40 ? 'text-slate-800' : 'text-emerald-600'}`}>
                   {materialRatio.toFixed(1)}%
                 </div>
               </div>
-              <div className="w-px h-8 bg-indigo-200" />
+              <div className="w-px h-8 bg-slate-200" />
             </>
           )}
           <div>
@@ -171,7 +166,7 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           </div>
           <div>
             <div className="text-[10px] text-emerald-600 font-bold">YTD</div>
-            <div className="text-sm font-bold text-emerald-700">{progressRate.toFixed(0)}%</div>
+            <div className="text-sm font-bold text-emerald-600">{progressRate.toFixed(0)}%</div>
           </div>
         </div>
 
@@ -179,7 +174,7 @@ const ForecastSummaryBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           {s.monthlyRevenue.map((rev, i) => (
             <div key={i} className="flex flex-col items-center gap-0.5">
               <div
-                className={`w-3 rounded-t-sm transition-all ${i <= currentMonth ? 'bg-indigo-400' : 'bg-slate-200'}`}
+                className={`w-3 rounded-t-sm transition-all ${i <= currentMonth ? 'bg-slate-700' : 'bg-slate-200'}`}
                 style={{ height: `${Math.max(2, (rev / maxMonthly) * 32)}px` }}
                 title={`${i + 1}월: ${fmt(rev)}`}
               />
@@ -236,11 +231,11 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard label="총 표준재료비" value={fmt(summary.totalMaterial)} sub={`재료비율 ${ratio.toFixed(1)}%`} color="indigo" />
+        <KPICard label="총 표준재료비" value={fmt(summary.totalMaterial)} sub={`재료비율 ${ratio.toFixed(1)}%`} color="slate" />
         {summary.byType.map(t => (
           <KPICard key={t.name} label={t.name} value={fmt(t.amount)}
             sub={`${summary.totalMaterial > 0 ? (t.amount / summary.totalMaterial * 100).toFixed(1) : 0}%`}
-            color={t.name === 'RESIN' ? 'violet' : t.name === 'PAINT' ? 'amber' : t.name === '사출' ? 'violet' : t.name === '도장' ? 'amber' : t.name === '외주' ? 'red' : 'emerald'} />
+            color="slate" />
         ))}
       </div>
 
@@ -273,12 +268,12 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => fmt(v)} />
               <Tooltip formatter={(v: number) => `₩${Math.round(v as number).toLocaleString()}`} />
-              <Bar dataKey="매출" fill="#c7d2fe" radius={[4, 4, 0, 0]}>
+              <Bar dataKey="매출" fill="#cbd5e1" radius={[4, 4, 0, 0]}>
                 <LabelList dataKey="매출" position="top" style={{ fontSize: 9, fill: '#64748b' }}
                   formatter={(v: number) => v >= 1e8 ? `${(v / 1e8).toFixed(1)}` : ''} />
               </Bar>
-              <Bar dataKey="재료비" fill="#6366f1" radius={[4, 4, 0, 0]}>
-                <LabelList dataKey="재료비" position="top" style={{ fontSize: 9, fill: '#4338ca' }}
+              <Bar dataKey="재료비" fill="#334155" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="재료비" position="top" style={{ fontSize: 9, fill: '#334155' }}
                   formatter={(v: number) => v >= 1e8 ? `${(v / 1e8).toFixed(1)}` : ''} />
               </Bar>
             </BarChart>
@@ -311,7 +306,7 @@ const StandardCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             <tbody>
               {top10.map(row => (
                 <tr key={row.pn} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-2 py-1.5 font-mono text-indigo-600">{row.pn}</td>
+                  <td className="px-2 py-1.5 font-mono text-slate-800">{row.pn}</td>
                   <td className="px-2 py-1.5 truncate max-w-[150px]">{row.name}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{row.planQty.toLocaleString()}</td>
                   <td className="px-2 py-1.5 text-right font-mono">{Math.round(row.materialCost).toLocaleString()}</td>
@@ -375,13 +370,13 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
         <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0); }}
           placeholder="품번/품명/거래선 검색"
-          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48 focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+          className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48 focus:outline-none focus:ring-1 focus:ring-blue-600" />
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard label="매출(BOM매칭)" value={fmt(summary.totalRevenue)} color="indigo" />
-        <KPICard label="재료비 합계" value={fmt(summary.totalMaterial)} color="violet" />
-        <KPICard label="재료비율" value={`${ratio.toFixed(1)}%`} color={ratio > 50 ? 'red' : 'emerald'} />
+        <KPICard label="매출(BOM매칭)" value={fmt(summary.totalRevenue)} color="slate" />
+        <KPICard label="재료비 합계" value={fmt(summary.totalMaterial)} color="slate" />
+        <KPICard label="재료비율" value={`${ratio.toFixed(1)}%`} color="slate" />
         <KPICard label="산출 제품" value={`${summary.matchedCount}건`} sub={`전체 ${summary.productCount}건`} color="slate" />
       </div>
 
@@ -401,27 +396,21 @@ const ProductCostPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           <tbody>
             {pageData.map(row => (
               <tr key={row.pn} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-3 py-2 font-mono text-indigo-600 whitespace-nowrap">{row.pn}</td>
+                <td className="px-3 py-2 font-mono text-slate-800 whitespace-nowrap">{row.pn}</td>
                 <td className="px-3 py-2 truncate max-w-[180px]" title={row.name}>{row.name}</td>
                 <td className="px-3 py-2 text-slate-500">{row.customer}</td>
                 <td className="px-3 py-2 text-right font-mono">{row.planQty.toLocaleString()}</td>
-                <td className="px-3 py-2 text-right font-mono font-bold text-indigo-700">{Math.round(row.materialCost).toLocaleString()}</td>
+                <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{Math.round(row.materialCost).toLocaleString()}</td>
                 <td className="px-3 py-2 text-right font-mono text-slate-500">{row.expectedRevenue > 0 ? fmt(row.expectedRevenue) : '-'}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">{fmt(row.materialTotal)}</td>
                 <td className="px-3 py-2 text-right font-mono">{row.materialRatio > 0 ? `${row.materialRatio.toFixed(1)}%` : '-'}</td>
                 <td className="px-3 py-2 text-center">
-                  {row.source && <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                    row.source === '구매' ? 'bg-emerald-100 text-emerald-700' :
-                    row.source === '사출' ? 'bg-indigo-100 text-indigo-700' :
-                    row.source === '도장' ? 'bg-violet-100 text-violet-700' :
-                    row.source === '외주' ? 'bg-blue-100 text-blue-700' :
-                    'bg-slate-100 text-slate-600'
-                  }`}>{row.source}</span>}
+                  {row.source && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">{row.source}</span>}
                 </td>
               </tr>
             ))}
           </tbody>
-          <tfoot><tr className="bg-indigo-50 border-t-2 border-indigo-200 font-bold text-xs">
+          <tfoot><tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-xs">
             <td className="px-3 py-2" colSpan={3}>합계 ({filtered.length}건)</td>
             <td className="px-3 py-2 text-right font-mono">{filtered.reduce((s, r) => s + r.planQty, 0).toLocaleString()}</td>
             <td className="px-3 py-2 text-right">-</td>
@@ -483,7 +472,7 @@ const RequiredQtyCell: React.FC<{
           <div className="flex items-center justify-between mb-2">
             <span className="font-bold text-slate-200">소요량 산출근거 — {row.materialName}</span>
             <button onClick={() => downloadRequiredQtyBreakdown(row)}
-              className="px-2 py-0.5 bg-indigo-500 hover:bg-indigo-400 rounded text-[10px] font-bold text-white flex items-center gap-1">
+              className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded text-[10px] font-bold text-white flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
               Excel
             </button>
@@ -506,13 +495,13 @@ const RequiredQtyCell: React.FC<{
                 const planQty = c.qtyPerUnit > 0 ? Math.round(qty / c.qtyPerUnit) : 0;
                 return (
                   <tr key={c.productPn} className="border-b border-slate-700/50 hover:bg-slate-700/50">
-                    <td className="py-1 pr-2 font-mono text-indigo-300">{c.productPn}</td>
+                    <td className="py-1 pr-2 font-mono text-slate-300">{c.productPn}</td>
                     <td className="py-1 pr-2 truncate max-w-[140px] text-slate-300" title={c.productName}>{c.productName}</td>
                     <td className="py-1 pr-2 text-right font-mono text-slate-300">
                       {c.qtyPerUnit < 0.01 ? c.qtyPerUnit.toFixed(4) : c.qtyPerUnit < 1 ? c.qtyPerUnit.toFixed(3) : c.qtyPerUnit.toFixed(2)}
                     </td>
                     <td className="py-1 pr-2 text-right text-slate-500">×</td>
-                    <td className="py-1 pr-2 text-right font-mono text-amber-300">{planQty.toLocaleString()}</td>
+                    <td className="py-1 pr-2 text-right font-mono text-slate-300">{planQty.toLocaleString()}</td>
                     <td className="py-1 pr-2 text-right text-slate-500">=</td>
                     <td className="py-1 pr-2 text-right font-mono font-bold text-white">{Math.round(qty).toLocaleString()}</td>
                   </tr>
@@ -520,7 +509,7 @@ const RequiredQtyCell: React.FC<{
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t border-slate-500 font-bold text-indigo-300">
+              <tr className="border-t border-slate-500 font-bold text-slate-300">
                 <td className="py-1" colSpan={4}>합계 ({breakdown.length}건)</td>
                 <td className="py-1 pr-2 text-right font-mono">{breakdown.reduce((s, c) => {
                   const qty = selectedMonth === -1 ? c.totalQty : (c.monthlyQty[selectedMonth] || 0);
@@ -621,12 +610,12 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       <MonthSelector selectedMonth={selectedMonth} setSelectedMonth={setSelectedMonth} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard label="총 자재 종류" value={`${leafMaterials.length}건`} color="indigo" />
+        <KPICard label="총 자재 종류" value={`${leafMaterials.length}건`} color="slate" />
         <KPICard label="총 소요금액 (조달기준)" value={fmt(totalCost)}
           sub={totalCost !== summary.totalMaterial ? `매출매칭 ${fmt(summary.totalMaterial)}` : undefined}
-          color="violet" />
-        <KPICard label="BOM매칭 제품" value={`${summary.matchedCount}건`} color="emerald" />
-        <KPICard label="재료비율" value={`${(summary.materialRatio * 100).toFixed(1)}%`} color={summary.materialRatio > 0.5 ? 'red' : 'emerald'} />
+          color="slate" />
+        <KPICard label="BOM매칭 제품" value={`${summary.matchedCount}건`} color="slate" />
+        <KPICard label="재료비율" value={`${(summary.materialRatio * 100).toFixed(1)}%`} color="slate" />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-4">
@@ -662,7 +651,7 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           <tbody>
             {pageData.map(m => (
               <tr key={m.materialCode} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-3 py-1.5 font-mono text-indigo-600">{m.materialCode}</td>
+                <td className="px-3 py-1.5 font-mono text-slate-800">{m.materialCode}</td>
                 <td className="px-3 py-1.5 truncate max-w-[200px]" title={m.materialName}>{m.materialName}</td>
                 <td className="px-3 py-1.5 text-center">
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
@@ -670,15 +659,15 @@ const YieldPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                 <td className="px-3 py-1.5 text-slate-500 truncate max-w-[120px]" title={m.supplier}>{m.supplier || '-'}</td>
                 <RequiredQtyCell row={m} selectedMonth={selectedMonth} />
                 <td className="px-3 py-1.5 text-right font-mono">{m.inboundQty > 0 ? Math.round(m.inboundQty).toLocaleString() : '-'}</td>
-                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-amber-600' : m.diff < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diff > 0 ? 'text-emerald-600' : m.diff < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
                   {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diff > 0 ? '+' : '') + Math.round(m.diff).toLocaleString() : '-'}
                 </td>
-                <td className={`px-3 py-1.5 text-right font-mono ${m.yieldRate >= 100 ? 'text-emerald-600' : m.yieldRate > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                <td className={`px-3 py-1.5 text-right font-mono ${m.yieldRate >= 100 ? 'text-emerald-600' : m.yieldRate > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
                   {m.yieldRate > 0 ? `${m.yieldRate.toFixed(0)}%` : '-'}
                 </td>
                 <td className="px-3 py-1.5 text-right font-mono">{Math.round(m.unitPrice).toLocaleString()}</td>
                 <td className="px-3 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
-                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diffCost > 0 ? 'text-amber-600' : m.diffCost < 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                <td className={`px-3 py-1.5 text-right font-mono font-bold ${m.diffCost > 0 ? 'text-emerald-600' : m.diffCost < 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                   {m.requiredQty > 0 || m.inboundQty > 0 ? (m.diffCost > 0 ? '+' : '') + fmt(m.diffCost) : '-'}
                 </td>
               </tr>
@@ -879,7 +868,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       <table className="w-full text-xs">
         <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
           <SortTh field="materialCode" label="자재코드" sortKey={sortKey} sortDir={sortDir} onSort={handleSort} align="left" />
-          <th className="px-2 py-2 text-left cursor-pointer hover:text-indigo-600 select-none min-w-[200px]"
+          <th className="px-2 py-2 text-left cursor-pointer hover:text-blue-600 select-none min-w-[200px]"
             onClick={() => handleSort('materialName')}>
             자재명 {sortKey === 'materialName' ? (sortDir === 'desc' ? '▼' : '▲') : ''}
           </th>
@@ -900,10 +889,10 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             const hasBreakdown = breakdown.length > 0;
             return (
               <React.Fragment key={m.materialCode}>
-                <tr className={`border-b border-slate-50 ${hasBreakdown ? 'hover:bg-indigo-50/50 cursor-pointer' : 'hover:bg-slate-50'} transition-colors`}
+                <tr className={`border-b border-slate-50 ${hasBreakdown ? 'hover:bg-slate-50 cursor-pointer' : 'hover:bg-slate-50'} transition-colors`}
                   onClick={hasBreakdown ? () => toggleMaterial(m.materialCode) : undefined}>
-                  <td className="px-2 py-1.5 font-mono text-indigo-600 whitespace-nowrap sticky left-0 bg-white">
-                    {hasBreakdown && <span className={`inline-block w-3.5 text-indigo-400 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>}
+                  <td className="px-2 py-1.5 font-mono text-slate-800 whitespace-nowrap sticky left-0 bg-white">
+                    {hasBreakdown && <span className={`inline-block w-3.5 text-slate-400 text-[10px] transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>}
                     {m.materialCode}
                   </td>
                   <td className="px-2 py-1.5 min-w-[200px]" title={m.materialName}>
@@ -918,15 +907,15 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                   ))}
                   <td className="px-2 py-1.5 text-right font-mono font-bold">{Math.round(m.totalQty).toLocaleString()}</td>
                   <td className="px-2 py-1.5 text-right font-mono text-slate-500">{m.currentStock > 0 ? Math.round(m.currentStock).toLocaleString() : '-'}</td>
-                  <td className={`px-2 py-1.5 text-right font-mono font-bold ${m.orderQty > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                  <td className={`px-2 py-1.5 text-right font-mono font-bold ${m.orderQty > 0 ? 'text-rose-500' : 'text-slate-400'}`}>
                     {m.orderQty > 0 ? Math.round(m.orderQty).toLocaleString() : '-'}
                   </td>
                   <td className="px-2 py-1.5 text-right font-mono font-bold">{fmt(m.totalCost)}</td>
                 </tr>
                 {isExpanded && breakdown.map(c => (
-                  <tr key={c.productPn} className="border-b border-slate-50 bg-indigo-50/30 hover:bg-indigo-50/60">
-                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-indigo-50/30">
-                      <span className="font-mono text-violet-600 text-[10px]">{c.productPn}</span>
+                  <tr key={c.productPn} className="border-b border-slate-50 bg-slate-50/30 hover:bg-slate-50/60">
+                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-slate-50/30">
+                      <span className="font-mono text-slate-600 text-[10px]">{c.productPn}</span>
                     </td>
                     <td className="px-2 py-1 text-slate-500 text-[10px] truncate max-w-[200px]" title={c.productName}>
                       {c.productName}
@@ -942,19 +931,19 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                   </tr>
                 ))}
                 {isExpanded && breakdown.length > 0 && (
-                  <tr className="border-b border-indigo-200 bg-indigo-50/20">
-                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-indigo-50/20 text-[10px] text-indigo-500 font-bold" colSpan={2}>
+                  <tr className="border-b border-slate-200 bg-slate-50/20">
+                    <td className="pl-7 pr-2 py-1 sticky left-0 bg-slate-50/20 text-[10px] text-slate-500 font-bold" colSpan={2}>
                       {breakdown.length}개 제품 투입
                     </td>
                     <td colSpan={2}></td>
                     {Array.from({ length: 12 }, (_, i) => {
                       const mSum = breakdown.reduce((s, c) => s + (c.monthlyQty[i] || 0), 0);
-                      return <td key={i} className="px-1.5 py-1 text-right font-mono text-[10px] text-indigo-500 font-bold">{mSum > 0 ? Math.round(mSum).toLocaleString() : ''}</td>;
+                      return <td key={i} className="px-1.5 py-1 text-right font-mono text-[10px] text-slate-500 font-bold">{mSum > 0 ? Math.round(mSum).toLocaleString() : ''}</td>;
                     })}
-                    <td className="px-2 py-1 text-right font-mono text-[10px] font-bold text-indigo-600">{Math.round(breakdown.reduce((s, c) => s + c.totalQty, 0)).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right font-mono text-[10px] font-bold text-slate-800">{Math.round(breakdown.reduce((s, c) => s + c.totalQty, 0)).toLocaleString()}</td>
                     <td className="px-2 py-1 text-center" colSpan={3}>
                       <button onClick={(e) => { e.stopPropagation(); downloadRequiredQtyBreakdown(m); }}
-                        className="text-indigo-500 hover:text-indigo-700" title="산출근거 다운로드">
+                        className="text-blue-600 hover:text-blue-700" title="산출근거 다운로드">
                         <svg className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                       </button>
                     </td>
@@ -995,10 +984,10 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
             const isExpanded = expandedSuppliers.has(s.name);
             return (
               <React.Fragment key={s.name}>
-                <tr className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                <tr className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                   onClick={() => toggleSupplier(s.name)}>
                   <td className="px-3 py-2 font-bold text-slate-700 sticky left-0 bg-white">
-                    <span className={`inline-block w-4 text-indigo-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+                    <span className={`inline-block w-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     {s.name}
                   </td>
                   <td className="px-3 py-2 text-right text-slate-500">{s.materialCount}</td>
@@ -1006,11 +995,11 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                     <td key={i} className="px-1.5 py-2 text-right font-mono text-[10px]">{q > 0 ? Math.round(q).toLocaleString() : ''}</td>
                   ))}
                   <td className="px-3 py-2 text-right font-mono font-bold">{fmt(s.totalCost)}</td>
-                  <td className="px-3 py-2 text-right font-mono text-red-600">{s.totalOrderAmount > 0 ? fmt(s.totalOrderAmount) : '-'}</td>
+                  <td className="px-3 py-2 text-right font-mono text-rose-500">{s.totalOrderAmount > 0 ? fmt(s.totalOrderAmount) : '-'}</td>
                   <td className="px-2 py-2 text-center">
                     {s.totalOrderAmount > 0 && (
                       <button onClick={(e) => { e.stopPropagation(); handleDownloadPO(s.name, s.materials); }}
-                        className="text-indigo-500 hover:text-indigo-700" title="발주서 다운로드">
+                        className="text-blue-600 hover:text-blue-700" title="발주서 다운로드">
                         <svg className="w-4 h-4 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                       </button>
                     )}
@@ -1021,7 +1010,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                   .map(m => (
                   <tr key={m.materialCode} className="border-b border-slate-50 bg-slate-50/50 hover:bg-slate-100/50">
                     <td className="pl-9 pr-2 py-1.5 sticky left-0 bg-slate-50/50">
-                      <span className="font-mono text-indigo-600 text-[10px]">{m.materialCode}</span>
+                      <span className="font-mono text-slate-800 text-[10px]">{m.materialCode}</span>
                       <span className="ml-1.5 text-slate-500 truncate">{m.materialName}</span>
                       <span className={`ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold ${typeBadgeClass(m.materialType)}`}>{m.materialType}</span>
                     </td>
@@ -1031,7 +1020,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
                     ))}
                     <td className="px-3 py-1.5 text-right font-mono text-[10px] font-bold text-slate-600">{fmt(m.totalCost)}</td>
                     <td className="px-3 py-1.5 text-right font-mono text-[10px]">
-                      {m.orderQty > 0 && <span className="text-red-600">{Math.round(m.orderQty).toLocaleString()}</span>}
+                      {m.orderQty > 0 && <span className="text-rose-500">{Math.round(m.orderQty).toLocaleString()}</span>}
                     </td>
                     <td className="px-2 py-1.5"></td>
                   </tr>
@@ -1054,11 +1043,9 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
         <div className="flex gap-1">
           {VIEW_TABS.map(tab => (
             <button key={tab.id} onClick={() => { setViewMode(tab.id); setPage(0); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === tab.id ? (
-                tab.id === 'resin' ? 'bg-indigo-600 text-white' :
-                tab.id === 'paint' ? 'bg-amber-600 text-white' :
-                'bg-indigo-600 text-white'
-              ) : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold ${viewMode === tab.id
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
               {tab.label}
             </button>
           ))}
@@ -1067,7 +1054,7 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
           <div className="flex gap-1 flex-wrap">
             {types.map(t => (
               <button key={t} onClick={() => { setTypeFilter(t); setPage(0); }}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold ${typeFilter === t ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold ${typeFilter === t ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
                 {t}
               </button>
             ))}
@@ -1076,10 +1063,10 @@ const MRPPanel: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard label="자재 종류" value={`${filtered.length}건`} color="indigo" />
-        <KPICard label="총 소요금액" value={fmt(filtered.reduce((s, m) => s + m.totalCost, 0))} color="violet" />
-        <KPICard label="업체 수" value={`${supplierData.length}곳`} color="emerald" />
-        <KPICard label="발주 필요 금액" value={fmt(filtered.reduce((s, m) => s + m.orderQty * m.unitPrice, 0))} color="red" />
+        <KPICard label="자재 종류" value={`${filtered.length}건`} color="slate" />
+        <KPICard label="총 소요금액" value={fmt(filtered.reduce((s, m) => s + m.totalCost, 0))} color="slate" />
+        <KPICard label="업체 수" value={`${supplierData.length}곳`} color="slate" />
+        <KPICard label="발주 필요 금액" value={fmt(filtered.reduce((s, m) => s + m.orderQty * m.unitPrice, 0))} color="slate" />
       </div>
 
       {(viewMode === 'material' || viewMode === 'resin' || viewMode === 'paint') && renderMaterialTable()}
@@ -1107,7 +1094,7 @@ const DataQualityBar: React.FC<{ data: CostAnalysisData }> = ({ data }) => {
     <div className="bg-white rounded-xl p-3 border border-slate-200 flex items-center gap-3 text-xs flex-wrap">
       <span className="font-bold text-slate-600">데이터</span>
       {items.map(item => (
-        <span key={item.label} className={`px-2 py-0.5 rounded-full font-bold ${item.ok ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+        <span key={item.label} className={`px-2 py-0.5 rounded-full font-bold ${item.ok ? 'bg-slate-100 text-emerald-600' : 'bg-slate-100 text-rose-500'}`}>
           {item.ok ? '✓' : '✗'} {item.label}
         </span>
       ))}
@@ -1134,8 +1121,8 @@ const CostAnalysisView: React.FC = () => {
             onClick={() => setMode(tab.id)}
             className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all ${
               mode === tab.id
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-50'
             }`}
           >
             {tab.label}
@@ -1150,7 +1137,7 @@ const CostAnalysisView: React.FC = () => {
         {data.loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
               <div className="text-xs text-slate-400">데이터 로딩 중...</div>
             </div>
           </div>

@@ -344,10 +344,10 @@ const DataQualityGuide: React.FC = () => {
     if (sections.length === 0) return { score: 0, color: '', label: '' };
     const critical = sections.filter(s => s.severity === 'critical' && s.items.length > 0).length;
     const warning = sections.filter(s => s.severity === 'warning' && s.items.length > 0).length;
-    if (critical >= 2) return { score: 30, color: 'text-red-600', label: '개선 필요' };
-    if (critical >= 1) return { score: 50, color: 'text-orange-600', label: '보완 필요' };
-    if (warning >= 2) return { score: 70, color: 'text-amber-600', label: '양호' };
-    if (warning >= 1) return { score: 85, color: 'text-blue-600', label: '우수' };
+    if (critical >= 2) return { score: 30, color: 'text-rose-500', label: '개선 필요' };
+    if (critical >= 1) return { score: 50, color: 'text-slate-600', label: '보완 필요' };
+    if (warning >= 2) return { score: 70, color: 'text-slate-600', label: '양호' };
+    if (warning >= 1) return { score: 85, color: 'text-slate-600', label: '우수' };
     return { score: 95, color: 'text-emerald-600', label: '최상' };
   }, [sections]);
 
@@ -542,14 +542,14 @@ const DataQualityGuide: React.FC = () => {
   };
 
   const sevColor = (s: string) =>
-    s === 'critical' ? 'border-red-300 bg-red-50' :
-    s === 'warning' ? 'border-amber-300 bg-amber-50' :
-    'border-blue-200 bg-blue-50';
+    s === 'critical' ? 'border-rose-200 bg-slate-50' :
+    s === 'warning' ? 'border-slate-200 bg-slate-50' :
+    'border-slate-200 bg-slate-50';
 
   const sevBadge = (s: string) =>
-    s === 'critical' ? 'bg-red-500 text-white' :
-    s === 'warning' ? 'bg-amber-500 text-white' :
-    'bg-blue-500 text-white';
+    s === 'critical' ? 'bg-rose-500 text-white' :
+    s === 'warning' ? 'bg-slate-500 text-white' :
+    'bg-slate-400 text-white';
 
   if (loading) {
     return <div className="bg-white rounded-lg shadow p-8 text-center text-slate-500">데이터 품질 분석 중...</div>;
@@ -562,17 +562,17 @@ const DataQualityGuide: React.FC = () => {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
         <div className="flex items-center gap-6">
           <div className="text-center">
-            <div className={`text-4xl font-black ${scoreInfo.color}`}>{scoreInfo.score}</div>
+            <div className={`text-4xl font-bold ${scoreInfo.color}`}>{scoreInfo.score}</div>
             <div className="text-xs text-slate-500 mt-1">데이터 품질</div>
           </div>
           <div className="flex-1">
             <div className={`text-lg font-bold ${scoreInfo.color}`}>{scoreInfo.label}</div>
             <div className="text-sm text-slate-500 mt-1">
               {sections.filter(s => s.severity === 'critical' && s.items.length > 0).length > 0 &&
-                <span className="text-red-600 font-semibold mr-3">긴급 {sections.filter(s => s.severity === 'critical' && s.items.length > 0).length}건</span>
+                <span className="text-rose-500 font-semibold mr-3">긴급 {sections.filter(s => s.severity === 'critical' && s.items.length > 0).length}건</span>
               }
               {sections.filter(s => s.severity === 'warning' && s.items.length > 0).length > 0 &&
-                <span className="text-amber-600 font-semibold mr-3">주의 {sections.filter(s => s.severity === 'warning' && s.items.length > 0).length}건</span>
+                <span className="text-slate-500 font-semibold mr-3">주의 {sections.filter(s => s.severity === 'warning' && s.items.length > 0).length}건</span>
               }
               {sections.filter(s => s.items.length === 0 && s.id !== 'revenue').length > 0 &&
                 <span className="text-emerald-600 font-semibold">정상 {sections.filter(s => s.items.length === 0 && s.id !== 'revenue').length}건</span>
@@ -595,7 +595,7 @@ const DataQualityGuide: React.FC = () => {
           : '100';
 
         return (
-          <div key={section.id} className={`rounded-xl border shadow-sm overflow-hidden ${hasIssues ? sevColor(section.severity) : 'border-emerald-200 bg-emerald-50'}`}>
+          <div key={section.id} className={`rounded-xl border shadow-sm overflow-hidden ${hasIssues ? sevColor(section.severity) : 'border-slate-200 bg-slate-50'}`}>
             {/* 헤더 */}
             <div
               className="p-4 cursor-pointer hover:bg-white/50 transition-colors"
@@ -611,7 +611,7 @@ const DataQualityGuide: React.FC = () => {
                 </div>
                 {section.total > 0 && (
                   <div className="text-right">
-                    <div className={`text-lg font-bold ${hasIssues ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <div className={`text-lg font-bold ${hasIssues ? 'text-rose-500' : 'text-emerald-600'}`}>
                       {section.items.length > 0 ? `${section.items.length}건 누락` : '완료'}
                     </div>
                     <div className="text-[10px] text-slate-400">커버리지 {coveragePct}%</div>
@@ -619,7 +619,7 @@ const DataQualityGuide: React.FC = () => {
                 )}
                 {section.id === 'revenue' && (
                   <div className="text-right">
-                    <div className={`text-lg font-bold ${revenueCount === 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    <div className={`text-lg font-bold ${revenueCount === 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
                       {revenueCount === 0 ? '미등록' : `${revenueCount}건`}
                     </div>
                   </div>
@@ -628,7 +628,7 @@ const DataQualityGuide: React.FC = () => {
               </div>
               {section.programFix && (
                 <div className="mt-2 flex items-center gap-2 text-xs">
-                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-semibold">프로그램 수정 완료</span>
+                  <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-semibold">프로그램 수정 완료</span>
                   <span className="text-slate-500">{section.programFix}</span>
                 </div>
               )}
@@ -644,17 +644,17 @@ const DataQualityGuide: React.FC = () => {
                 </div>
 
                 {/* 사용자 조치방법 */}
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <div className="text-xs font-semibold text-blue-700 mb-2">조치방법</div>
+                <div className="bg-slate-50 rounded-lg p-3 border border-slate-100">
+                  <div className="text-xs font-semibold text-slate-900 mb-2">조치방법</div>
                   <ol className="space-y-1.5">
                     {section.userAction.map((step, i) => (
                       <li key={i} className="flex gap-2 text-sm text-slate-700">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center">{i + 1}</span>
                         <span>{step}</span>
                       </li>
                     ))}
                   </ol>
-                  <div className="mt-2 text-xs text-blue-600 font-medium">
+                  <div className="mt-2 text-xs text-slate-500 font-medium">
                     업로드 위치: {section.uploadTarget}
                   </div>
                 </div>
@@ -669,7 +669,7 @@ const DataQualityGuide: React.FC = () => {
                           <>
                             <button
                               onClick={() => handleTemplateDownload(section)}
-                              className="px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                              className="px-3 py-1.5 bg-slate-700 text-white text-xs rounded-lg hover:bg-slate-800 transition-colors font-medium"
                             >
                               1. 입력 템플릿 다운로드
                             </button>
@@ -693,7 +693,7 @@ const DataQualityGuide: React.FC = () => {
                     </div>
                     {uploadMsg && uploadMsg.id === section.id && (
                       <div className={`mb-2 px-3 py-2 rounded-lg text-xs font-medium ${
-                        uploadMsg.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+                        uploadMsg.ok ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-rose-50 text-rose-500 border border-rose-200'
                       }`}>
                         {uploadMsg.text}
                       </div>

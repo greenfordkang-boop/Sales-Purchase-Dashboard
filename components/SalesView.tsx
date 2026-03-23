@@ -1215,9 +1215,9 @@ const SalesView: React.FC = () => {
       {activeSubTab === 'sales' && (
       <section className="space-y-6">
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          <div><h2 className="text-xl font-black text-slate-800">1.판매계획 대비 실적</h2></div>
+          <div><h2 className="text-xl font-bold text-slate-800">1.판매계획 대비 실적</h2></div>
           <div className="flex gap-4 items-center">
-            <label className="bg-amber-100 hover:bg-amber-200 text-amber-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2"><span>📂</span> 수량 업로드 (CSV/Excel)<input type="file" accept=".csv,.xlsx,.xls" onChange={handleQtyFileUpload} className="hidden" /></label>
+            <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2"><span>📂</span> 수량 업로드 (CSV/Excel)<input type="file" accept=".csv,.xlsx,.xls" onChange={handleQtyFileUpload} className="hidden" /></label>
             <select value={selectedQtyMonth} onChange={(e) => setSelectedQtyMonth(e.target.value)} className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[120px]">
               {MONTH_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
@@ -1229,7 +1229,7 @@ const SalesView: React.FC = () => {
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 실적 수량 (TOTAL ACTUAL)</p>
             <div className="flex items-end justify-between">
               <div>
-                <p className="text-3xl font-black text-emerald-500">{activeQtyData.totalActual.toLocaleString()} EA</p>
+                <p className="text-3xl font-bold text-slate-800">{activeQtyData.totalActual.toLocaleString()} EA</p>
                 <p className="text-xs text-slate-400 mt-1">계획: {activeQtyData.totalPlan.toLocaleString()} EA</p>
               </div>
               <div className="text-right">
@@ -1242,12 +1242,12 @@ const SalesView: React.FC = () => {
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">검색된 품목 수</p>
-            <p className="text-3xl font-black text-slate-800">{filteredQtyItems.length}개</p>
+            <p className="text-3xl font-bold text-slate-800">{filteredQtyItems.length}개</p>
             <p className="text-xs text-slate-400 mt-1">총 {activeQtyData.items.length}개 중</p>
           </div>
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">분석 대상</p>
-            <p className="text-3xl font-black text-slate-800">{selectedQtyCustomer === 'All' ? '전체 고객사' : selectedQtyCustomer}</p>
+            <p className="text-3xl font-bold text-slate-800">{selectedQtyCustomer === 'All' ? '전체 고객사' : selectedQtyCustomer}</p>
             <p className="text-xs text-slate-400 mt-1">2024년 데이터</p>
           </div>
         </div>
@@ -1258,11 +1258,11 @@ const SalesView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>1. 고객사별 매출현황</h3>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-slate-700 rounded-full"></span>1. 고객사별 매출현황</h3>
               <p className="text-xs text-slate-500 mt-1">고객사별 월별 매출금액 및 수량 현황</p>
             </div>
             <div className="flex gap-3 items-center flex-wrap">
-              <label className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2 ${isUploadingRevenue ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-amber-100 hover:bg-amber-200 text-amber-700'}`}>
+              <label className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2 ${isUploadingRevenue ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
                 <span>📂</span> {isUploadingRevenue ? '업로드 중...' : '매출 업로드 (CSV/Excel)'}
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={handleRevenueFileUpload} className="hidden" disabled={isUploadingRevenue} />
               </label>
@@ -1292,9 +1292,9 @@ const SalesView: React.FC = () => {
 
           {/* Revenue Metrics Cards */}
           <div className={`grid grid-cols-1 ${revenueMetrics.hasForecast ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4 mb-6`}>
-            <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm">
-              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">총 매출실적</p>
-              <p className="text-3xl font-black text-blue-600">
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 매출실적</p>
+              <p className="text-3xl font-bold text-slate-800">
                 {revenueMetrics.totalAmount >= 100000000
                   ? `${(revenueMetrics.totalAmount / 100000000).toFixed(1)}억`
                   : `${(revenueMetrics.totalAmount / 10000).toFixed(0)}만`}원
@@ -1302,9 +1302,9 @@ const SalesView: React.FC = () => {
               <p className="text-xs text-slate-400 mt-1">{selectedRevenueYear}년 {selectedRevenueCustomer === 'All' ? '전체' : selectedRevenueCustomer}</p>
             </div>
             {revenueMetrics.hasForecast && (
-              <div className="bg-gradient-to-br from-amber-50 to-white p-6 rounded-2xl border border-amber-100 shadow-sm">
-                <p className="text-xs font-bold text-amber-500 uppercase tracking-wider mb-2">매출계획</p>
-                <p className="text-3xl font-black text-amber-600">
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">매출계획</p>
+                <p className="text-3xl font-bold text-slate-800">
                   {revenueMetrics.totalPlanAmount >= 100000000
                     ? `${(revenueMetrics.totalPlanAmount / 100000000).toFixed(1)}억`
                     : `${(revenueMetrics.totalPlanAmount / 10000).toFixed(0)}만`}원
@@ -1314,14 +1314,14 @@ const SalesView: React.FC = () => {
                 </p>
               </div>
             )}
-            <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
-              <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">총 매출수량</p>
-              <p className="text-3xl font-black text-emerald-600">{revenueMetrics.totalQty.toLocaleString()} EA</p>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 매출수량</p>
+              <p className="text-3xl font-bold text-slate-800">{revenueMetrics.totalQty.toLocaleString()} EA</p>
               <p className="text-xs text-slate-400 mt-1">{revenueMetrics.uniqueModels}개 모델</p>
             </div>
-            <div className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-2xl border border-violet-100 shadow-sm">
-              <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">고객사 / 데이터 수</p>
-              <p className="text-3xl font-black text-violet-600">{revenueMetrics.uniqueCustomers}개사</p>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">고객사 / 데이터 수</p>
+              <p className="text-3xl font-bold text-slate-800">{revenueMetrics.uniqueCustomers}개사</p>
               <p className="text-xs text-slate-400 mt-1">{filteredRevenueData.length}건 데이터</p>
             </div>
           </div>
@@ -1330,20 +1330,20 @@ const SalesView: React.FC = () => {
           {revenueMetrics.chartData.length > 0 && (
             <div className="mb-6">
               <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
-                월별 매출 추이 {revenueMetrics.hasForecast && <span className="text-xs font-normal text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">계획 vs 실적</span>}
+                <span className="w-1 h-4 bg-slate-700 rounded-full"></span>
+                월별 매출 추이 {revenueMetrics.hasForecast && <span className="text-xs font-normal text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">계획 vs 실적</span>}
               </h3>
               <div className="h-[350px] w-full">
                 <ResponsiveContainer minWidth={0} width="100%" height="100%">
                   <ComposedChart data={revenueMetrics.chartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
                     <defs>
                       <linearGradient id="gradPlan" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#a78bfa" stopOpacity={0.85} />
-                        <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.45} />
+                        <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.85} />
+                        <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.45} />
                       </linearGradient>
                       <linearGradient id="gradActual" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2563eb" stopOpacity={0.95} />
-                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.7} />
+                        <stop offset="0%" stopColor="#334155" stopOpacity={0.95} />
+                        <stop offset="100%" stopColor="#334155" stopOpacity={0.7} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -1358,10 +1358,10 @@ const SalesView: React.FC = () => {
                     />
                     <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontWeight: 600 }} />
                     <Bar yAxisId="left" name="매출계획" dataKey="planAmount" fill="url(#gradPlan)" radius={[6, 6, 0, 0]} barSize={28} hide={!revenueMetrics.hasForecast}>
-                      <LabelList dataKey="planAmount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 9, fontWeight: 500, fill: '#7c3aed' }} />
+                      <LabelList dataKey="planAmount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 9, fontWeight: 500, fill: '#64748b' }} />
                     </Bar>
                     <Bar yAxisId="left" name="매출실적" dataKey="amount" fill="url(#gradActual)" radius={[6, 6, 0, 0]} barSize={28}>
-                      <LabelList dataKey="amount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#1d4ed8' }} />
+                      <LabelList dataKey="amount" position="top" formatter={(value: number) => value > 0 ? `${(value / 100000000).toFixed(1)}억` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
                       {revenueMetrics.hasForecast && (
                         <LabelList dataKey="achieveRate" position="top" offset={18} formatter={(value: number) => value > 0 ? `${value.toFixed(1)}%` : ''} style={{ fontSize: 9, fontWeight: 700, fill: '#dc2626' }} />
                       )}
@@ -1376,7 +1376,7 @@ const SalesView: React.FC = () => {
           {revenueMetrics.customerBreakdown.length > 0 && selectedRevenueCustomer === 'All' && (
             <div className="mb-6">
               <h3 className="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                <span className="w-1 h-4 bg-violet-500 rounded-full"></span>
+                <span className="w-1 h-4 bg-slate-700 rounded-full"></span>
                 고객사별 매출 비중 (Top 5)
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -1384,7 +1384,7 @@ const SalesView: React.FC = () => {
                   <div key={item.customer} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold text-slate-500">#{idx + 1}</span>
-                      <span className="text-xs font-bold text-blue-600">{item.share.toFixed(1)}%</span>
+                      <span className="text-xs font-bold text-slate-800">{item.share.toFixed(1)}%</span>
                     </div>
                     <p className="font-bold text-slate-800 text-sm truncate" title={item.customer}>{item.customer}</p>
                     <p className="text-xs text-slate-500 mt-1">
@@ -1453,7 +1453,7 @@ const SalesView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredRevenueData.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                         <td colSpan={3} className="px-3 py-2 text-right">집계 ({filteredRevenueData.length}건)</td>
                         <td className="px-3 py-2 text-right font-mono">{revenueTotal.totalQty.toLocaleString()}</td>
                         <td className="px-3 py-2 text-right font-mono">₩{revenueTotal.totalAmount.toLocaleString()}</td>
@@ -1465,7 +1465,7 @@ const SalesView: React.FC = () => {
                         <td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td>
                         <td className="px-4 py-3 text-slate-600">{item.model}</td>
                         <td className="px-4 py-3 text-right font-mono text-slate-600">{item.qty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">₩{item.amount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
                       </tr>
                     ))}
                     {filteredRevenueData.length === 0 && (
@@ -1485,7 +1485,7 @@ const SalesView: React.FC = () => {
                       <tr>
                         <td colSpan={3} className="px-4 py-3 text-center">합계 (Total)</td>
                         <td className="px-4 py-3 text-right font-mono">{revenueTotal.totalQty.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right font-mono text-blue-600">₩{revenueTotal.totalAmount.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-800">₩{revenueTotal.totalAmount.toLocaleString()}</td>
                       </tr>
                     </tfoot>
                   )}
@@ -1495,7 +1495,7 @@ const SalesView: React.FC = () => {
           </div>
         </div>
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between mb-8"><h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-blue-600 rounded-full"></span>2. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
+          <div className="flex items-center justify-between mb-8"><h3 className="font-bold text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-slate-700 rounded-full"></span>2. 월별 계획수량(Plan) vs 실적수량(Actual) 추이</h3></div>
           <div className="h-[400px] w-full">
             <ResponsiveContainer minWidth={0} width="100%" height="100%">
               <ComposedChart data={qtyChartData} margin={{ top: 40, right: 30, bottom: 20, left: 30 }}>
@@ -1504,18 +1504,18 @@ const SalesView: React.FC = () => {
                 <YAxis axisLine={false} tickLine={false} tick={{fontSize: 11, fill: '#94a3b8'}} tickFormatter={(value) => value.toLocaleString()} />
                 <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }} cursor={{ fill: '#f8fafc' }} formatter={(value: number) => value.toLocaleString()} />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
-                <Bar name="계획수량 (Plan)" dataKey="plan" fill="#d1d5db" radius={[4, 4, 0, 0]} barSize={25}>
+                <Bar name="계획수량 (Plan)" dataKey="plan" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={25}>
                   <LabelList dataKey="plan" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
                 </Bar>
-                <Bar name="실적수량 (Actual)" dataKey="actual" fill="#10b981" radius={[4, 4, 0, 0]} barSize={25}>
-                  <LabelList dataKey="actual" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#10b981' }} />
+                <Bar name="실적수량 (Actual)" dataKey="actual" fill="#334155" radius={[4, 4, 0, 0]} barSize={25}>
+                  <LabelList dataKey="actual" position="top" formatter={(value: number) => value >= 100000000 ? `${(value / 100000000).toFixed(1)}억` : value >= 10000 ? `${(value / 10000).toFixed(1)}만` : value.toLocaleString()} style={{ fontSize: 10, fontWeight: 600, fill: '#334155' }} />
                 </Bar>
-                <Line type="monotone" name="실적추세" dataKey="actual" stroke="#10b981" strokeWidth={2} dot={{r: 5, fill: '#10b981', strokeWidth: 2, stroke: '#fff'}} connectNulls />
+                <Line type="monotone" name="실적추세" dataKey="actual" stroke="#2563eb" strokeWidth={2} dot={{r: 5, fill: '#2563eb', strokeWidth: 2, stroke: '#fff'}} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-8">
-            <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
+            <div className="flex items-center justify-between mb-4"><button onClick={() => setQtyListOpen(!qtyListOpen)} className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"><svg className={`w-5 h-5 transition-transform ${qtyListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>상세 품목 리스트 (Quantity List)</button><button onClick={handleDownloadQty} className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>엑셀 다운로드</button></div>
             {qtyListOpen && (
               <div className="overflow-x-auto border border-slate-200 rounded-2xl">
                 <table className="w-full text-xs text-left" style={qtyResize.getTableStyle()}>
@@ -1534,17 +1534,17 @@ const SalesView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredQtyItems.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                         <td colSpan={4} className="px-3 py-2 text-right">집계 ({filteredQtyItems.length}건)</td>
                         <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td>
                         <td className="px-3 py-2 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td>
+                        <td className="px-3 py-2 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td>
                       </tr>
                     )}
-                    {filteredQtyItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 font-mono text-slate-500">{item.partNo}</td><td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.partName}>{item.partName}</td><td className="px-4 py-3 text-right font-mono text-slate-500">{item.totalPlan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.totalActual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${item.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : item.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{item.rate.toFixed(1)}%</span></td></tr>))}
+                    {filteredQtyItems.map((item) => (<tr key={item.id} className="hover:bg-slate-50"><td className="px-4 py-3 font-medium text-slate-800">{item.customer}</td><td className="px-4 py-3 text-slate-600">{item.model}</td><td className="px-4 py-3 font-mono text-slate-500">{item.partNo}</td><td className="px-4 py-3 text-slate-600 truncate max-w-[200px]" title={item.partName}>{item.partName}</td><td className="px-4 py-3 text-right font-mono text-slate-500">{item.totalPlan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.totalActual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${item.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : item.rate >= 80 ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-700'}`}>{item.rate.toFixed(1)}%</span></td></tr>))}
                      {filteredQtyItems.length === 0 && (<tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터가 없습니다.</td></tr>)}
                   </tbody>
-                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td></tr></tfoot>
+                  <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200"><tr><td colSpan={4} className="px-4 py-3 text-center">합계 (Total)</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.plan.toLocaleString()}</td><td className="px-4 py-3 text-right font-mono">{filteredQtyTotal.actual.toLocaleString()}</td><td className="px-4 py-3 text-center"><span className={`px-2 py-1 rounded-md font-bold text-[10px] ${filteredQtyTotal.rate >= 100 ? 'bg-emerald-100 text-emerald-700' : filteredQtyTotal.rate >= 80 ? 'bg-slate-100 text-slate-700' : 'bg-rose-100 text-rose-700'}`}>{filteredQtyTotal.rate.toFixed(1)}%</span></td></tr></tfoot>
                 </table>
               </div>
             )}
@@ -1557,18 +1557,18 @@ const SalesView: React.FC = () => {
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className="font-black text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-emerald-600 rounded-full"></span>3. 품목별 매출현황</h3>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2"><span className="w-1 h-5 bg-slate-700 rounded-full"></span>3. 품목별 매출현황</h3>
               <p className="text-xs text-slate-500 mt-1">품목별 매출금액 및 수량 현황 (CSV/Excel 업로드)</p>
             </div>
             <div className="flex items-center gap-2">
-              <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+              <label className="bg-slate-800 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
                 <span>📂</span> 품목별 매출 업로드 (CSV/Excel)
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={handleItemRevenueFileUpload} className="hidden" />
               </label>
               <select
                 value={selectedRevenueCustomer}
                 onChange={(e) => setSelectedRevenueCustomer(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-emerald-500/20 min-w-[150px]"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[150px]"
               >
                 {revenueCustomers.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -1577,23 +1577,23 @@ const SalesView: React.FC = () => {
 
           {/* Item Revenue Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-emerald-50 to-white p-6 rounded-2xl border border-emerald-100 shadow-sm">
-              <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-2">총 매출금액</p>
-              <p className="text-3xl font-black text-emerald-600">
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 매출금액</p>
+              <p className="text-3xl font-bold text-slate-800">
                 {itemRevenueStats.totalAmount >= 100000000
                   ? `${(itemRevenueStats.totalAmount / 100000000).toFixed(1)}억`
                   : `${(itemRevenueStats.totalAmount / 10000).toFixed(0)}만`}원
               </p>
               <p className="text-xs text-slate-400 mt-1">{selectedRevenueCustomer === 'All' ? '전체 고객사' : selectedRevenueCustomer}</p>
             </div>
-            <div className="bg-gradient-to-br from-blue-50 to-white p-6 rounded-2xl border border-blue-100 shadow-sm">
-              <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-2">총 매출수량</p>
-              <p className="text-3xl font-black text-blue-600">{itemRevenueStats.totalQty.toLocaleString()} EA</p>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">총 매출수량</p>
+              <p className="text-3xl font-bold text-slate-800">{itemRevenueStats.totalQty.toLocaleString()} EA</p>
               <p className="text-xs text-slate-400 mt-1">{itemRevenueStats.items.length}개 품목</p>
             </div>
-            <div className="bg-gradient-to-br from-violet-50 to-white p-6 rounded-2xl border border-violet-100 shadow-sm">
-              <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-2">데이터 수</p>
-              <p className="text-3xl font-black text-violet-600">{itemRevenueStats.items.length}건</p>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-sm">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">데이터 수</p>
+              <p className="text-3xl font-bold text-slate-800">{itemRevenueStats.items.length}건</p>
               <p className="text-xs text-slate-400 mt-1">품목별 집계 데이터</p>
             </div>
           </div>
@@ -1603,7 +1603,7 @@ const SalesView: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => setItemRevenueListOpen(!itemRevenueListOpen)}
-                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"
+                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"
               >
                 <svg className={`w-5 h-5 transition-transform ${itemRevenueListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -1650,7 +1650,7 @@ const SalesView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {itemRevenueStats.items.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                         <td colSpan={4} className="px-3 py-2 text-right">집계 ({itemRevenueStats.items.length}건)</td>
                         <td className="px-3 py-2 text-right font-mono">{itemRevenueStats.totalQty.toLocaleString()}</td>
                         <td className="px-3 py-2 text-right font-mono">₩{itemRevenueStats.totalAmount.toLocaleString()}</td>
@@ -1663,7 +1663,7 @@ const SalesView: React.FC = () => {
                         <td className="px-4 py-3 font-mono text-slate-700">{item.partNo || '-'}</td>
                         <td className="px-4 py-3 font-mono text-slate-500">{item.customerPN || '-'}</td>
                         <td className="px-4 py-3 text-slate-700 truncate max-w-[240px]" title={item.partName}>{item.partName || '-'}</td>
-                        <td className="px-4 py-3 text-right font-mono text-emerald-700">{item.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-800">{item.qty.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.amount.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right text-slate-500">{item.share.toFixed(1)}%</td>
                       </tr>
@@ -1684,7 +1684,7 @@ const SalesView: React.FC = () => {
                     <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                       <tr>
                         <td colSpan={4} className="px-4 py-3 text-right">합계</td>
-                        <td className="px-4 py-3 text-right font-mono text-emerald-700">
+                        <td className="px-4 py-3 text-right font-mono text-slate-800">
                           {itemRevenueStats.totalQty.toLocaleString()}
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-slate-800">
@@ -1709,7 +1709,7 @@ const SalesView: React.FC = () => {
          <div className="space-y-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-xl font-black text-slate-800">RFQ 현황 (Request for Quotation)</h2>
+                    <h2 className="text-xl font-bold text-slate-800">RFQ 현황 (Request for Quotation)</h2>
                     <p className="text-xs text-slate-500 mt-1">신규 프로젝트 수주 및 견적 진행 현황 관리</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1722,7 +1722,7 @@ const SalesView: React.FC = () => {
                     {isEditingRFQ && (
                         <button
                             onClick={handleAddRfqRow}
-                            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2"
+                            className="bg-slate-800 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2"
                         >
                             ➕ 행 추가
                         </button>
@@ -1754,7 +1754,7 @@ const SalesView: React.FC = () => {
                                     />
                                     <Bar dataKey="count" radius={[4, 4, 4, 4]} barSize={30}>
                                         {rfqMetrics.chartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={entry.status.includes('양산') ? '#10b981' : entry.status.includes('실패') || entry.status.includes('포기') ? '#ef4444' : '#f59e0b'} />
+                                            <Cell key={`cell-${index}`} fill={entry.status.includes('양산') ? '#334155' : entry.status.includes('실패') || entry.status.includes('포기') ? '#ef4444' : '#cbd5e1'} />
                                         ))}
                                     </Bar>
                                     <Tooltip cursor={{fill: 'transparent'}} contentStyle={{fontSize: '10px', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}} />
@@ -1820,7 +1820,7 @@ const SalesView: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredRfqItems.length > 0 && (
-                                  <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                                  <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                                     {isEditingRFQ && <td className="px-2 py-2"></td>}
                                     <td colSpan={10} className="px-3 py-2 text-right">집계 ({filteredRfqItems.length}건)</td>
                                     <td className="px-3 py-2 text-right font-mono">{filteredRfqItems.reduce((s, r) => s + r.qty, 0).toLocaleString()}</td>
@@ -1895,7 +1895,7 @@ const SalesView: React.FC = () => {
                                                 <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
                                                     item.status.includes('양산') || item.status.includes('수주') ? 'bg-emerald-100 text-emerald-700' :
                                                     item.status.includes('실패') || item.status.includes('포기') || item.status.includes('Drop') ? 'bg-rose-100 text-rose-700' :
-                                                    item.status.includes('검토') || item.status.includes('분석') ? 'bg-amber-100 text-amber-700' :
+                                                    item.status.includes('검토') || item.status.includes('분석') ? 'bg-slate-100 text-slate-700' :
                                                     'bg-slate-100 text-slate-600'
                                                 }`}>
                                                     {item.status}
@@ -1932,7 +1932,7 @@ const SalesView: React.FC = () => {
                                                 <input type="number" value={item.unitPrice} onChange={(e) => handleRfqChange(item.id, 'unitPrice', e.target.value)} className="w-full text-right bg-white border border-blue-200 rounded px-1 py-0.5" />
                                             ) : `₩${item.unitPrice.toLocaleString()}`}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">
+                                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">
                                             {isEditingRFQ ? (
                                                 <input type="number" value={item.amount} onChange={(e) => handleRfqChange(item.id, 'amount', e.target.value)} className="w-full text-right bg-white border border-blue-200 rounded px-1 py-0.5" />
                                             ) : `₩${item.amount.toLocaleString()}`}
@@ -1964,7 +1964,7 @@ const SalesView: React.FC = () => {
                {/* Header and Controls */}
                <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
                   <div>
-                     <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                     <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                         CR (Cost Reduction) 현황
                         <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded">단위: 백만원</span>
                      </h2>
@@ -1995,7 +1995,7 @@ const SalesView: React.FC = () => {
                      >
                         {isEditingCR ? '💾 편집 종료 (저장)' : '✏️ 실적 직접 입력'}
                      </button>
-                     <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+                     <label className="bg-slate-800 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
                         <span>📁 CR 데이터 업로드 (CSV/Excel)</span>
                         <input type="file" accept=".csv,.xlsx,.xls" onChange={handleCRFileUpload} className="hidden" />
                      </label>
@@ -2069,13 +2069,13 @@ const SalesView: React.FC = () => {
                         </tr>
                         {/* 4. LG VI율 (Calculated) */}
                         <tr className="hover:bg-slate-50">
-                           <td className="px-2 py-3 border-r border-slate-200 font-bold bg-white text-left pl-4 text-emerald-600">LG VI율</td>
+                           <td className="px-2 py-3 border-r border-slate-200 font-bold bg-white text-left pl-4 text-slate-500">LG VI율</td>
                            {crTableData.monthly.map((item, i) => (
-                              <td key={i} className="px-2 py-3 border-r border-slate-200 text-emerald-500 font-medium">
+                              <td key={i} className="px-2 py-3 border-r border-slate-200 text-slate-800 font-medium">
                                  {item.lgSales > 0 ? ((item.lgCR / item.lgSales) * 100).toFixed(2) : '0.00'}%
                               </td>
                            ))}
-                           <td className="px-2 py-3 font-bold text-emerald-600">
+                           <td className="px-2 py-3 font-bold text-slate-800">
                               {crTableData.total.lgSales > 0 ? ((crTableData.total.lgCR / crTableData.total.lgSales) * 100).toFixed(2) : '0.00'}%
                            </td>
                         </tr>
@@ -2115,13 +2115,13 @@ const SalesView: React.FC = () => {
                         </tr>
                         {/* 7. MTX VI율 */}
                         <tr className="hover:bg-slate-50">
-                           <td className="px-2 py-3 border-r border-slate-200 font-bold bg-white text-left pl-4 text-emerald-600">MTX VI율</td>
+                           <td className="px-2 py-3 border-r border-slate-200 font-bold bg-white text-left pl-4 text-slate-500">MTX VI율</td>
                            {crTableData.monthly.map((item, i) => (
-                              <td key={i} className="px-2 py-3 border-r border-slate-200 text-emerald-500 font-medium">
+                              <td key={i} className="px-2 py-3 border-r border-slate-200 text-slate-800 font-medium">
                                  {item.mtxSales > 0 ? ((item.mtxCR / item.mtxSales) * 100).toFixed(2) : '0.00'}%
                               </td>
                            ))}
-                           <td className="px-2 py-3 font-bold text-emerald-600">
+                           <td className="px-2 py-3 font-bold text-slate-800">
                               {crTableData.total.mtxSales > 0 ? ((crTableData.total.mtxCR / crTableData.total.mtxSales) * 100).toFixed(2) : '0.00'}%
                            </td>
                         </tr>
@@ -2186,8 +2186,8 @@ const SalesView: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
                   <div>
-                     <h3 className="font-black text-slate-800 flex items-center gap-2">
-                        <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
+                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                         품목별 단가 현황 (Unit Price)
                      </h3>
                      <p className="text-sm text-slate-500 mt-1">매출 내역을 기반으로 산출된 품목별 최신 단가 및 단가 변동 정보입니다.</p>
@@ -2195,7 +2195,7 @@ const SalesView: React.FC = () => {
                   <div className="flex gap-2">
                      <button
                         onClick={handleCopyPrice}
-                        className="text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors"
+                        className="text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
                      >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -2216,17 +2216,17 @@ const SalesView: React.FC = () => {
 
                {/* Metrics */}
                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-xl border border-blue-100">
-                     <p className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-1">등록 품목 수</p>
-                     <p className="text-2xl font-black text-blue-600">{priceStats.length}개</p>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">등록 품목 수</p>
+                     <p className="text-2xl font-bold text-slate-800">{priceStats.length}개</p>
                   </div>
-                  <div className="bg-gradient-to-br from-emerald-50 to-white p-4 rounded-xl border border-emerald-100">
-                     <p className="text-xs font-bold text-emerald-500 uppercase tracking-wider mb-1">고객사 수</p>
-                     <p className="text-2xl font-black text-emerald-600">{new Set(priceStats.map(p => p.customer)).size}개사</p>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">고객사 수</p>
+                     <p className="text-2xl font-bold text-slate-800">{new Set(priceStats.map(p => p.customer)).size}개사</p>
                   </div>
-                  <div className="bg-gradient-to-br from-violet-50 to-white p-4 rounded-xl border border-violet-100">
-                     <p className="text-xs font-bold text-violet-500 uppercase tracking-wider mb-1">총 거래 수량</p>
-                     <p className="text-2xl font-black text-violet-600">{priceStats.reduce((sum, p) => sum + p.totalQty, 0).toLocaleString()} EA</p>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">총 거래 수량</p>
+                     <p className="text-2xl font-bold text-slate-800">{priceStats.reduce((sum, p) => sum + p.totalQty, 0).toLocaleString()} EA</p>
                   </div>
                </div>
 
@@ -2356,7 +2356,7 @@ const SalesView: React.FC = () => {
                      </thead>
                      <tbody className="divide-y divide-slate-100">
                         {priceStats.length > 0 && (
-                          <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                          <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                             <td colSpan={2} className="px-3 py-2 text-right">집계 ({priceStats.length}건)</td>
                             <td className="px-3 py-2 text-right font-mono">{Math.round(priceStats.reduce((s, p) => s + p.latestPrice, 0) / priceStats.length).toLocaleString()}</td>
                             <td className="px-3 py-2 text-right font-mono">{Math.round(Math.max(...priceStats.map(p => p.maxPrice))).toLocaleString()}</td>
@@ -2370,7 +2370,7 @@ const SalesView: React.FC = () => {
                            <tr key={idx} className="hover:bg-slate-50">
                               <td className="px-4 py-3 font-medium text-slate-800">{item.model}</td>
                               <td className="px-4 py-3 text-slate-600">{item.customer}</td>
-                              <td className="px-4 py-3 text-right font-bold text-blue-600">₩{Math.round(item.latestPrice).toLocaleString()}</td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-800">₩{Math.round(item.latestPrice).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-rose-500">₩{Math.round(item.maxPrice).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-emerald-500">₩{Math.round(item.minPrice).toLocaleString()}</td>
                               <td className="px-4 py-3 text-right text-slate-600">₩{Math.round(item.avgPrice).toLocaleString()}</td>

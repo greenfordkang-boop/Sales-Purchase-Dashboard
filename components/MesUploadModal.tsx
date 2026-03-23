@@ -97,13 +97,13 @@ const MES_ITEMS: MesItemConfig[] = [
 ];
 
 const COLOR_MAP: Record<string, { bg: string; text: string; border: string; badge: string }> = {
-  emerald: { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', badge: 'bg-emerald-100 text-emerald-700' },
-  amber: { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', badge: 'bg-amber-100 text-amber-700' },
-  blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700' },
-  orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700' },
-  pink: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', badge: 'bg-pink-100 text-pink-700' },
-  teal: { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-200', badge: 'bg-teal-100 text-teal-700' },
-  purple: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', badge: 'bg-purple-100 text-purple-700' },
+  emerald: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  amber: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  blue: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  orange: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  pink: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  teal: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
+  purple: { bg: 'bg-slate-50', text: 'text-slate-800', border: 'border-slate-100', badge: 'bg-slate-100 text-slate-800' },
 };
 
 const MesUploadModal: React.FC<Props> = ({ isOpen, onClose }) => {
@@ -168,7 +168,7 @@ const MesUploadModal: React.FC<Props> = ({ isOpen, onClose }) => {
     >
       <div className="bg-white rounded-2xl shadow-2xl w-[560px] overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-violet-50 to-purple-50">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
           <div>
             <h2 className="text-base font-bold text-slate-800">MES 마스터 데이터 업로드</h2>
             <p className="text-xs text-slate-500 mt-0.5">각 파일을 개별 업로드하여 마스터 데이터를 갱신합니다.</p>
@@ -235,7 +235,7 @@ const MesUploadModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 {/* 상태 표시 */}
                 <div className="w-40 shrink-0 text-right">
                   {st?.status === 'uploading' && (
-                    <span className="flex items-center justify-end gap-1 text-blue-600 text-[11px]">
+                    <span className="flex items-center justify-end gap-1 text-slate-500 text-[11px]">
                       <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
                         <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
                         <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />

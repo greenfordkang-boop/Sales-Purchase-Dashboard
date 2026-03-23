@@ -656,7 +656,7 @@ const BomMasterUploadView: React.FC = () => {
         </div>
         {uploadMessage && (
           <div className={`mt-2 text-xs px-3 py-2 rounded ${
-            uploadMessage.includes('실패') ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+            uploadMessage.includes('실패') ? 'bg-slate-50 text-rose-500' : 'bg-slate-50 text-emerald-600'
           }`}>
             {uploadMessage}
           </div>
@@ -748,9 +748,9 @@ const BomMasterUploadView: React.FC = () => {
                   </tr>
                 );
               })}
-              <tr className="bg-blue-50 font-semibold">
-                <td className="px-4 py-2 text-blue-700">합계</td>
-                <td className="px-4 py-2 text-right text-blue-700">
+              <tr className="bg-slate-50 font-semibold">
+                <td className="px-4 py-2 text-slate-800">합계</td>
+                <td className="px-4 py-2 text-right text-slate-800">
                   {gapAnalysis.length > 0
                     ? gapAnalysis.reduce((s, g) => s + g.parsed, 0).toLocaleString()
                     : totalDataRows.toLocaleString()
@@ -758,7 +758,7 @@ const BomMasterUploadView: React.FC = () => {
                 </td>
                 {gapAnalysis.length > 0 && (
                   <>
-                    <td className="px-4 py-2 text-right text-blue-700">
+                    <td className="px-4 py-2 text-right text-slate-800">
                       {gapAnalysis.reduce((s, g) => s + g.saved, 0).toLocaleString()}
                     </td>
                     <td className={`px-4 py-2 text-right font-mono ${
@@ -785,12 +785,12 @@ const BomMasterUploadView: React.FC = () => {
             </tbody>
           </table>
           {gapAnalysis.length > 0 && gapAnalysis.some(g => g.status === 'mismatch') && (
-            <div className="px-4 py-2 bg-red-50 text-xs text-red-600">
+            <div className="px-4 py-2 bg-slate-50 text-xs text-rose-500">
               Gap이 있는 시트가 있습니다. UNIQUE 제약조건 중복 또는 저장 오류를 확인하세요. 재업로드하면 해결될 수 있습니다.
             </div>
           )}
           {gapAnalysis.length > 0 && gapAnalysis.every(g => g.status === 'match') && (
-            <div className="px-4 py-2 bg-emerald-50 text-xs text-emerald-600">
+            <div className="px-4 py-2 bg-slate-50 text-xs text-emerald-600">
               모든 시트가 정확하게 일치합니다. Excel 파싱 → DB 저장 무결성 확인 완료.
             </div>
           )}
@@ -808,11 +808,11 @@ const BomMasterUploadView: React.FC = () => {
                   key={type}
                   onClick={() => setFilterIssueType(filterIssueType === type ? 'All' : type)}
                   className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                    filterIssueType === type ? 'bg-orange-100 border border-orange-300' : 'bg-white border border-gray-200'
+                    filterIssueType === type ? 'bg-slate-100 border border-slate-300' : 'bg-white border border-gray-200'
                   }`}
                 >
                   <div className="text-xs text-gray-500">{ISSUE_TYPE_LABELS[type] || type}</div>
-                  <div className="text-lg font-bold text-orange-600">{count}건</div>
+                  <div className="text-lg font-bold text-slate-800">{count}건</div>
                 </div>
               ))}
             </div>
@@ -827,11 +827,11 @@ const BomMasterUploadView: React.FC = () => {
 
           {/* 처리방법 가이드 */}
           {filterIssueType !== 'All' && ISSUE_FIX_GUIDE[filterIssueType] && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <div className="text-xs font-semibold text-blue-800 mb-1">처리방법 — {ISSUE_TYPE_LABELS[filterIssueType]}</div>
-              <div className="text-xs text-blue-700 space-y-1">
-                <div><span className="font-medium">수정 시트:</span> <span className="font-mono bg-blue-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].sheet}</span></div>
-                <div><span className="font-medium">수정 필드:</span> <span className="font-mono bg-blue-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].field}</span></div>
+            <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
+              <div className="text-xs font-semibold text-slate-700 mb-1">처리방법 — {ISSUE_TYPE_LABELS[filterIssueType]}</div>
+              <div className="text-xs text-slate-600 space-y-1">
+                <div><span className="font-medium">수정 시트:</span> <span className="font-mono bg-slate-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].sheet}</span></div>
+                <div><span className="font-medium">수정 필드:</span> <span className="font-mono bg-slate-100 px-1 rounded">{ISSUE_FIX_GUIDE[filterIssueType].field}</span></div>
                 <div><span className="font-medium">조치:</span> {ISSUE_FIX_GUIDE[filterIssueType].action}</div>
               </div>
             </div>
@@ -844,7 +844,7 @@ const BomMasterUploadView: React.FC = () => {
                   <div key={type} className="text-xs bg-white rounded p-2 border border-gray-100">
                     <div className="font-semibold text-gray-700 mb-0.5">{ISSUE_TYPE_LABELS[type]}</div>
                     <div className="text-gray-500">
-                      <span className="font-mono text-blue-600">{guide.sheet}</span> 시트의 <span className="font-mono text-blue-600">{guide.field}</span> 수정
+                      <span className="font-mono text-slate-600">{guide.sheet}</span> 시트의 <span className="font-mono text-slate-600">{guide.field}</span> 수정
                     </div>
                   </div>
                 ))}
@@ -876,14 +876,14 @@ const BomMasterUploadView: React.FC = () => {
                     <td className="px-3 py-1.5">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         issue.severity === 'error' ? 'bg-red-100 text-red-700' :
-                        issue.severity === 'warning' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-blue-100 text-blue-700'
+                        issue.severity === 'warning' ? 'bg-slate-100 text-slate-600' :
+                        'bg-slate-100 text-slate-600'
                       }`}>
                         {issue.severity}
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-gray-500 max-w-60 truncate">{issue.description}</td>
-                    <td className="px-3 py-1.5 text-blue-600 font-mono text-[10px]">
+                    <td className="px-3 py-1.5 text-slate-500 font-mono text-[10px]">
                       {ISSUE_FIX_GUIDE[issue.issueType]?.sheet} &gt; {ISSUE_FIX_GUIDE[issue.issueType]?.field}
                     </td>
                   </tr>

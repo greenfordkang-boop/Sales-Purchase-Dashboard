@@ -523,7 +523,7 @@ const PurchaseView: React.FC = () => {
     return `${(value / 100000000).toFixed(1)}억`;
   };
 
-  const PIE_COLORS = ['#6366f1', '#f43f5e']; 
+  const PIE_COLORS = ['#334155', '#cbd5e1'];
 
   const SUB_TABS = [
     { id: 'costAnalysis', label: '원가분석', highlight: true },
@@ -571,13 +571,13 @@ const PurchaseView: React.FC = () => {
                 onClick={() => setActiveSubTab(tab.id as any)}
                 className={`px-5 py-3 text-sm font-bold transition-all relative whitespace-nowrap ${
                     activeSubTab === tab.id
-                    ? ((tab as any).highlight ? 'text-violet-600' : 'text-indigo-600')
-                    : ((tab as any).highlight ? 'text-violet-400 hover:text-violet-600' : 'text-slate-400 hover:text-slate-600')
+                    ? 'text-blue-600'
+                    : 'text-slate-400 hover:text-slate-600'
                 }`}
             >
                 {tab.label}
                 {activeSubTab === tab.id && (
-                    <span className={`absolute bottom-[-5px] left-0 w-full h-1 rounded-t-full ${(tab as any).highlight ? 'bg-violet-600' : 'bg-indigo-600'}`}></span>
+                    <span className="absolute bottom-[-5px] left-0 w-full h-1 rounded-t-full bg-blue-600"></span>
                 )}
             </button>
         ))}
@@ -587,7 +587,7 @@ const PurchaseView: React.FC = () => {
           0. COST ANALYSIS TAB (원가분석 통합 워크벤치)
          ================================================================================= */}
       {activeSubTab === 'costAnalysis' && (
-        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
           <CostAnalysisView />
         </Suspense>
       )}
@@ -600,7 +600,7 @@ const PurchaseView: React.FC = () => {
         {/* Header & Controls */}
         <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-slate-800">구매 입고 현황 (Inbound)</h2>
+            <h2 className="text-xl font-bold text-slate-800">구매 입고 현황 (Inbound)</h2>
             <p className="text-xs text-slate-500 mt-1">부품 및 원재료 월별 입고 현황 통합 분석</p>
           </div>
           
@@ -610,7 +610,7 @@ const PurchaseView: React.FC = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 min-w-[100px]"
+                className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[100px]"
               >
                 <option value="All">전체 (누적)</option>
                 {Array.from({ length: 12 }, (_, i) => {
@@ -625,7 +625,7 @@ const PurchaseView: React.FC = () => {
                     onClick={() => toggleYear(year)}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
                       selectedYears.includes(year)
-                        ? 'bg-indigo-500 text-white shadow-sm'
+                        ? 'bg-blue-600 text-white shadow-sm'
                         : 'bg-white text-slate-400 hover:bg-slate-100'
                     }`}
                   >
@@ -639,7 +639,7 @@ const PurchaseView: React.FC = () => {
               <select
                 value={uploadMonth}
                 onChange={(e) => setUploadMonth(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 min-w-[120px]"
+                className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20 min-w-[120px]"
               >
                 <option value="">월 선택 (필수)</option>
                 {Array.from({ length: 12 }, (_, i) => {
@@ -647,11 +647,11 @@ const PurchaseView: React.FC = () => {
                   return <option key={month} value={month}>{month}</option>;
                 })}
               </select>
-              <label className={`bg-indigo-600 ${uploadMonth ? 'hover:bg-indigo-700' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
+              <label className={`bg-slate-700 ${uploadMonth ? 'hover:bg-slate-800' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
                 <span>⚙️ 부품 입고 업로드</span>
                 <input type="file" accept=".csv" onChange={handlePartsFileUpload} className="hidden" disabled={!uploadMonth} />
               </label>
-              <label className={`bg-rose-500 ${uploadMonth ? 'hover:bg-rose-600' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
+              <label className={`bg-slate-700 ${uploadMonth ? 'hover:bg-slate-600' : 'opacity-50 cursor-not-allowed'} text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-2`}>
                 <span>🧪 원재료 입고 업로드</span>
                 <input type="file" accept=".csv" onChange={handleMaterialFileUpload} className="hidden" disabled={!uploadMonth} />
               </label>
@@ -685,8 +685,8 @@ const PurchaseView: React.FC = () => {
         {/* Charts */}
         <div className="flex flex-col lg:flex-row gap-6">
             <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                <h3 className="font-black text-slate-800 flex items-center gap-2 mb-6">
-                    <span className="w-1 h-5 bg-indigo-600 rounded-full"></span>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-6">
+                    <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                     월별 매입 금액 추이 ({selectedYears.join(', ')})
                 </h3>
                 <div className="h-[320px] w-full">
@@ -701,8 +701,8 @@ const PurchaseView: React.FC = () => {
                         formatter={(value: number) => `₩${Math.round(value).toLocaleString()}`}
                         />
                         <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 600 }} />
-                        <Bar name="부품 (Parts)" dataKey="parts" stackId="a" fill="#6366f1" radius={[0, 0, 0, 0]} barSize={40} />
-                        <Bar name="원재료 (Materials)" dataKey="material" stackId="a" fill="#f43f5e" radius={[4, 4, 0, 0]} barSize={40}>
+                        <Bar name="부품 (Parts)" dataKey="parts" stackId="a" fill="#334155" radius={[0, 0, 0, 0]} barSize={40} />
+                        <Bar name="원재료 (Materials)" dataKey="material" stackId="a" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={40}>
                             <LabelList 
                                 dataKey="total" 
                                 position="top" 
@@ -717,7 +717,7 @@ const PurchaseView: React.FC = () => {
 
             <div className="w-full lg:w-1/3 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between mb-6">
-                    <h3 className="font-black text-slate-800 flex items-center gap-2">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
                         <span className="w-1 h-5 bg-slate-500 rounded-full"></span>
                         매입 유형별 비중
                     </h3>
@@ -767,7 +767,7 @@ const PurchaseView: React.FC = () => {
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setPurchaseListOpen(!purchaseListOpen)}
-                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-indigo-600 transition-colors"
+                className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"
               >
                 <svg className={`w-5 h-5 transition-transform ${purchaseListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -777,7 +777,7 @@ const PurchaseView: React.FC = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500/20"
               >
                 <option value="All">전체 월</option>
                 {Array.from({ length: 12 }, (_, i) => {
@@ -821,7 +821,7 @@ const PurchaseView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredItems.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                         <td colSpan={5} className="px-3 py-2 text-right">집계 ({filteredItems.length}건)</td>
                         <td className="px-3 py-2 text-right font-mono">{filteredTotal.qty.toLocaleString()}</td>
                         <td className="px-3 py-2 text-right font-mono">₩{Math.round(filteredTotal.amount).toLocaleString()}</td>
@@ -832,7 +832,7 @@ const PurchaseView: React.FC = () => {
                         <td className="px-4 py-3 text-slate-600 font-mono">{item.date}</td>
                         <td className="px-4 py-3">
                             <span className={`px-2 py-1 rounded-md font-bold text-[10px] ${
-                                item.category === 'Parts' ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'
+                                item.category === 'Parts' ? 'bg-slate-100 text-slate-700' : 'bg-slate-100 text-slate-700'
                             }`}>
                                 {item.category === 'Parts' ? '부품' : '원재료'}
                             </span>
@@ -854,7 +854,7 @@ const PurchaseView: React.FC = () => {
                     <tr>
                       <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
                       <td className="px-4 py-3 text-right font-mono">{filteredTotal.qty.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right font-mono text-indigo-700">₩{Math.round(filteredTotal.amount).toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">₩{Math.round(filteredTotal.amount).toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -878,7 +878,7 @@ const PurchaseView: React.FC = () => {
              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h2 className="text-xl font-black text-slate-800">품목별 단가 현황 (Unit Price)</h2>
+                        <h2 className="text-xl font-bold text-slate-800">품목별 단가 현황 (Unit Price)</h2>
                         <p className="text-sm text-slate-500">입고 내역을 기반으로 산출된 품목별 최신 단가 및 단가 변동 정보입니다.</p>
                     </div>
                     <button 
@@ -906,7 +906,7 @@ const PurchaseView: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {priceStats.length > 0 && (
-                              <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                              <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                                 <td colSpan={3} className="px-3 py-2 text-right">집계 ({priceStats.length}건)</td>
                                 <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(priceStats.reduce((s, p) => s + p.latestPrice, 0) / priceStats.length).toLocaleString()}</td>
                                 <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(Math.max(...priceStats.map(p => p.maxPrice))).toLocaleString()}</td>
@@ -919,7 +919,7 @@ const PurchaseView: React.FC = () => {
                                     <td className="px-4 py-3 font-medium text-slate-800">{item.name}</td>
                                     <td className="px-4 py-3 text-slate-600">{item.supplier}</td>
                                     <td className="px-4 py-3 text-center text-slate-500">{item.unit}</td>
-                                    <td className="px-4 py-3 text-right font-bold text-indigo-600">₩{Math.round(item.latestPrice).toLocaleString()}</td>
+                                    <td className="px-4 py-3 text-right font-bold text-slate-800">₩{Math.round(item.latestPrice).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-slate-500">₩{Math.round(item.maxPrice).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right text-slate-500">₩{Math.round(item.minPrice).toLocaleString()}</td>
                                     <td className="px-4 py-3 text-right font-mono text-slate-400">{item.date}</td>
@@ -939,7 +939,7 @@ const PurchaseView: React.FC = () => {
           4. CR TAB
          ================================================================================= */}
       {activeSubTab === 'cr' && (
-        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
           <CRView />
         </Suspense>
       )}
@@ -952,7 +952,7 @@ const PurchaseView: React.FC = () => {
              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h2 className="text-xl font-black text-slate-800">협력사 현황 (Supplier Status)</h2>
+                        <h2 className="text-xl font-bold text-slate-800">협력사 현황 (Supplier Status)</h2>
                         <p className="text-sm text-slate-500">전체 입고 데이터를 기준으로 집계된 협력사별 거래 현황입니다.</p>
                     </div>
                     <button 
@@ -983,7 +983,7 @@ const PurchaseView: React.FC = () => {
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                             {supplierStats.length > 0 && (
-                              <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                              <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                                 <td className="px-3 py-2 text-right font-bold">집계 ({supplierStats.length}개사)</td>
                                 <td className="px-3 py-2 text-right font-mono">{'\u20A9'}{Math.round(supplierStats.reduce((s, p) => s + p.totalAmount, 0)).toLocaleString()}</td>
                                 <td className="px-3 py-2 text-right font-mono">100.0%</td>
@@ -1014,7 +1014,7 @@ const PurchaseView: React.FC = () => {
           8. DATA QUALITY GUIDE (데이터 품질 가이드)
          ================================================================================= */}
       {activeSubTab === 'dataGuide' && (
-        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>}>
           <DataQualityGuide />
         </Suspense>
       )}

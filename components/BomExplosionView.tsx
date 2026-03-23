@@ -391,9 +391,9 @@ const BomExplosionView: React.FC = () => {
   };
   const typeColor = (t: SearchIndexEntry['type']) => {
     switch (t) {
-      case 'product': return 'bg-blue-100 text-blue-700';
-      case 'part': return 'bg-amber-100 text-amber-700';
-      case 'material': return 'bg-emerald-100 text-emerald-700';
+      case 'product': return 'bg-slate-100 text-slate-600';
+      case 'part': return 'bg-slate-100 text-slate-600';
+      case 'material': return 'bg-slate-100 text-slate-600';
     }
   };
 
@@ -444,8 +444,8 @@ const BomExplosionView: React.FC = () => {
                 const shortName = step.name.length > 20 ? step.name.slice(0, 20) + '…' : step.name;
                 return (
                   <div key={i} className="flex items-center gap-1.5 text-[11px]">
-                    {i > 0 && <span className="text-amber-400 font-bold">×</span>}
-                    <span className="text-indigo-300 font-bold">Lv{step.level}</span>
+                    {i > 0 && <span className="text-slate-400 font-bold">×</span>}
+                    <span className="text-slate-300 font-bold">Lv{step.level}</span>
                     <span className="text-slate-300 font-mono truncate max-w-[120px]" title={step.pn}>{step.pn}</span>
                     {shortName && <span className="text-slate-400 truncate max-w-[80px]">({shortName})</span>}
                     <span className="ml-auto text-white font-bold">{fmtQty}</span>
@@ -457,7 +457,7 @@ const BomExplosionView: React.FC = () => {
               <span className="text-slate-400">
                 = {chain.map(s => Number.isInteger(s.unitQty) ? s.unitQty : s.unitQty.toFixed(4)).join(' × ')}
               </span>
-              <span className="text-amber-300 font-black">{displayQty}</span>
+              <span className="text-white font-bold">{displayQty}</span>
             </div>
           </div>
         )}
@@ -493,7 +493,7 @@ const BomExplosionView: React.FC = () => {
             {hasChildren ? (
               <button
                 onClick={() => toggleCollapse(nodeKey)}
-                className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors flex-shrink-0"
+                className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-slate-700 transition-colors flex-shrink-0"
               >
                 <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -506,7 +506,7 @@ const BomExplosionView: React.FC = () => {
             )}
             <button
               onClick={() => handleNodeClick(node.pn, node.name)}
-              className="font-mono text-xs text-indigo-600 hover:text-indigo-800 hover:underline truncate"
+              className="font-mono text-xs text-slate-800 hover:text-slate-900 hover:underline truncate"
               title={`${node.pn} 클릭하여 전개`}
             >
               {node.pn}
@@ -544,7 +544,7 @@ const BomExplosionView: React.FC = () => {
                         if (e.key === 'Escape') setEditingPriceKey('');
                       }}
                       onBlur={() => handlePriceSave(node.pn)}
-                      className="w-20 px-1 py-0.5 border border-indigo-300 rounded text-right text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="w-20 px-1 py-0.5 border border-slate-300 rounded text-right text-xs outline-none focus:ring-1 focus:ring-slate-400"
                       autoFocus
                       disabled={savingPrice}
                     />
@@ -555,7 +555,7 @@ const BomExplosionView: React.FC = () => {
                       setEditingPriceKey(nodeKey);
                       setEditPriceValue(price > 0 ? String(Math.round(price)) : '');
                     }}
-                    className={`cursor-pointer hover:bg-indigo-50 px-1.5 py-0.5 rounded transition-colors w-full text-right ${
+                    className={`cursor-pointer hover:bg-slate-50 px-1.5 py-0.5 rounded transition-colors w-full text-right ${
                       price > 0 ? 'text-slate-700' : 'text-slate-300'
                     }`}
                     title={source ? `출처: ${source} — 클릭하여 수정` : '클릭하여 단가 입력'}
@@ -588,7 +588,7 @@ const BomExplosionView: React.FC = () => {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800 mx-auto mb-3" />
           <p className="text-sm text-slate-500">BOM 마스터 데이터 로딩 중...</p>
         </div>
       </div>
@@ -610,7 +610,7 @@ const BomExplosionView: React.FC = () => {
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-slate-800">BOM 전개 (Explosion)</h2>
+            <h2 className="text-xl font-bold text-slate-800">BOM 전개 (Explosion)</h2>
             <p className="text-xs text-slate-500 mt-1">
               품번 검색 후 정전개(부모→자식 트리) 또는 역전개(자식→부모 경로 추적)를 확인합니다.
             </p>
@@ -638,7 +638,7 @@ const BomExplosionView: React.FC = () => {
                 onFocus={() => {
                   if (query.length >= 2) setShowDropdown(true);
                 }}
-                className="w-full px-4 py-2.5 pr-10 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-300 transition-all"
+                className="w-full px-4 py-2.5 pr-10 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-slate-500/20 focus:border-slate-300 transition-all"
               />
               <svg className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -662,14 +662,14 @@ const BomExplosionView: React.FC = () => {
                       <button
                         key={`${type}-${idx}`}
                         onClick={() => handleSelect(entry)}
-                        className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors flex items-center gap-2 text-xs border-b border-slate-50 last:border-b-0"
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors flex items-center gap-2 text-xs border-b border-slate-50 last:border-b-0"
                       >
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${typeColor(entry.type)}`}>
                           {typeLabel(entry.type)}
                         </span>
-                        <span className="font-mono text-indigo-600 font-bold">{entry.pn}</span>
+                        <span className="font-mono text-slate-800 font-bold">{entry.pn}</span>
                         {entry.customerPn && normalizePn(entry.customerPn) !== normalizePn(entry.pn) && (
-                          <span className="font-mono text-violet-500 text-[10px]">[{entry.customerPn}]</span>
+                          <span className="font-mono text-slate-500 text-[10px]">[{entry.customerPn}]</span>
                         )}
                         <span className="text-slate-600 truncate">{entry.name}</span>
                         {entry.customer && (
@@ -694,7 +694,7 @@ const BomExplosionView: React.FC = () => {
         {selectedPn && (
           <div className="mt-3 flex items-center gap-2 text-sm">
             <span className="text-slate-500">선택:</span>
-            <span className="font-mono font-bold text-indigo-600">{selectedPn}</span>
+            <span className="font-mono font-bold text-slate-800">{selectedPn}</span>
             {selectedName && <span className="text-slate-700">{selectedName}</span>}
             <button
               onClick={() => {
@@ -722,7 +722,7 @@ const BomExplosionView: React.FC = () => {
               onClick={() => setMode('forward')}
               className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
                 mode === 'forward'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-slate-700 text-white shadow-sm'
                   : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'
               }`}
             >
@@ -732,7 +732,7 @@ const BomExplosionView: React.FC = () => {
               onClick={() => setMode('reverse')}
               className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
                 mode === 'reverse'
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-slate-700 text-white shadow-sm'
                   : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'
               }`}
             >
@@ -769,12 +769,12 @@ const BomExplosionView: React.FC = () => {
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-black text-slate-800 flex items-center gap-2">
-                    <span className="w-1 h-5 bg-indigo-600 rounded-full" />
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-1 h-5 bg-slate-800 rounded-full" />
                     정전개 트리 (Forward Explosion)
                   </h3>
                   {bomRootPn && (
-                    <p className="text-[11px] text-amber-600 mt-1 ml-4">
+                    <p className="text-[11px] text-slate-500 mt-1 ml-4">
                       제품코드 → BOM 자동연결: <span className="font-mono font-bold">{bomRootPn}</span> (고객P/N 기준)
                     </p>
                   )}
@@ -827,7 +827,7 @@ const BomExplosionView: React.FC = () => {
           {mode === 'reverse' && (
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
                   <span className="w-1 h-5 bg-rose-500 rounded-full" />
                   역전개 경로 (Reverse Explosion)
                 </h3>
@@ -863,14 +863,14 @@ const BomExplosionView: React.FC = () => {
                           )}
                           <button
                             onClick={() => handleNodeClick(node.pn, node.name)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors flex-shrink-0"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors flex-shrink-0"
                           >
-                            <span className="font-mono text-xs text-indigo-600 font-bold">{node.pn}</span>
+                            <span className="font-mono text-xs text-slate-800 font-bold">{node.pn}</span>
                             {node.name && (
                               <span className="text-[10px] text-slate-500">{node.name}</span>
                             )}
                             {node.qty !== 1 && (
-                              <span className="text-[10px] text-amber-600 font-bold">x{node.qty}</span>
+                              <span className="text-[10px] text-slate-500 font-bold">x{node.qty}</span>
                             )}
                           </button>
                         </React.Fragment>

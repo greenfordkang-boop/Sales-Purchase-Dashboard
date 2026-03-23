@@ -424,7 +424,7 @@ const App: React.FC = () => {
         {/* ===== 로그인 통계 섹션 ===== */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+            <span className="w-3 h-3 bg-slate-700 rounded-full"></span>
             접속 통계
           </h3>
 
@@ -432,23 +432,23 @@ const App: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">전체 사용자</p>
-              <p className="text-2xl font-black text-slate-800">{loginStats.totalUsers}</p>
+              <p className="text-2xl font-bold text-slate-800">{loginStats.totalUsers}</p>
               <p className="text-xs text-slate-400 mt-0.5">명 등록</p>
             </div>
-            <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">승인 사용자</p>
-              <p className="text-2xl font-black text-emerald-700">{loginStats.approvedCount}</p>
-              <p className="text-xs text-emerald-500 mt-0.5">명 활성</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">승인 사용자</p>
+              <p className="text-2xl font-bold text-slate-800">{loginStats.approvedCount}</p>
+              <p className="text-xs text-slate-400 mt-0.5">명 활성</p>
             </div>
-            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">오늘 로그인</p>
-              <p className="text-2xl font-black text-blue-700">{loginStats.todayLogins}</p>
-              <p className="text-xs text-blue-500 mt-0.5">회 접속</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">오늘 로그인</p>
+              <p className="text-2xl font-bold text-slate-800">{loginStats.todayLogins}</p>
+              <p className="text-xs text-slate-400 mt-0.5">회 접속</p>
             </div>
-            <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
-              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">7일 로그인</p>
-              <p className="text-2xl font-black text-amber-700">{loginStats.weekLogins}</p>
-              <p className="text-xs text-amber-500 mt-0.5">회 접속</p>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">7일 로그인</p>
+              <p className="text-2xl font-bold text-slate-800">{loginStats.weekLogins}</p>
+              <p className="text-xs text-slate-400 mt-0.5">회 접속</p>
             </div>
           </div>
 
@@ -473,7 +473,7 @@ const App: React.FC = () => {
                     formatter={(v: number | string) => [`${v as number}회`, '로그인']}
                     labelFormatter={(label: string) => `날짜: ${label}`}
                   />
-                  <Bar dataKey="logins" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={24} />
+                  <Bar dataKey="logins" fill="#334155" radius={[4, 4, 0, 0]} maxBarSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -503,11 +503,11 @@ const App: React.FC = () => {
                         <td className="py-3 px-4 font-medium text-slate-700">
                           {row.email}
                           {row.email === ADMIN_EMAIL && (
-                            <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">관리자</span>
+                            <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">관리자</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">
+                          <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-full">
                             {row.count}회
                           </span>
                         </td>
@@ -534,7 +534,7 @@ const App: React.FC = () => {
         {/* 승인 대기 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="w-3 h-3 bg-amber-500 rounded-full animate-pulse"></span>
+            <span className="w-3 h-3 bg-slate-700 rounded-full animate-pulse"></span>
             승인 대기 중 ({pendingUsers.length}명)
           </h3>
           {usersLoading ? (
@@ -557,7 +557,7 @@ const App: React.FC = () => {
                 </thead>
                 <tbody>
                   {pendingUsers.map(user => (
-                    <tr key={user.id} className="border-b border-slate-100 bg-amber-50">
+                    <tr key={user.id} className="border-b border-slate-100 bg-slate-50">
                       <td className="py-3 px-4 font-medium">{user.email}</td>
                       <td className="py-3 px-4">{user.display_name || '-'}</td>
                       <td className="py-3 px-4">{new Date(user.created_at).toLocaleDateString('ko-KR')}</td>
@@ -586,7 +586,7 @@ const App: React.FC = () => {
         {/* 승인된 사용자 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
           <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="w-3 h-3 bg-emerald-500 rounded-full"></span>
+            <span className="w-3 h-3 bg-slate-700 rounded-full"></span>
             승인된 사용자 ({approvedUsers.length}명)
           </h3>
           <div className="overflow-x-auto">
@@ -606,7 +606,7 @@ const App: React.FC = () => {
                     <td className="py-3 px-4 font-medium">
                       {user.email}
                       {user.email === ADMIN_EMAIL && (
-                        <span className="ml-2 px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full">관리자</span>
+                        <span className="ml-2 px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">관리자</span>
                       )}
                     </td>
                     <td className="py-3 px-4">{user.display_name || '-'}</td>
@@ -647,7 +647,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <h1 className="text-[13px] font-semibold text-white tracking-tight leading-none">SHINSUNG AUTOTECH</h1>
-              <p className={`text-[10px] ${isBomReviewMode ? 'text-violet-400' : 'text-gray-500'} font-medium tracking-[0.15em]`}>
+              <p className={`text-[10px] ${isBomReviewMode ? 'text-blue-400' : 'text-gray-500'} font-medium tracking-[0.15em]`}>
                 {isBomReviewMode ? 'BOM REVIEW' : 'SALES & PURCHASE'}
               </p>
             </div>
@@ -717,7 +717,7 @@ const App: React.FC = () => {
       {/* Main Content */}
       <main className="flex-1 px-8 py-8 max-w-[1440px] mx-auto w-full">
         <div className="space-y-6">
-          <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" /></div>}>
+          <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" /></div>}>
             {activeTab === DashboardTab.OVERVIEW && <Overview />}
             {activeTab === DashboardTab.SALES && <SalesView />}
             {activeTab === DashboardTab.PURCHASE && <PurchaseView />}
@@ -725,7 +725,7 @@ const App: React.FC = () => {
             {activeTab === DashboardTab.SUPPLIER && <SupplierView />}
           </Suspense>
           {activeTab === DashboardTab.BOM_REVIEW && (
-            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto" /></div>}>
+            <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800 mx-auto" /></div>}>
               <BomReviewView />
             </Suspense>
           )}

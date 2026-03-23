@@ -350,7 +350,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-black text-slate-800">도장 분석 대시보드</h2>
+          <h2 className="text-lg font-bold text-slate-800">도장 분석 대시보드</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl font-bold px-2">✕</button>
         </div>
 
@@ -366,7 +366,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
               onClick={() => setActiveTab(tab.key)}
               className={`px-4 py-2.5 text-sm font-bold border-b-2 transition-colors ${
                 activeTab === tab.key
-                  ? 'border-purple-600 text-purple-700'
+                  ? 'border-slate-900 text-slate-800'
                   : 'border-transparent text-slate-400 hover:text-slate-600'
               }`}
             >
@@ -389,7 +389,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                 <SummaryCard label="미매칭" value={stats.noRaw + stats.noMix} unit="건"
                   sub={`코드없음 ${stats.noRaw} + 미등록 ${stats.noMix}`} color="rose" />
                 <SummaryCard label="도장량 입력" value={stats.withQty} unit="건"
-                  sub={`${stats.totalCoats - stats.withQty}건 미입력`} color="purple" />
+                  sub={`${stats.totalCoats - stats.withQty}건 미입력`} color="slate" />
               </div>
 
               {/* Match Rate Bar */}
@@ -402,7 +402,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                     title={`매칭 ${stats.matched}건`}
                   />
                   <div
-                    className="bg-amber-400 transition-all"
+                    className="bg-slate-400 transition-all"
                     style={{ width: `${stats.noMix / stats.totalCoats * 100}%` }}
                     title={`코드있으나 미매칭 ${stats.noMix}건`}
                   />
@@ -414,21 +414,21 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                 </div>
                 <div className="flex gap-4 mt-2 text-xs">
                   <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> 매칭 {(stats.matched / stats.totalCoats * 100).toFixed(1)}%</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-400 inline-block" /> 코드미등록 {(stats.noMix / stats.totalCoats * 100).toFixed(1)}%</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-slate-400 inline-block" /> 코드미등록 {(stats.noMix / stats.totalCoats * 100).toFixed(1)}%</span>
                   <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-rose-400 inline-block" /> 원재료없음 {(stats.noRaw / stats.totalCoats * 100).toFixed(1)}%</span>
                 </div>
               </div>
 
               {/* Cost Distribution */}
               {stats.withCost > 0 && (
-                <div className="bg-purple-50 rounded-xl p-4">
-                  <h3 className="text-sm font-bold text-purple-700 mb-3">도료비 분포 (산출된 {stats.withCost}건)</h3>
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3">도료비 분포 (산출된 {stats.withCost}건)</h3>
                   <CostDistribution items={paintAnalysis.filter(p => p.costPerEa > 0)} />
                 </div>
               )}
 
               {/* Action Guide */}
-              <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-800 space-y-3">
+              <div className="bg-slate-50 rounded-xl p-4 text-sm text-slate-700 space-y-3 border border-slate-100">
                 <p className="font-bold">개선 가이드</p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
                   {stats.noRaw > 0 && <li><strong>원재료코드 없음 ({stats.noRaw}건)</strong>: 기준정보 엑셀에서 원재료코드를 등록 후 재업로드 필요</li>}
@@ -436,19 +436,19 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                   {stats.withQty < stats.totalCoats && <li><strong>도장량 미입력 ({stats.totalCoats - stats.withQty}건)</strong>: &ldquo;개취수량 관리&rdquo; 탭에서 도별로 입력 가능</li>}
                 </ul>
                 {stats.noMix > 0 && (
-                  <div className="mt-2 bg-blue-100/60 rounded-lg p-3 text-xs space-y-2">
-                    <p className="font-bold text-blue-900">배합비 미등록 해결 방법</p>
-                    <div className="space-y-1.5 text-blue-800">
+                  <div className="mt-2 bg-slate-100/60 rounded-lg p-3 text-xs space-y-2">
+                    <p className="font-bold text-slate-800">배합비 미등록 해결 방법</p>
+                    <div className="space-y-1.5 text-slate-700">
                       <div className="flex gap-2">
-                        <span className="shrink-0 font-bold text-blue-600">A.</span>
-                        <div><strong>배합표준서 보강</strong> — &ldquo;미매칭&rdquo; 탭에서 미등록 도료코드 {stats.unmatchedRawCodes.size}개를 확인하고, 배합표준서 Excel에 해당 코드의 주제/경화제/신너 비율을 추가한 후 재업로드합니다. <span className="text-blue-500">(근본 해결)</span></div>
+                        <span className="shrink-0 font-bold text-slate-500">A.</span>
+                        <div><strong>배합표준서 보강</strong> — &ldquo;미매칭&rdquo; 탭에서 미등록 도료코드 {stats.unmatchedRawCodes.size}개를 확인하고, 배합표준서 Excel에 해당 코드의 주제/경화제/신너 비율을 추가한 후 재업로드합니다. <span className="text-slate-500">(근본 해결)</span></div>
                       </div>
                       <div className="flex gap-2">
-                        <span className="shrink-0 font-bold text-blue-600">B.</span>
+                        <span className="shrink-0 font-bold text-slate-500">B.</span>
                         <div><strong>기준정보 원재료코드 수정</strong> — 원재료코드가 잘못 등록된 경우, 기준정보 엑셀에서 올바른 도료코드(배합표준서에 있는 코드)로 수정 후 재업로드합니다.</div>
                       </div>
                       <div className="flex gap-2">
-                        <span className="shrink-0 font-bold text-blue-600">C.</span>
+                        <span className="shrink-0 font-bold text-slate-500">C.</span>
                         <div><strong>코드 체계 확인</strong> — P코드→S/X코드(재질코드) 자동 변환이 적용됩니다. S코드 우선, X코드 보조로 매칭합니다.</div>
                       </div>
                     </div>
@@ -461,15 +461,15 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
           {activeTab === 'unmatched' && (
             <div className="space-y-4">
               {/* Unmatched raw codes */}
-              <div className="bg-amber-50 rounded-xl p-4">
-                <h3 className="text-sm font-bold text-amber-700 mb-2">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <h3 className="text-sm font-bold text-slate-700 mb-2">
                   배합표준서 미등록 도료코드 ({stats.unmatchedRawCodes.size}개)
                 </h3>
-                <p className="text-xs text-amber-600 mb-3">이 코드들이 배합표준서에 등록되면 매칭률이 향상됩니다.</p>
+                <p className="text-xs text-slate-500 mb-3">이 코드들이 배합표준서에 등록되면 매칭률이 향상됩니다.</p>
                 <div className="max-h-64 overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-amber-50">
-                      <tr className="text-left border-b border-amber-200">
+                    <thead className="sticky top-0 bg-slate-50">
+                      <tr className="text-left border-b border-slate-200">
                         <th className="py-1.5 px-2 font-bold">도료코드</th>
                         <th className="py-1.5 px-2 font-bold">도료명</th>
                         <th className="py-1.5 px-2 font-bold text-right">사용 품목수</th>
@@ -477,7 +477,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                     </thead>
                     <tbody>
                       {unmatchedRawList.map(([code, { count, name }]) => (
-                        <tr key={code} className="border-b border-amber-100 hover:bg-amber-100/50">
+                        <tr key={code} className="border-b border-slate-100 hover:bg-slate-100/50">
                           <td className="py-1.5 px-2 font-mono">{code}</td>
                           <td className="py-1.5 px-2 text-slate-600">{name || '—'}</td>
                           <td className="py-1.5 px-2 text-right">{count}건</td>
@@ -489,22 +489,22 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
               </div>
 
               {/* No raw code items */}
-              <div className="bg-rose-50 rounded-xl p-4">
-                <h3 className="text-sm font-bold text-rose-700 mb-2">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <h3 className="text-sm font-bold text-rose-500 mb-2">
                   원재료코드 없는 도장품 ({stats.noRaw}건)
                 </h3>
-                <p className="text-xs text-rose-600 mb-3">기준정보에 원재료코드를 등록해주세요.</p>
+                <p className="text-xs text-slate-500 mb-3">기준정보에 원재료코드를 등록해주세요.</p>
                 <div className="max-h-64 overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-rose-50">
-                      <tr className="text-left border-b border-rose-200">
+                    <thead className="sticky top-0 bg-slate-50">
+                      <tr className="text-left border-b border-slate-200">
                         <th className="py-1.5 px-2 font-bold">품목코드</th>
                         <th className="py-1.5 px-2 font-bold">품목명</th>
                       </tr>
                     </thead>
                     <tbody>
                       {paintAnalysis.filter(p => p.matchStatus === 'unmatched_no_raw').map(p => (
-                        <tr key={p.itemCode} className="border-b border-rose-100 hover:bg-rose-100/50">
+                        <tr key={p.itemCode} className="border-b border-slate-100 hover:bg-slate-100/50">
                           <td className="py-1.5 px-2 font-mono">{p.itemCode}</td>
                           <td className="py-1.5 px-2">{p.itemName}</td>
                         </tr>
@@ -537,7 +537,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                           <td className="py-1.5 px-2 text-center">
                             <span className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 text-[10px] font-bold">{p.coatNumber}도</span>
                           </td>
-                          <td className="py-1.5 px-2 font-mono text-amber-600">{p.rawCode}</td>
+                          <td className="py-1.5 px-2 font-mono text-slate-600">{p.rawCode}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -568,7 +568,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                     <select
                       value={filterVariety}
                       onChange={e => setFilterVariety(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-purple-500 focus:outline-none"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-blue-500 focus:outline-none"
                     >
                       <option value="">전체 ({paintAnalysis.length})</option>
                       {filterOptions.varieties.map(([v, cnt]) => (
@@ -581,7 +581,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                     <select
                       value={filterSizeType}
                       onChange={e => setFilterSizeType(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-purple-500 focus:outline-none"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-blue-500 focus:outline-none"
                     >
                       <option value="">전체</option>
                       {filterOptions.sizeTypes.map(([v, cnt]) => (
@@ -594,7 +594,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                     <select
                       value={filterMaterialCode}
                       onChange={e => setFilterMaterialCode(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-purple-500 focus:outline-none"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:border-blue-500 focus:outline-none"
                     >
                       <option value="">전체</option>
                       {filterOptions.materialCodes.map(([v, cnt]) => (
@@ -609,17 +609,17 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                       placeholder="품목명 검색..."
                       value={filterItemName}
                       onChange={e => setFilterItemName(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:border-purple-500 focus:outline-none"
+                      className="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs focus:border-blue-500 focus:outline-none"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Bulk actions */}
-              <div className="bg-purple-50 rounded-xl p-4">
+              <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-purple-700">일괄 설정:</span>
+                    <span className="text-sm font-bold text-slate-700">일괄 설정:</span>
                     <input
                       type="number"
                       step="0.01"
@@ -627,12 +627,12 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                       placeholder="개취수량 (EA/kg)"
                       value={bulkIntakeValue}
                       onChange={e => setBulkIntakeValue(e.target.value)}
-                      className="w-36 px-3 py-1.5 border-2 border-purple-300 rounded-lg text-sm font-mono focus:border-purple-500 focus:outline-none"
+                      className="w-36 px-3 py-1.5 border-2 border-slate-300 rounded-lg text-sm font-mono focus:border-blue-500 focus:outline-none"
                     />
                     <button
                       onClick={handleBulkSave}
                       disabled={saving || !bulkIntakeValue || selectedItems.size === 0}
-                      className="px-4 py-1.5 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="px-4 py-1.5 bg-slate-700 text-white text-sm font-bold rounded-lg hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       {saving ? '저장중...' : `선택 ${selectedItems.size}건 적용`}
                     </button>
@@ -643,7 +643,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
                       placeholder="품목코드 검색"
                       value={searchText}
                       onChange={e => setSearchText(e.target.value)}
-                      className="w-36 px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:border-purple-500 focus:outline-none"
+                      className="w-36 px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:outline-none"
                     />
                     <select
                       value={intakeFilter}
@@ -720,7 +720,7 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
               <div className="text-xs text-slate-400">
                 필터 결과: {intakeList.length}건 / 전체: {stats.totalCoats}건 ({stats.totalItems}개 부품)
                 {(filterVariety || filterSizeType || filterMaterialCode || filterItemName) && (
-                  <span className="ml-2 text-purple-500 font-bold">
+                  <span className="ml-2 text-slate-500 font-bold">
                     [필터: {[filterVariety && `차종=${filterVariety}`, filterSizeType && `유형=${filterSizeType}`, filterMaterialCode && `재질=${filterMaterialCode}`, filterItemName && `품명="${filterItemName}"`].filter(Boolean).join(', ')}]
                   </span>
                 )}
@@ -739,19 +739,18 @@ const PaintAnalysisPanel: React.FC<PaintAnalysisPanelProps> = ({
 
 const SummaryCard: React.FC<{
   label: string; value: number; unit: string; sub?: string;
-  color: 'slate' | 'emerald' | 'rose' | 'purple';
+  color: 'slate' | 'emerald' | 'rose';
 }> = ({ label, value, unit, sub, color }) => {
   const colorMap = {
-    slate: 'bg-slate-50 text-slate-800',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    rose: 'bg-rose-50 text-rose-700',
-    purple: 'bg-purple-50 text-purple-700',
+    slate: 'bg-slate-50 border border-slate-100 text-slate-800',
+    emerald: 'bg-slate-50 border border-slate-100 text-emerald-600',
+    rose: 'bg-slate-50 border border-slate-100 text-rose-500',
   };
   return (
     <div className={`rounded-xl p-4 ${colorMap[color]}`}>
-      <div className="text-xs font-bold opacity-70 mb-1">{label}</div>
-      <div className="text-2xl font-black">{value.toLocaleString()}<span className="text-sm font-bold ml-1">{unit}</span></div>
-      {sub && <div className="text-[10px] mt-1 opacity-60">{sub}</div>}
+      <div className="text-xs font-bold text-slate-500 mb-1">{label}</div>
+      <div className="text-2xl font-bold">{value.toLocaleString()}<span className="text-sm font-bold ml-1">{unit}</span></div>
+      {sub && <div className="text-[10px] mt-1 text-slate-400">{sub}</div>}
     </div>
   );
 };
@@ -781,24 +780,24 @@ const CostDistribution: React.FC<{ items: PaintItemAnalysis[] }> = ({ items }) =
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-4 gap-3 text-xs">
-        <div><span className="text-purple-500">최소</span> <span className="font-mono font-bold">{fmtWon(min)}</span></div>
-        <div><span className="text-purple-500">최대</span> <span className="font-mono font-bold">{fmtWon(max)}</span></div>
-        <div><span className="text-purple-500">평균</span> <span className="font-mono font-bold">{fmtWon(avg)}</span></div>
-        <div><span className="text-purple-500">중앙값</span> <span className="font-mono font-bold">{fmtWon(median)}</span></div>
+        <div><span className="text-slate-500">최소</span> <span className="font-mono font-bold">{fmtWon(min)}</span></div>
+        <div><span className="text-slate-500">최대</span> <span className="font-mono font-bold">{fmtWon(max)}</span></div>
+        <div><span className="text-slate-500">평균</span> <span className="font-mono font-bold">{fmtWon(avg)}</span></div>
+        <div><span className="text-slate-500">중앙값</span> <span className="font-mono font-bold">{fmtWon(median)}</span></div>
       </div>
       <div className="flex items-end gap-1 h-16">
         {bins.map((bin, i) => (
           <div key={i} className="flex-1 flex flex-col items-center gap-1">
             <div
-              className="w-full bg-purple-400 rounded-t transition-all"
+              className="w-full bg-slate-400 rounded-t transition-all"
               style={{ height: `${maxBin > 0 ? (bin.count / maxBin) * 48 : 0}px` }}
               title={`${fmtWon(bin.from)} ~ ${fmtWon(bin.to)}: ${bin.count}건`}
             />
-            <span className="text-[9px] text-purple-500 font-mono">{bin.count}</span>
+            <span className="text-[9px] text-slate-500 font-mono">{bin.count}</span>
           </div>
         ))}
       </div>
-      <div className="flex justify-between text-[9px] text-purple-400 font-mono">
+      <div className="flex justify-between text-[9px] text-slate-400 font-mono">
         <span>{fmtWon(min)}</span>
         <span>{fmtWon(max)}</span>
       </div>
@@ -806,8 +805,8 @@ const CostDistribution: React.FC<{ items: PaintItemAnalysis[] }> = ({ items }) =
   );
 };
 
-const COAT_COLORS = ['', 'bg-blue-50', 'bg-indigo-50', 'bg-violet-50', 'bg-fuchsia-50'];
-const COAT_BADGE_COLORS = ['', 'bg-blue-100 text-blue-700', 'bg-indigo-100 text-indigo-700', 'bg-violet-100 text-violet-700', 'bg-fuchsia-100 text-fuchsia-700'];
+const COAT_COLORS = ['', 'bg-slate-50', 'bg-slate-50', 'bg-slate-50', 'bg-slate-50'];
+const COAT_BADGE_COLORS = ['', 'bg-slate-200 text-slate-700', 'bg-slate-200 text-slate-700', 'bg-slate-200 text-slate-700', 'bg-slate-200 text-slate-700'];
 
 const IntakeRow: React.FC<{
   item: PaintItemAnalysis;
@@ -832,12 +831,12 @@ const IntakeRow: React.FC<{
     ? <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">OK</span>
     : item.matchStatus === 'unmatched_no_raw'
     ? <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 text-[10px] font-bold">코드없음</span>
-    : <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-600 text-[10px] font-bold">미등록</span>;
+    : <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-bold">미등록</span>;
 
   const costPerEa = item.paintQty > 0 && item.mixCostPerKg > 0 ? item.mixCostPerKg / item.paintQty : 0;
 
   return (
-    <tr className={`border-b hover:bg-slate-50 ${selected ? 'bg-purple-50' : ''} ${isNewGroup ? 'border-t-2 border-t-slate-300' : 'border-slate-100'}`}>
+    <tr className={`border-b hover:bg-slate-50 ${selected ? 'bg-slate-100' : ''} ${isNewGroup ? 'border-t-2 border-t-slate-300' : 'border-slate-100'}`}>
       <td className="py-1.5 px-2">
         <input type="checkbox" checked={selected} onChange={onToggle} className="w-3.5 h-3.5" />
       </td>
@@ -875,7 +874,7 @@ const IntakeRow: React.FC<{
         {item.mixCostPerKg > 0 ? fmtWon(item.mixCostPerKg) + '/kg' : '—'}
         {showTooltip && item.matchedMix && (
           <div className="absolute z-50 right-0 top-full mt-1 w-72 bg-slate-800 text-white rounded-xl shadow-2xl p-3 text-[11px] leading-relaxed pointer-events-none">
-            <div className="font-bold text-purple-300 mb-2">{item.coatNumber}도 배합단가 산출근거</div>
+            <div className="font-bold text-slate-300 mb-2">{item.coatNumber}도 배합단가 산출근거</div>
             <div className="text-slate-300 mb-2">재질코드: <span className="font-mono text-white">{item.matchedPaintCode}</span>{item.rawCode && item.rawCode !== item.matchedPaintCode && <span className="text-slate-500 ml-1">(P: {item.rawCode})</span>}</div>
             <table className="w-full text-[10px]">
               <thead>
@@ -908,7 +907,7 @@ const IntakeRow: React.FC<{
               </tbody>
             </table>
             <div className="mt-2 pt-2 border-t border-slate-600 flex justify-between font-bold">
-              <span className="text-purple-300">배합단가</span>
+              <span className="text-slate-300">배합단가</span>
               <span className="text-yellow-300 font-mono">{fmtWon(item.mixCostPerKg)}/kg</span>
             </div>
             {item.paintQty > 0 && (
@@ -930,10 +929,10 @@ const IntakeRow: React.FC<{
               value={value}
               onChange={e => setValue(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSave()}
-              className="w-20 px-1.5 py-0.5 border border-purple-400 rounded text-right text-xs font-mono"
+              className="w-20 px-1.5 py-0.5 border border-slate-400 rounded text-right text-xs font-mono"
               autoFocus
             />
-            <button onClick={handleSave} disabled={saving} className="text-[10px] text-purple-600 font-bold hover:underline">OK</button>
+            <button onClick={handleSave} disabled={saving} className="text-[10px] text-slate-700 font-bold hover:underline">OK</button>
             <button onClick={() => setEditing(false)} className="text-[10px] text-slate-400 hover:underline">X</button>
           </div>
         ) : (
@@ -945,7 +944,7 @@ const IntakeRow: React.FC<{
           </span>
         )}
       </td>
-      <td className="py-1.5 px-2 text-right font-mono font-bold text-purple-700">
+      <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-800">
         {costPerEa > 0 ? fmtWon(costPerEa) : '—'}
       </td>
     </tr>

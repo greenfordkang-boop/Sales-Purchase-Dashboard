@@ -603,7 +603,7 @@ const SalesForecast: React.FC = () => {
       {/* Header + Upload */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-slate-800">매출계획 (Sales Forecast)</h2>
+          <h2 className="text-xl font-bold text-slate-800">매출계획 (Sales Forecast)</h2>
           <p className="text-xs text-slate-500 mt-1">
             {summary ? `${summary.year}년 ${summary.revision} | ${summary.reportDate}` : '엑셀 파일을 업로드하세요'}
           </p>
@@ -719,24 +719,24 @@ const SalesForecast: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">연간 예상매출</p>
-              <p className="text-2xl font-black text-blue-600">{formatBillion(totals.totalRevenue)}원</p>
+              <p className="text-2xl font-bold text-slate-900">{formatBillion(totals.totalRevenue)}원</p>
               <p className="text-xs text-slate-400 mt-1">{formatWon(totals.totalRevenue)}</p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">연간 총 수량</p>
-              <p className="text-2xl font-black text-emerald-600">{Math.round(totals.totalQty).toLocaleString()} EA</p>
+              <p className="text-2xl font-bold text-emerald-600">{Math.round(totals.totalQty).toLocaleString()} EA</p>
               <p className="text-xs text-slate-400 mt-1">월평균 {Math.round(totals.totalQty / 12).toLocaleString()} EA</p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">품목 수</p>
-              <p className="text-2xl font-black text-slate-800">{totals.itemCount}개</p>
+              <p className="text-2xl font-bold text-slate-800">{totals.itemCount}개</p>
               <p className="text-xs text-slate-400 mt-1">
                 {selectedCustomer === 'All' ? `전체 ${customers.length - 1}개 고객사` : selectedCustomer}
               </p>
             </div>
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">월평균 매출</p>
-              <p className="text-2xl font-black text-amber-600">{formatBillion(totals.totalRevenue / 12)}원</p>
+              <p className="text-2xl font-bold text-slate-800">{formatBillion(totals.totalRevenue / 12)}원</p>
               <p className="text-xs text-slate-400 mt-1">{summary?.year}년 예상 기준</p>
             </div>
           </div>
@@ -744,7 +744,7 @@ const SalesForecast: React.FC = () => {
           {/* Monthly Revenue Chart */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
                 월별 예상매출 추이 {selectedCustomer !== 'All' && `(${selectedCustomer})`}
               </h3>
@@ -812,16 +812,16 @@ const SalesForecast: React.FC = () => {
 
           {/* Revision Diff - 전기 대비 증감내역 */}
           {changeItems.length > 0 && (
-            <div className="bg-white p-6 rounded-3xl border border-orange-200 shadow-sm">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={() => setDiffOpen(!diffOpen)}
-                  className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-orange-600 transition-colors"
+                  className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-slate-900 transition-colors"
                 >
                   <svg className={`w-5 h-5 transition-transform ${diffOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
-                  <span className="w-1 h-5 bg-orange-500 rounded-full"></span>
+                  <span className="w-1 h-5 bg-slate-400 rounded-full"></span>
                   전기 대비 증감내역 ({changeItems.length}건)
                   <span className="text-xs font-normal text-slate-500 ml-2">
                     {prevSummary ? `${prevSummary.revision}` : '이전'} → {summary ? `${summary.revision}` : '현재'}
@@ -852,7 +852,7 @@ const SalesForecast: React.FC = () => {
                         삭제 {changeItems.filter(c => c.type === 'removed').length}건
                       </span>
                     )}
-                    <span className="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-xs font-bold">
+                    <span className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs font-bold">
                       매출 증감 합계: {(() => {
                         const total = changeItems.reduce((s, c) => s + c.revenueDiff, 0);
                         return `${total >= 0 ? '+' : ''}${formatBillion(total)}원`;
@@ -933,12 +933,12 @@ const SalesForecast: React.FC = () => {
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
             <button
               onClick={() => setChangeTableOpen(!changeTableOpen)}
-              className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-amber-600 transition-colors w-full"
+              className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-slate-900 transition-colors w-full"
             >
               <svg className={`w-5 h-5 transition-transform ${changeTableOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
-              <span className="w-1 h-5 bg-amber-500 rounded-full"></span>
+              <span className="w-1 h-5 bg-slate-400 rounded-full"></span>
               월별 매출액 증감 현황
             </button>
             {changeTableOpen && (
@@ -1035,7 +1035,7 @@ const SalesForecast: React.FC = () => {
                   <tbody className="divide-y divide-slate-100">
                     {(() => {
                       let cumPct = 0;
-                      const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-orange-500'];
+                      const colors = ['bg-slate-700', 'bg-blue-600', 'bg-slate-700', 'bg-blue-400', 'bg-slate-500', 'bg-blue-300', 'bg-slate-400', 'bg-blue-200'];
                       return customerRevenue.map((cr, idx) => {
                         const pct = totals.totalRevenue > 0 ? (cr.revenue / totals.totalRevenue) * 100 : 0;
                         cumPct += pct;
@@ -1123,7 +1123,7 @@ const SalesForecast: React.FC = () => {
                             item.stage === '양산' ? 'bg-emerald-100 text-emerald-700' :
                             item.stage === '신규' ? 'bg-blue-100 text-blue-700' :
                             item.stage === '단종' ? 'bg-slate-100 text-slate-500' :
-                            'bg-amber-100 text-amber-700'
+                            'bg-slate-50 text-slate-600 border border-slate-200'
                           }`}>
                             {item.stage}
                           </span>

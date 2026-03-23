@@ -37,7 +37,7 @@ const UserGuideModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 onClick={() => setActiveSection(s.id)}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                   activeSection === s.id
-                    ? 'bg-blue-600 text-white shadow-sm'
+                    ? 'bg-slate-700 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -162,8 +162,8 @@ function StandardSection() {
       <SectionTitle>표준재료비 산출</SectionTitle>
 
       <SubTitle>산출 기준</SubTitle>
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-        <p className="font-semibold text-blue-800 mb-2">매출계획 기준 산출</p>
+      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+        <p className="font-semibold text-slate-800 mb-2">매출계획 기준 산출</p>
         <p>
           <strong>영업현황 &gt; 매출계획</strong>에 업로드된 품목별 월 계획수량을 기준으로
           표준재료비를 산출합니다. 매출계획이 없으면 매출실적(item_revenue)으로 보완합니다.
@@ -174,14 +174,14 @@ function StandardSection() {
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-slate-50 rounded-xl p-4 border">
           <p className="font-semibold text-slate-800 mb-2">
-            <Pill color="bg-blue-100 text-blue-700">자동 산출</Pill>
+            <Pill color="bg-slate-100 text-slate-600">자동 산출</Pill>
           </p>
           <p className="text-xs">BOM 전개 + 구매입고 실적 avgPrice 역산</p>
           <p className="text-xs mt-1 text-slate-400">구매입고 데이터 필요</p>
         </div>
-        <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-200">
+        <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
           <p className="font-semibold text-slate-800 mb-2">
-            <Pill color="bg-emerald-100 text-emerald-700">마스터 기준</Pill> (권장)
+            <Pill color="bg-slate-100 text-slate-600">마스터 기준</Pill> (권장)
           </p>
           <p className="text-xs">item_standard_cost 테이블 기반 정방향 산출</p>
           <p className="text-xs mt-1 text-emerald-600 font-semibold">Excel 12개월 검증 완료 (0.0% 오차)</p>
@@ -217,10 +217,10 @@ function StandardSection() {
       <SubTitle>표준재료비 구성 비율 (연간 기준)</SubTitle>
       <div className="flex gap-3">
         {[
-          { label: 'RESIN', pct: '18.6%', amt: '13.7억', color: 'bg-blue-100 text-blue-700' },
-          { label: 'PAINT', pct: '8.1%', amt: '5.9억', color: 'bg-green-100 text-green-700' },
-          { label: '구매', pct: '28.7%', amt: '21.0억', color: 'bg-purple-100 text-purple-700' },
-          { label: '외주', pct: '44.6%', amt: '32.7억', color: 'bg-orange-100 text-orange-700' },
+          { label: 'RESIN', pct: '18.6%', amt: '13.7억', color: 'bg-slate-50 text-slate-800 border border-slate-100' },
+          { label: 'PAINT', pct: '8.1%', amt: '5.9억', color: 'bg-slate-50 text-slate-800 border border-slate-100' },
+          { label: '구매', pct: '28.7%', amt: '21.0억', color: 'bg-slate-50 text-slate-800 border border-slate-100' },
+          { label: '외주', pct: '44.6%', amt: '32.7억', color: 'bg-slate-50 text-slate-800 border border-slate-100' },
         ].map(item => (
           <div key={item.label} className={`flex-1 rounded-lg p-3 ${item.color}`}>
             <p className="font-bold text-lg">{item.pct}</p>
@@ -263,10 +263,10 @@ function DataSection() {
       <SectionTitle>데이터 관리</SectionTitle>
 
       <SubTitle>매월 필수 작업</SubTitle>
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-        <p className="font-bold text-amber-800 mb-2">매출계획 Excel 업로드</p>
+      <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+        <p className="font-bold text-slate-800 mb-2">매출계획 Excel 업로드</p>
         <p><strong>영업현황</strong> 탭 &gt; 매출계획 업로드</p>
-        <p className="text-xs text-amber-600 mt-1">
+        <p className="text-xs text-slate-500 mt-1">
           이 데이터가 표준재료비 산출의 기준 수량이 됩니다.
         </p>
       </div>

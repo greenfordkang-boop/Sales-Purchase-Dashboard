@@ -245,20 +245,20 @@ const SupplierView: React.FC = () => {
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
-              <span className="w-1 h-6 bg-emerald-600 rounded-full"></span>
+            <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+              <span className="w-1 h-6 bg-slate-700 rounded-full"></span>
               협력사 관리
             </h2>
             <p className="text-sm text-slate-500 mt-1">협력사 정보 및 매입액 현황 관리</p>
           </div>
           <div className="flex items-center gap-2">
-            <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
+            <label className="bg-slate-800 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-2">
               <span>📂</span> 협력사 CSV 업로드
               <input type="file" accept=".csv" onChange={handleFileUpload} className="hidden" />
             </label>
             <button
               onClick={handleDownload}
-              className="text-slate-500 hover:text-green-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
+              className="text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -270,10 +270,10 @@ const SupplierView: React.FC = () => {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <MetricCard label="등록된 협력사 수" value={`${totalStats.count}개사`} color="blue" />
-          <MetricCard label="2025년 총 매입액" value={`₩${(totalStats.total2025 / 100000000).toFixed(1)}억`} color="emerald" />
+          <MetricCard label="등록된 협력사 수" value={`${totalStats.count}개사`} color="slate" />
+          <MetricCard label="2025년 총 매입액" value={`₩${(totalStats.total2025 / 100000000).toFixed(1)}억`} color="slate" />
           <MetricCard label="2024년 총 매입액" value={`₩${(totalStats.total2024 / 100000000).toFixed(1)}억`} color="slate" />
-          <MetricCard label="2023년 총 매입액" value={`₩${(totalStats.total2023 / 100000000).toFixed(1)}억`} color="violet" />
+          <MetricCard label="2023년 총 매입액" value={`₩${(totalStats.total2023 / 100000000).toFixed(1)}억`} color="slate" />
         </div>
 
         {/* Supplier List */}
@@ -281,7 +281,7 @@ const SupplierView: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => setSupplierListOpen(!supplierListOpen)}
-              className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-emerald-600 transition-colors"
+              className="flex items-center gap-2 text-sm font-bold text-slate-700 hover:text-blue-600 transition-colors"
             >
               <svg className={`w-5 h-5 transition-transform ${supplierListOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -328,7 +328,7 @@ const SupplierView: React.FC = () => {
                       <td className="px-4 py-3 font-mono text-slate-600">{item.businessNumber}</td>
                       <td className="px-4 py-3 text-slate-600">{item.ceo}</td>
                       <td className="px-4 py-3 text-slate-600">{item.address}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">₩{item.purchaseAmount2025.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">₩{item.purchaseAmount2025.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono text-slate-700">₩{item.purchaseAmount2024.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono text-slate-700">₩{item.purchaseAmount2023.toLocaleString()}</td>
                     </tr>
@@ -349,7 +349,7 @@ const SupplierView: React.FC = () => {
                   <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                     <tr>
                       <td colSpan={4} className="px-4 py-3 text-right">합계</td>
-                      <td className="px-4 py-3 text-right font-mono text-emerald-600">₩{totalStats.total2025.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">₩{totalStats.total2025.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono text-slate-800">₩{totalStats.total2024.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right font-mono text-slate-800">₩{totalStats.total2023.toLocaleString()}</td>
                     </tr>

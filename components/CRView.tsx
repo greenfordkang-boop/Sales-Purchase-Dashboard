@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { safeSetItem } from '../utils/safeStorage';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { parseCIExcel, CIDetailItem, CIParseResult } from '../utils/ciDataParser';
 import { ForecastSummary } from '../utils/salesForecastParser';
 import { ciKpiService, ciDetailService, ciUploadService, forecastService } from '../services/supabaseService';
@@ -461,7 +461,7 @@ const CRView: React.FC = () => {
     const display = isPercent ? fmtPct(value) : fmtMillion(value);
     return (
       <span
-        className={`cursor-pointer hover:bg-blue-50 px-1 py-0.5 rounded ${className}`}
+        className={`cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded ${className}`}
         onClick={() => handleKpiEdit(cellId, value)}
         title="클릭하여 수정"
       >
@@ -488,7 +488,7 @@ const CRView: React.FC = () => {
     </th>
   );
 
-  const PIE_COLORS = ['#6366f1', '#f43f5e', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#14b8a6'];
+  const PIE_COLORS = ['#334155', '#334155', '#64748b', '#94a3b8', '#cbd5e1', '#2563eb', '#475569', '#1e293b'];
 
   // ============================================
   // Render
@@ -503,14 +503,14 @@ const CRView: React.FC = () => {
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
           <div>
-            <h2 className="text-lg font-black text-slate-800">CR (Cost Reduction) 현황</h2>
+            <h2 className="text-lg font-bold text-slate-800">CR (Cost Reduction) 현황</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               매출계획: {forecastSummary ? `${forecastSummary.revision} (${forecastSummary.reportDate})` : '매출계획 데이터 없음 - 영업현황에서 업로드 필요'}
             </p>
           </div>
           <button
             onClick={handleDistributeTarget}
-            className="text-xs text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
+            className="text-xs text-blue-600 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-colors font-medium"
             title="연간 목표를 12개월 균등분배"
           >
             목표 균등분배
@@ -520,7 +520,7 @@ const CRView: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-cyan-100">
+              <tr className="bg-slate-100">
                 <th rowSpan={2} className="border border-slate-300 px-3 py-2 text-center font-bold min-w-[100px]">KPI항목</th>
                 <th rowSpan={2} className="border border-slate-300 px-3 py-2 text-center font-bold min-w-[70px]">2025년<br/>실적</th>
                 <th rowSpan={2} className="border border-slate-300 px-3 py-2 text-center font-bold min-w-[70px]">2026년<br/>목표</th>
@@ -528,7 +528,7 @@ const CRView: React.FC = () => {
                 <th colSpan={12} className="border border-slate-300 px-3 py-2 text-center font-bold">월별 실적</th>
                 <th rowSpan={2} className="border border-slate-300 px-3 py-2 text-center font-bold min-w-[70px]">누계</th>
               </tr>
-              <tr className="bg-cyan-100">
+              <tr className="bg-slate-100">
                 {MONTHS.map(m => (
                   <th key={m} className="border border-slate-300 px-2 py-1.5 text-center font-bold min-w-[65px]">{m}</th>
                 ))}
@@ -565,7 +565,7 @@ const CRView: React.FC = () => {
                     <EditableCell cellId={`actual-${i}`} value={v} />
                   </td>
                 ))}
-                <td className="border border-slate-300 px-2 py-1.5 text-right font-bold bg-blue-50 text-blue-700">
+                <td className="border border-slate-300 px-2 py-1.5 text-right font-bold bg-slate-50 text-slate-800">
                   {fmtMillion(ciActualCumulative)}
                 </td>
               </tr>
@@ -602,7 +602,7 @@ const CRView: React.FC = () => {
                     {fmtPct(v)}
                   </td>
                 ))}
-                <td className="border border-slate-300 px-2 py-1.5 text-right font-bold bg-blue-50 text-blue-700">
+                <td className="border border-slate-300 px-2 py-1.5 text-right font-bold bg-slate-50 text-slate-800">
                   {fmtPct(ciRatioActualCumulative)}
                 </td>
               </tr>
@@ -617,7 +617,7 @@ const CRView: React.FC = () => {
                   </td>
                 ))}
                 <td className={`border border-slate-300 px-2 py-1.5 text-right font-bold ${
-                  achievementCumulative >= 100 ? 'text-emerald-600 bg-emerald-50' : achievementCumulative > 0 ? 'text-red-600 bg-red-50' : 'bg-slate-50'
+                  achievementCumulative >= 100 ? 'text-emerald-600 bg-slate-50' : achievementCumulative > 0 ? 'text-red-600 bg-slate-50' : 'bg-slate-50'
                 }`}>
                   {fmtPct(achievementCumulative)}
                 </td>
@@ -633,9 +633,9 @@ const CRView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Upload Area */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-sm font-black text-slate-800 mb-4">CI 실적 업로드</h3>
+          <h3 className="text-sm font-bold text-slate-800 mb-4">CI 실적 업로드</h3>
           <label className={`flex flex-col items-center justify-center h-32 border-2 border-dashed rounded-2xl cursor-pointer transition-colors ${
-            isUploading ? 'border-blue-400 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-blue-50/50'
+            isUploading ? 'border-blue-400 bg-slate-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50/50'
           }`}>
             <input
               type="file"
@@ -674,7 +674,7 @@ const CRView: React.FC = () => {
                     <span className="ml-2">{u.fileName}</span>
                   </div>
                   <div className="text-right">
-                    <div className="font-bold text-blue-600">{fmtWon(u.totalCIAmount)}</div>
+                    <div className="font-bold text-slate-800">{fmtWon(u.totalCIAmount)}</div>
                     <div>{new Date(u.uploadDate).toLocaleDateString('ko-KR')}</div>
                   </div>
                 </div>
@@ -685,9 +685,9 @@ const CRView: React.FC = () => {
 
         {/* Monthly Chart */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-sm font-black text-slate-800 mb-4">CI 금액 월별 추이 (백만원)</h3>
+          <h3 className="text-sm font-bold text-slate-800 mb-4">CI 금액 월별 추이 (백만원)</h3>
           <ResponsiveContainer minWidth={0} width="100%" height={220}>
-            <BarChart data={chartData} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
+            <BarChart data={chartData} margin={{ top: 20, right: 5, left: -10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
               <XAxis dataKey="month" tick={{ fontSize: 10 }} />
               <YAxis tick={{ fontSize: 10 }} />
@@ -696,15 +696,17 @@ const CRView: React.FC = () => {
                 formatter={(v: number) => [`${(v as number).toFixed(1)} 백만원`]}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Bar dataKey="목표" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="실적" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="목표" fill="#cbd5e1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="실적" fill="#334155" radius={[4, 4, 0, 0]}>
+                <LabelList dataKey="실적" position="top" formatter={(v: number) => v > 0 ? `${v.toFixed(0)}` : ''} style={{ fontSize: 10, fontWeight: 600, fill: '#64748b' }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
 
         {/* Category Pie Chart */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
-          <h3 className="text-sm font-black text-slate-800 mb-4">품목별 CI 실적</h3>
+          <h3 className="text-sm font-bold text-slate-800 mb-4">품목별 CI 실적</h3>
           {categoryChartData.length > 0 ? (
             <>
               <ResponsiveContainer minWidth={0} width="100%" height={180}>
@@ -756,7 +758,7 @@ const CRView: React.FC = () => {
           onClick={() => setDetailOpen(!detailOpen)}
         >
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-black text-slate-800">CI 상세 리스트</h2>
+            <h2 className="text-lg font-bold text-slate-800">CI 상세 리스트</h2>
             <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
               {filteredDetails.length}건
             </span>
@@ -819,7 +821,7 @@ const CRView: React.FC = () => {
 
               {/* Total */}
               <div className="text-xs text-slate-500">
-                CI 합계: <span className="font-bold text-blue-700">{fmtWon(filteredDetails.reduce((s, d) => s + d.ciAmount, 0))}</span>
+                CI 합계: <span className="font-bold text-slate-800">{fmtWon(filteredDetails.reduce((s, d) => s + d.ciAmount, 0))}</span>
               </div>
             </div>
 
@@ -851,7 +853,7 @@ const CRView: React.FC = () => {
                         <td className="px-3 py-2 text-center text-slate-400">{idx + 1}</td>
                         {detailMonth === 'all' && (
                           <td className="px-3 py-2 text-center">
-                            <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                            <span className="bg-slate-100 text-slate-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
                               {(item as CIDetailItem & { month: number }).month}월
                             </span>
                           </td>
@@ -864,8 +866,8 @@ const CRView: React.FC = () => {
                         <td className="px-3 py-2 text-slate-700">{item.partName}</td>
                         <td className="px-3 py-2">
                           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            item.category === 'PAINT' ? 'bg-purple-100 text-purple-700' :
-                            item.category === 'RESIN' ? 'bg-amber-100 text-amber-700' :
+                            item.category === 'PAINT' ? 'bg-slate-200 text-slate-700' :
+                            item.category === 'RESIN' ? 'bg-slate-100 text-slate-700' :
                             'bg-slate-100 text-slate-700'
                           }`}>
                             {item.category}
@@ -883,7 +885,7 @@ const CRView: React.FC = () => {
                             : '-'}
                         </td>
                         <td className="px-3 py-2 text-right font-mono text-slate-700 font-medium">{item.quantity.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right font-mono font-bold text-blue-700">{fmtWon(item.ciAmount)}</td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{fmtWon(item.ciAmount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -895,7 +897,7 @@ const CRView: React.FC = () => {
                       <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-700">
                         {filteredDetails.reduce((s, d) => s + d.quantity, 0).toLocaleString()}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono font-black text-blue-700">
+                      <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-800">
                         {fmtWon(filteredDetails.reduce((s, d) => s + d.ciAmount, 0))}
                       </td>
                     </tr>

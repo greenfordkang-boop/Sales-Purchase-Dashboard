@@ -155,11 +155,11 @@ function isAllChecked(status: ReviewStatus | undefined): boolean {
 }
 
 const typeBadge = (t: string) => {
-  if (/사출/.test(t)) return { label: '사출', cls: 'bg-emerald-100 text-emerald-700' };
-  if (/도장/.test(t)) return { label: '도장', cls: 'bg-violet-100 text-violet-700' };
-  if (/구매/.test(t)) return { label: '구매', cls: 'bg-amber-100 text-amber-700' };
-  if (/외주/.test(t)) return { label: '외주', cls: 'bg-blue-100 text-blue-700' };
-  if (/원재료/.test(t)) return { label: '원재료', cls: 'bg-rose-100 text-rose-700' };
+  if (/사출/.test(t)) return { label: '사출', cls: 'bg-slate-100 text-slate-600' };
+  if (/도장/.test(t)) return { label: '도장', cls: 'bg-slate-100 text-slate-600' };
+  if (/구매/.test(t)) return { label: '구매', cls: 'bg-slate-100 text-slate-600' };
+  if (/외주/.test(t)) return { label: '외주', cls: 'bg-slate-100 text-slate-600' };
+  if (/원재료/.test(t)) return { label: '원재료', cls: 'bg-slate-100 text-slate-600' };
   if (/조립/.test(t)) return { label: '조립', cls: 'bg-slate-100 text-slate-600' };
   if (t) return { label: t.slice(0, 4), cls: 'bg-slate-100 text-slate-600' };
   return null;
@@ -1303,7 +1303,7 @@ const BomReviewView: React.FC = () => {
                 onChange={e => setEditValue(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') cancelEdit(); }}
                 onBlur={handleSave}
-                className="w-full px-1.5 py-0.5 border border-indigo-300 rounded text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+                className="w-full px-1.5 py-0.5 border border-slate-300 rounded text-xs outline-none focus:ring-1 focus:ring-blue-400"
                 disabled={saving}
               />
             </td>
@@ -1311,8 +1311,8 @@ const BomReviewView: React.FC = () => {
         }
         return (
           <td
-            className={`px-2 py-1.5 cursor-pointer hover:bg-indigo-50 transition-colors ${className} ${
-              recentlySaved.has(savedKey(field)) ? 'bg-amber-50' : ''
+            className={`px-2 py-1.5 cursor-pointer hover:bg-slate-50 transition-colors ${className} ${
+              recentlySaved.has(savedKey(field)) ? 'bg-slate-50' : ''
             }`}
             onClick={() => startEdit(parentPn, node.pn, field, nodeKey, value)}
             title="클릭하여 수정"
@@ -1326,8 +1326,8 @@ const BomReviewView: React.FC = () => {
         <tr
           key={nodeKey}
           className={`transition-colors border-b border-slate-100 ${
-            isVirtualPaint ? 'bg-violet-50/40' : 'hover:bg-slate-50/80'
-          } ${selectedNodeInfo?.pn === node.pn ? 'ring-1 ring-inset ring-indigo-300 bg-indigo-50/50' : ''}`}
+            isVirtualPaint ? 'bg-slate-50/40' : 'hover:bg-slate-50/80'
+          } ${selectedNodeInfo?.pn === node.pn ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/50' : ''}`}
           onClick={() => handleNodeSelect(node, parentPn)}
         >
           {/* Level */}
@@ -1340,7 +1340,7 @@ const BomReviewView: React.FC = () => {
               {hasChildren ? (
                 <button
                   onClick={e => { e.stopPropagation(); toggleCollapse(nodeKey); }}
-                  className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors flex-shrink-0"
+                  className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-blue-600 transition-colors flex-shrink-0"
                 >
                   <svg className={`w-3 h-3 transition-transform ${isCollapsed ? '' : 'rotate-90'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -1348,10 +1348,10 @@ const BomReviewView: React.FC = () => {
                 </button>
               ) : (
                 <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-                  <span className={`w-1.5 h-1.5 rounded-full ${isVirtualPaint ? 'bg-violet-400' : 'bg-slate-300'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${isVirtualPaint ? 'bg-slate-400' : 'bg-slate-300'}`} />
                 </span>
               )}
-              <span className={`font-mono text-xs font-bold truncate ${isVirtualPaint ? 'text-violet-600' : 'text-indigo-600'}`}>
+              <span className={`font-mono text-xs font-bold truncate ${isVirtualPaint ? 'text-slate-500' : 'text-slate-800'}`}>
                 {isVirtualPaint ? node.pn.replace('PAINT_', '🎨 ') : node.pn}
               </span>
             </div>
@@ -1381,7 +1381,7 @@ const BomReviewView: React.FC = () => {
             return (
               <td className="px-2 py-1.5 text-right text-xs font-mono w-24">
                 {isVirtualPaint ? (
-                  <span className="text-purple-600">{nodePrice > 0 ? fmtWon(nodePrice) : '—'}</span>
+                  <span className="text-slate-800">{nodePrice > 0 ? fmtWon(nodePrice) : '—'}</span>
                 ) : isPriceEditing ? (
                   <input
                     ref={priceInputRef}
@@ -1393,7 +1393,7 @@ const BomReviewView: React.FC = () => {
                       if (e.key === 'Escape') setEditingPriceKey('');
                     }}
                     onBlur={() => handlePriceSave(node.pn)}
-                    className="w-20 px-1 py-0.5 border border-indigo-300 rounded text-right text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+                    className="w-20 px-1 py-0.5 border border-slate-300 rounded text-right text-xs outline-none focus:ring-1 focus:ring-blue-400"
                     disabled={savingPrice}
                   />
                 ) : (
@@ -1403,7 +1403,7 @@ const BomReviewView: React.FC = () => {
                       setEditingPriceKey(nodeKey);
                       setEditPriceValue(nodePrice > 0 ? String(Math.round(nodePrice)) : '');
                     }}
-                    className={`cursor-pointer hover:bg-indigo-50 px-1 py-0.5 rounded transition-colors w-full text-right ${
+                    className={`cursor-pointer hover:bg-slate-50 px-1 py-0.5 rounded transition-colors w-full text-right ${
                       nodePrice > 0 ? 'text-slate-700' : 'text-slate-300'
                     }`}
                     title={nodePriceSource ? `출처: ${nodePriceSource} — 클릭하여 수정` : '클릭하여 단가 입력'}
@@ -1431,7 +1431,7 @@ const BomReviewView: React.FC = () => {
             const justSynced = syncedPns.has(code);
             return (
               <>
-                <td className="px-2 py-1.5 text-right text-xs font-mono w-20 text-orange-600">
+                <td className="px-2 py-1.5 text-right text-xs font-mono w-20 text-slate-500">
                   {stdPrice > 0 ? fmtWon(stdPrice) : <span className="text-slate-300">—</span>}
                 </td>
                 <td className="px-1 py-1.5 text-center text-xs w-20">
@@ -1443,8 +1443,8 @@ const BomReviewView: React.FC = () => {
                       disabled={syncingStd}
                       className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
                         diff > 0
-                          ? 'bg-rose-50 text-rose-600 hover:bg-rose-100'
-                          : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
+                          ? 'bg-slate-50 text-rose-500 hover:bg-slate-100'
+                          : 'bg-slate-50 text-emerald-600 hover:bg-slate-100'
                       }`}
                       title={`BOM단가(${fmtWon(nodePrice)})→표준 반영`}
                     >
@@ -1514,7 +1514,7 @@ const BomReviewView: React.FC = () => {
   }, [syncingStd]);
 
   // --- Progress Bar Color ---
-  const progressColor = progressStats.pct >= 80 ? 'bg-emerald-500' : progressStats.pct >= 50 ? 'bg-amber-500' : 'bg-rose-500';
+  const progressColor = progressStats.pct >= 80 ? 'bg-emerald-500' : progressStats.pct >= 50 ? 'bg-slate-400' : 'bg-rose-500';
   const costDiff = bomTotal - stdTotal;
 
   // --- Loading ---
@@ -1522,7 +1522,7 @@ const BomReviewView: React.FC = () => {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
           <p className="text-sm text-slate-500">BOM 데이터 로딩 중...</p>
         </div>
       </div>
@@ -1544,8 +1544,8 @@ const BomReviewView: React.FC = () => {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-              <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <svg className="w-6 h-6 text-slate-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
               BOM 관리
@@ -1558,13 +1558,13 @@ const BomReviewView: React.FC = () => {
             </span>
             <button
               onClick={() => setShowMesModal(true)}
-              className="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-bold rounded-lg hover:bg-violet-200 transition-colors"
+              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors"
             >
               MES정보
             </button>
             <button
               onClick={() => setShowPaintAnalysis(true)}
-              className="px-3 py-1.5 bg-purple-100 text-purple-700 text-xs font-bold rounded-lg hover:bg-purple-200 transition-colors"
+              className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-200 transition-colors"
             >
               도장 분석
             </button>
@@ -1576,7 +1576,7 @@ const BomReviewView: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <label className="text-xs font-bold text-slate-600">고객사</label>
             <select value={filterCustomer} onChange={e => { setFilterCustomer(e.target.value); setFilterModel(''); }}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20">
               <option value="">전체</option>
               {customers.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -1584,7 +1584,7 @@ const BomReviewView: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <label className="text-xs font-bold text-slate-600">차종</label>
             <select value={filterModel} onChange={e => setFilterModel(e.target.value)}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20">
               <option value="">전체</option>
               {filteredModels.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -1592,7 +1592,7 @@ const BomReviewView: React.FC = () => {
           <div className="flex items-center gap-1.5">
             <label className="text-xs font-bold text-slate-600">월</label>
             <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}
-              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20">
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20">
               <option value={0}>연간</option>
               {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}월</option>)}
             </select>
@@ -1601,7 +1601,7 @@ const BomReviewView: React.FC = () => {
             <label className="text-xs font-bold text-slate-600">검색</label>
             <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)}
               placeholder="품번/품명 검색..."
-              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              className="flex-1 px-3 py-1.5 border border-slate-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-500/20" />
           </div>
         </div>
 
@@ -1618,12 +1618,12 @@ const BomReviewView: React.FC = () => {
       {/* Product List */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
-            <span className="w-1 h-4 bg-indigo-600 rounded-full" />
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            <span className="w-1 h-4 bg-slate-400 rounded-full" />
             Level-0 제품 목록 <span className="text-xs font-normal text-slate-400 ml-1">({filteredProducts.length}개)</span>
           </h3>
           <button onClick={() => setProductListCollapsed(v => !v)}
-            className="text-xs font-bold text-slate-500 hover:text-indigo-600 px-2 py-1 rounded transition-colors">
+            className="text-xs font-bold text-slate-500 hover:text-blue-600 px-2 py-1 rounded transition-colors">
             {productListCollapsed ? '펼치기 ▼' : '접기 ▲'}
           </button>
         </div>
@@ -1647,7 +1647,7 @@ const BomReviewView: React.FC = () => {
                     onClick={() => handleSort(col.key)}
                     className={`${col.align} px-3 py-2.5 font-bold text-slate-600 ${col.w} cursor-pointer hover:bg-slate-100 select-none`}>
                     {col.label}
-                    {sortKey === col.key && <span className="ml-0.5 text-indigo-500">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                    {sortKey === col.key && <span className="ml-0.5 text-blue-600">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                   </th>
                 ))}
                 {DEPARTMENTS.map(d => (
@@ -1663,12 +1663,12 @@ const BomReviewView: React.FC = () => {
                   const status = reviewStatus[p.pn];
                   const allDone = isAllChecked(status);
                   const isSelected = selectedProduct === p.pn;
-                  const ratioColor = p.materialRatio > 70 ? 'text-rose-600' : p.materialRatio > 50 ? 'text-amber-600' : 'text-emerald-600';
+                  const ratioColor = p.materialRatio > 70 ? 'text-rose-600' : p.materialRatio > 50 ? 'text-slate-500' : 'text-emerald-600';
 
                   return (
                     <tr key={p.pn}
                       onClick={() => { setSelectedProduct(prev => prev === p.pn ? '' : p.pn); setCollapsedNodes(new Set()); setSelectedNodeInfo(null); cancelEdit(); }}
-                      className={`cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 border-l-2 border-l-indigo-500' : 'hover:bg-slate-50'} ${allDone ? 'text-blue-600 font-semibold' : ''}`}
+                      className={`cursor-pointer transition-colors ${isSelected ? 'bg-blue-50 border-l-2 border-l-blue-600' : 'hover:bg-slate-50'} ${allDone ? 'text-blue-600 font-semibold' : ''}`}
                     >
                       <td className="px-3 py-2 font-mono font-bold">{p.pn}</td>
                       <td className="px-3 py-2 truncate max-w-[180px]" title={p.name}>{p.name}</td>
@@ -1686,7 +1686,7 @@ const BomReviewView: React.FC = () => {
                           <input type="checkbox" checked={status?.[d.key] ?? false}
                             onChange={e => { e.stopPropagation(); handleReviewToggle(p.pn, d.key); }}
                             onClick={e => e.stopPropagation()}
-                            className="w-3.5 h-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" />
                         </td>
                       ))}
                     </tr>
@@ -1701,17 +1701,17 @@ const BomReviewView: React.FC = () => {
               const sumExpRevenue = filteredProducts.reduce((s, p) => s + p.expectedRevenue, 0);
               const sumMaterialTotal = filteredProducts.reduce((s, p) => s + (p.expectedRevenue > 0 ? p.planQty * p.materialCost : 0), 0);
               const avgRatio = sumExpRevenue > 0 ? (sumMaterialTotal / sumExpRevenue) * 100 : 0;
-              const ratioColor = avgRatio > 70 ? 'text-rose-600' : avgRatio > 50 ? 'text-amber-600' : 'text-emerald-600';
+              const ratioColor = avgRatio > 70 ? 'text-rose-600' : avgRatio > 50 ? 'text-slate-500' : 'text-emerald-600';
               return (
                 <tfoot className="bg-slate-100 border-t-2 border-slate-300 sticky bottom-0">
                   <tr>
-                    <td className="px-3 py-2 font-black text-slate-700" colSpan={2}>합계 ({filteredProducts.length}개)</td>
+                    <td className="px-3 py-2 font-bold text-slate-700" colSpan={2}>합계 ({filteredProducts.length}개)</td>
                     <td className="px-3 py-2" colSpan={2} />
-                    <td className="px-3 py-2 text-right font-mono font-black text-slate-800">{avgSelling > 0 ? `${fmtWon(avgSelling)} avg` : '—'}</td>
-                    <td className="px-3 py-2 text-right font-mono font-black text-slate-800">{sumPlanQty > 0 ? sumPlanQty.toLocaleString() : '—'}</td>
-                    <td className="px-3 py-2 text-right font-mono font-black text-slate-800">{sumExpRevenue > 0 ? fmtWon(sumExpRevenue) : '—'}</td>
-                    <td className="px-3 py-2 text-right font-mono font-black text-slate-800">{sumMaterialTotal > 0 ? fmtWon(sumMaterialTotal) : '—'}</td>
-                    <td className={`px-3 py-2 text-right font-mono font-black ${ratioColor}`}>{avgRatio > 0 ? `${avgRatio.toFixed(1)}%` : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{avgSelling > 0 ? `${fmtWon(avgSelling)} avg` : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{sumPlanQty > 0 ? sumPlanQty.toLocaleString() : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{sumExpRevenue > 0 ? fmtWon(sumExpRevenue) : '—'}</td>
+                    <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{sumMaterialTotal > 0 ? fmtWon(sumMaterialTotal) : '—'}</td>
+                    <td className={`px-3 py-2 text-right font-mono font-bold ${ratioColor}`}>{avgRatio > 0 ? `${avgRatio.toFixed(1)}%` : '—'}</td>
                     {DEPARTMENTS.map(d => <td key={d.key} className="px-1 py-2" />)}
                   </tr>
                 </tfoot>
@@ -1728,15 +1728,15 @@ const BomReviewView: React.FC = () => {
           {/* Left: BOM Tree */}
           <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-700 flex items-center gap-2">
-                <span className="w-1 h-4 bg-emerald-500 rounded-full" />
-                BOM 트리: <span className="text-indigo-600 font-mono">{selectedProduct}</span>
+              <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                <span className="w-1 h-4 bg-slate-400 rounded-full" />
+                BOM 트리: <span className="text-blue-600 font-mono">{selectedProduct}</span>
                 {enrichedTree.name && <span className="text-slate-500 font-normal ml-1">{enrichedTree.name}</span>}
               </h3>
               {/* BOM vs Std cost warning */}
               {stdTotal > 0 && bomTotal > 0 && Math.abs(costDiff) > 1 && (
                 <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${
-                  costDiff > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                  costDiff > 0 ? 'bg-slate-50 text-rose-500 border border-slate-100' : 'bg-slate-50 text-emerald-600 border border-slate-100'
                 }`}>
                   BOM({fmtWon(bomTotal)}) {costDiff > 0 ? '>' : '<'} 표준({fmtWon(stdTotal)}) — {costDiff > 0 ? '△' : '▽'}{fmtWon(Math.abs(costDiff))}
                 </span>
@@ -1754,7 +1754,7 @@ const BomReviewView: React.FC = () => {
                     <th className="px-2 py-2 text-right font-bold text-slate-500 w-14">소요량</th>
                     <th className="px-2 py-2 text-right font-bold text-slate-500 w-20">단가</th>
                     <th className="px-2 py-2 text-right font-bold text-slate-500 w-20">금액</th>
-                    <th className="px-2 py-2 text-right font-bold text-orange-500 w-20">표준</th>
+                    <th className="px-2 py-2 text-right font-bold text-slate-500 w-20">표준</th>
                     <th className="px-2 py-2 text-center font-bold text-slate-500 w-20">차이</th>
                   </tr>
                 </thead>
@@ -1771,13 +1771,13 @@ const BomReviewView: React.FC = () => {
             <div className="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-6 text-xs">
                 <span className="font-bold text-slate-600">BOM 전개 소계</span>
-                <span className="font-black text-lg text-slate-800">{fmtWon(bomTotal)}</span>
+                <span className="font-bold text-lg text-slate-800">{fmtWon(bomTotal)}</span>
               </div>
               <div className="flex items-center gap-4 text-xs">
-                <span className="font-bold text-orange-600">표준재료비</span>
-                <span className="font-black text-lg text-orange-700">{stdTotal > 0 ? fmtWon(stdTotal) : '—'}</span>
+                <span className="font-bold text-slate-500">표준재료비</span>
+                <span className="font-bold text-lg text-slate-800">{stdTotal > 0 ? fmtWon(stdTotal) : '—'}</span>
                 {bomTotal > 0 && Math.abs(costDiff) > 1 && stdTotal > 0 && (
-                  <span className={`font-bold px-2 py-0.5 rounded ${costDiff > 0 ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <span className={`font-bold px-2 py-0.5 rounded ${costDiff > 0 ? 'bg-rose-50 text-rose-500' : 'bg-slate-50 text-emerald-600'}`}>
                     {costDiff > 0 ? '△' : '▽'}{fmtWon(Math.abs(costDiff))} ({((costDiff / stdTotal) * 100).toFixed(1)}%)
                   </span>
                 )}
@@ -1789,7 +1789,7 @@ const BomReviewView: React.FC = () => {
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                     syncingStd
                       ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                      : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm'
                   }`}
                 >
                   {syncingStd ? '반영 중...' : syncMsg || 'BOM소계 → 표준재료비 반영'}
@@ -1799,7 +1799,7 @@ const BomReviewView: React.FC = () => {
 
             {/* Warning bar */}
             {stdTotal > 0 && bomTotal > 0 && costDiff > 0 && (
-              <div className="px-5 py-2 bg-amber-50 border-t border-amber-200 text-xs text-amber-700 font-bold">
+              <div className="px-5 py-2 bg-slate-50 border-t border-slate-200 text-xs text-rose-500 font-bold">
                 표준재료비({fmtWon(stdTotal)}) &lt; BOM 소계({fmtWon(bomTotal)}) — 표준재료비 재검토 필요 △{fmtWon(costDiff)}
               </div>
             )}
@@ -1812,14 +1812,14 @@ const BomReviewView: React.FC = () => {
                 {/* Cost diff indicator */}
                 {stdTotal > 0 && bomTotal > 0 && Math.abs(costDiff) > 1 && (
                   <div className={`text-xs font-bold px-3 py-2 rounded-lg ${
-                    costDiff > 0 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+                    costDiff > 0 ? 'bg-slate-50 text-rose-500 border border-slate-100' : 'bg-slate-50 text-emerald-600 border border-slate-100'
                   }`}>
                     {costDiff > 0 ? '🟡' : '🟢'} BOM({fmtWon(bomTotal)}) ≠ 표준({fmtWon(stdTotal)}) — △{fmtWon(Math.abs(costDiff))}
                   </div>
                 )}
 
                 <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-black text-slate-700">선택 자재 상세</h4>
+                  <h4 className="text-sm font-bold text-slate-700">선택 자재 상세</h4>
                   {detailEdit === null ? (
                     <button
                       onClick={(e) => {
@@ -1996,7 +1996,7 @@ const BomReviewView: React.FC = () => {
                               }
                             }}
                             onClick={e => e.stopPropagation()}
-                            className="w-24 px-1 py-0.5 border-2 border-blue-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
+                            className="w-24 px-1 py-0.5 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white cursor-pointer"
                           >
                             <option value="">-</option>
                             <option value="자작">자작</option>
@@ -2017,7 +2017,7 @@ const BomReviewView: React.FC = () => {
                             onChange={e => setDetailEdit(prev => prev ? { ...prev, supplier: e.target.value } : prev)}
                             onClick={e => e.stopPropagation()}
                             placeholder="구입처 입력"
-                            className="w-full px-2 py-0.5 border-2 border-blue-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-full px-2 py-0.5 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                           />
                         ) : (selectedNodeInfo.supplier || '-')}
                       </td>
@@ -2033,7 +2033,7 @@ const BomReviewView: React.FC = () => {
                             value={detailEdit.unitQty}
                             onChange={e => setDetailEdit(prev => prev ? { ...prev, unitQty: e.target.value } : prev)}
                             onClick={e => e.stopPropagation()}
-                            className="w-24 px-2 py-0.5 border-2 border-blue-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-24 px-2 py-0.5 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                           />
                         ) : (
                           Number.isInteger(selectedNodeInfo.unitQty) ? String(selectedNodeInfo.unitQty) : selectedNodeInfo.unitQty.toFixed(4)
@@ -2051,7 +2051,7 @@ const BomReviewView: React.FC = () => {
                             value={detailEdit.price}
                             onChange={e => setDetailEdit(prev => prev ? { ...prev, price: e.target.value } : prev)}
                             onClick={e => e.stopPropagation()}
-                            className="w-24 px-2 py-0.5 border-2 border-blue-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            className="w-24 px-2 py-0.5 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                           />
                         ) : fmtWon(selectedNodeInfo.price)}
                       </td>
@@ -2083,7 +2083,7 @@ const BomReviewView: React.FC = () => {
                                         priceSource: '표준',
                                       } : prev);
                                     }}
-                                    className="text-[10px] text-white bg-indigo-500 hover:bg-indigo-600 font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap"
+                                    className="text-[10px] text-white bg-blue-600 hover:bg-blue-700 font-bold px-1.5 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap"
                                   >
                                     단가적용
                                   </button>
@@ -2135,7 +2135,7 @@ const BomReviewView: React.FC = () => {
                   return (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-black text-emerald-700">사출 산출근거</h4>
+                      <h4 className="text-sm font-bold text-slate-700">사출 산출근거</h4>
                       {injEdit === null ? (
                         <button
                           onClick={(e) => {
@@ -2149,7 +2149,7 @@ const BomReviewView: React.FC = () => {
                               lossRate: String(injData.lossRate),
                             });
                           }}
-                          className="text-[11px] text-white bg-emerald-600 hover:bg-emerald-700 font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                          className="text-[11px] text-white bg-slate-600 hover:bg-slate-700 font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer"
                         >
                           수정
                         </button>
@@ -2199,14 +2199,14 @@ const BomReviewView: React.FC = () => {
                               }
                             }}
                             disabled={savingInj}
-                            className="text-[11px] text-white bg-emerald-600 hover:bg-emerald-700 font-bold px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                            className="text-[11px] text-white bg-slate-600 hover:bg-slate-700 font-bold px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
                           >
                             {savingInj ? '저장중...' : '저장'}
                           </button>
                         </div>
                       )}
                     </div>
-                    <div className="bg-emerald-50 rounded-xl p-3 space-y-2 text-xs">
+                    <div className="bg-slate-50 rounded-xl p-3 space-y-2 text-xs border border-slate-100">
                       {/* 원재료 (읽기 전용) */}
                       <div className="flex justify-between">
                         <span className="text-slate-500">원재료</span>
@@ -2233,7 +2233,7 @@ const BomReviewView: React.FC = () => {
                                 value={injEdit[field]}
                                 onChange={e => setInjEdit(prev => prev ? { ...prev, [field]: e.target.value } : prev)}
                                 onClick={e => e.stopPropagation()}
-                                className="w-24 px-2 py-1 border-2 border-emerald-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                                className="w-24 px-2 py-1 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                               />
                               <span className="text-[10px] text-slate-400 w-6">{unit}</span>
                             </div>
@@ -2258,13 +2258,13 @@ const BomReviewView: React.FC = () => {
                         const cc = (wpe * mp / 1000) * (1 + lr / 100);
                         return (
                           <>
-                            <div className="flex justify-between border-t border-emerald-200 pt-1.5">
+                            <div className="flex justify-between border-t border-slate-200 pt-1.5">
                               <span className="text-slate-500">EA당중량</span>
                               <span className="font-mono font-bold text-slate-800">{wpe.toFixed(2)}g</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-emerald-600 font-bold">공식 산출</span>
-                              <span className={`font-mono font-black text-lg ${injEdit && Math.abs(cc - injData.calculatedCost) > 1 ? 'text-rose-600' : 'text-emerald-700'}`}>
+                              <span className="text-slate-500 font-bold">공식 산출</span>
+                              <span className={`font-mono font-bold text-lg ${injEdit && Math.abs(cc - injData.calculatedCost) > 1 ? 'text-rose-500' : 'text-slate-800'}`}>
                                 {cc > 0 ? fmtWon(cc) : '—'}
                               </span>
                             </div>
@@ -2274,11 +2274,11 @@ const BomReviewView: React.FC = () => {
                               </div>
                             )}
                             {!injEdit && selectedNodeInfo.priceSource !== '사출' && (
-                              <div className="text-[10px] text-amber-600 mt-1">
+                              <div className="text-[10px] text-slate-500 mt-1">
                                 ※ 현재 단가는 '{selectedNodeInfo.priceSource}' 기준 — 사출 산출가와 비교하세요
                               </div>
                             )}
-                            <div className="text-[9px] text-slate-400 mt-1 border-t border-emerald-100 pt-1">
+                            <div className="text-[9px] text-slate-400 mt-1 border-t border-slate-200 pt-1">
                               = ({nw.toFixed(1)}g + {rw.toFixed(1)}g/{cv}) × ₩{Math.round(mp)}/kg ÷ 1000 × (1+{lr}%)
                             </div>
                           </>
@@ -2293,7 +2293,7 @@ const BomReviewView: React.FC = () => {
                 {selectedNodeInfo.paint && !/외주/.test(selectedNodeInfo.supplyType || '') && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-black text-purple-700">도장 산출근거</h4>
+                      <h4 className="text-sm font-bold text-slate-700">도장 산출근거</h4>
                       {paintEdit === null ? (
                         <button
                           onClick={(e) => {
@@ -2302,7 +2302,7 @@ const BomReviewView: React.FC = () => {
                               paintIntake: String(selectedNodeInfo.paint!.paintIntake || ''),
                             });
                           }}
-                          className="text-[11px] text-white bg-purple-600 hover:bg-purple-700 font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer"
+                          className="text-[11px] text-white bg-slate-600 hover:bg-slate-700 font-bold px-3 py-1 rounded-lg transition-colors cursor-pointer"
                         >
                           수정
                         </button>
@@ -2347,7 +2347,7 @@ const BomReviewView: React.FC = () => {
                               }
                             }}
                             disabled={savingPaint}
-                            className="text-[11px] text-white bg-purple-600 hover:bg-purple-700 font-bold px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                            className="text-[11px] text-white bg-slate-600 hover:bg-slate-700 font-bold px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
                           >
                             {savingPaint ? '저장중...' : '저장'}
                           </button>
@@ -2360,7 +2360,7 @@ const BomReviewView: React.FC = () => {
                       const costPerEa = intake > 0 ? p.mixCostPerKg / intake : 0;
                       const hasMixData = p.mixCostPerKg > 0;
                       return (
-                        <div className="bg-purple-50 rounded-xl p-3 space-y-1.5 text-xs">
+                        <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-xs border border-slate-100">
                           {/* 도료 정보 */}
                           <div className="flex justify-between">
                             <span className="text-slate-500">도료코드</span>
@@ -2371,12 +2371,12 @@ const BomReviewView: React.FC = () => {
                             <span className="font-mono font-bold text-slate-800">{p.paintName}</span>
                           </div>
                           {!hasMixData && (
-                            <div className="text-[10px] text-amber-600 bg-amber-50 px-2 py-1.5 rounded">
+                            <div className="text-[10px] text-slate-500 bg-slate-50 px-2 py-1.5 rounded border border-slate-100">
                               배합표준서에 도료코드({p.paintCode}) 매칭 데이터가 없습니다. 배합표준서를 업로드해주세요.
                             </div>
                           )}
                           {/* 배합비율 상세 */}
-                          {hasMixData && <><div className="border-t border-purple-200 pt-1.5 space-y-1">
+                          {hasMixData && <><div className="border-t border-slate-200 pt-1.5 space-y-1">
                             <div className="flex justify-between">
                               <span className="text-slate-500">주제 {p.mainRatio}%</span>
                               <span className="font-mono text-slate-700">
@@ -2397,7 +2397,7 @@ const BomReviewView: React.FC = () => {
                             </div>
                           </div>
                           {/* 배합단가 */}
-                          <div className="flex justify-between border-t border-purple-200 pt-1.5">
+                          <div className="flex justify-between border-t border-slate-200 pt-1.5">
                             <span className="text-slate-500 font-bold">배합단가</span>
                             <span className="font-mono font-bold text-slate-800">{fmtWon(p.mixCostPerKg)}/kg</span>
                           </div>
@@ -2413,7 +2413,7 @@ const BomReviewView: React.FC = () => {
                                   value={paintEdit.paintIntake}
                                   onChange={e => setPaintEdit(prev => prev ? { ...prev, paintIntake: e.target.value } : prev)}
                                   onClick={e => e.stopPropagation()}
-                                  className="w-24 px-2 py-1 border-2 border-purple-400 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                                  className="w-24 px-2 py-1 border-2 border-slate-300 rounded text-right text-xs font-mono outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                                 />
                                 <span className="text-[10px] text-slate-400">EA/kg</span>
                               </div>
@@ -2424,10 +2424,10 @@ const BomReviewView: React.FC = () => {
                             )}
                           </div>
                           {/* 개당 도료비 */}
-                          <div className="flex justify-between border-t border-purple-200 pt-1.5">
-                            <span className="text-purple-600 font-bold">개당 도료비</span>
-                            <span className={`font-mono font-black text-lg ${
-                              paintEdit && Math.abs(costPerEa - p.costPerEa) > 0.5 ? 'text-rose-600' : 'text-purple-700'
+                          <div className="flex justify-between border-t border-slate-200 pt-1.5">
+                            <span className="text-slate-500 font-bold">개당 도료비</span>
+                            <span className={`font-mono font-bold text-lg ${
+                              paintEdit && Math.abs(costPerEa - p.costPerEa) > 0.5 ? 'text-rose-500' : 'text-slate-800'
                             }`}>
                               {costPerEa > 0 ? fmtWon(costPerEa) : '—'}
                             </span>
@@ -2438,11 +2438,11 @@ const BomReviewView: React.FC = () => {
                             </div>
                           )}
                           {p.paintIntake <= 0 && !paintEdit && (
-                            <div className="text-[10px] text-amber-600 bg-amber-50 px-2 py-1 rounded mt-1">
+                            <div className="text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded mt-1 border border-slate-100">
                               ※ 개취수량을 입력하면 개당 도료비가 계산됩니다. [수정] 버튼을 눌러 입력하세요.
                             </div>
                           )}
-                          <div className="text-[9px] text-slate-400 mt-1 border-t border-purple-100 pt-1">
+                          <div className="text-[9px] text-slate-400 mt-1 border-t border-slate-200 pt-1">
                             = {fmtWon(p.mixCostPerKg)}/kg ÷ {intake > 0 ? intake : '?'} EA/kg
                           </div>
                         </div>

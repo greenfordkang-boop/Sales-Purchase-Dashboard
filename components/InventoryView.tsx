@@ -651,9 +651,9 @@ const InventoryView: React.FC = () => {
 
   // --- Sub Tabs Config ---
   const SUB_TABS = [
-    { id: 'resin', label: 'Resin 재고', color: 'blue' },
-    { id: 'paint', label: '도료 재고', color: 'emerald' },
-    { id: 'parts', label: '부품재고(창고별재고)', color: 'violet' }
+    { id: 'resin', label: 'Resin 재고' },
+    { id: 'paint', label: '도료 재고' },
+    { id: 'parts', label: '부품재고(창고별재고)' }
   ];
 
   // Sortable Header Component
@@ -678,7 +678,7 @@ const InventoryView: React.FC = () => {
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-slate-800">재고 현황 (Inventory)</h2>
+            <h2 className="text-xl font-bold text-slate-800">재고 현황 (Inventory)</h2>
             <p className="text-sm text-slate-500 mt-1">Resin, 도료, 부품 재고 현황 관리</p>
           </div>
 
@@ -690,7 +690,7 @@ const InventoryView: React.FC = () => {
                 onClick={() => setActiveSubTab(tab.id as any)}
                 className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
                   activeSubTab === tab.id
-                    ? `bg-white text-${tab.color}-600 shadow-sm`
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
@@ -708,23 +708,23 @@ const InventoryView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">등록 품목</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.resin.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{inventoryData.resin.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">검색 결과</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredResinData.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{filteredResinData.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">총 재고량</span>
-              <h3 className="text-lg font-black text-blue-600 mt-1">{resinTotal.toLocaleString()} Kg</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{resinTotal.toLocaleString()} Kg</h3>
             </div>
           </div>
 
           {/* Table */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <span className="w-1 h-5 bg-blue-600 rounded-full"></span>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                 Resin 재고 리스트
               </h3>
               <div className="flex items-center gap-2">
@@ -761,7 +761,7 @@ const InventoryView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredResinData.length > 0 && (
-                    <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                    <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                       <td colSpan={5} className="px-3 py-2 text-right">집계 ({filteredResinData.length}건)</td>
                       <td className="px-3 py-2 text-right font-mono">{resinTotal.toLocaleString()}</td>
                     </tr>
@@ -773,7 +773,7 @@ const InventoryView: React.FC = () => {
                       <td className="px-4 py-3 text-slate-800">{item.name}</td>
                       <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
                       <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-blue-600">{item.qty.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.qty.toLocaleString()}</td>
                     </tr>
                   ))}
                   {filteredResinData.length === 0 && (
@@ -784,7 +784,7 @@ const InventoryView: React.FC = () => {
                   <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                     <tr>
                       <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
-                      <td className="px-4 py-3 text-right font-mono text-blue-600">{resinTotal.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">{resinTotal.toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 )}
@@ -801,27 +801,27 @@ const InventoryView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">등록 품목</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.paint.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{inventoryData.paint.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">검색 결과</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredPaintData.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{filteredPaintData.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">총 재고량</span>
-              <h3 className="text-lg font-black text-emerald-600 mt-1">{paintTotal.toLocaleString()} Kg</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{paintTotal.toLocaleString()} Kg</h3>
             </div>
           </div>
 
           {/* Table */}
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-black text-slate-800 flex items-center gap-2">
-                <span className="w-1 h-5 bg-emerald-600 rounded-full"></span>
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                 도료 재고 리스트
               </h3>
               <div className="flex items-center gap-2">
-                <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
                   <span>📤 CSV 업로드</span>
                   <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'paint')} className="hidden" />
                 </label>
@@ -854,7 +854,7 @@ const InventoryView: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredPaintData.length > 0 && (
-                    <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                    <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                       <td colSpan={5} className="px-3 py-2 text-right">집계 ({filteredPaintData.length}건)</td>
                       <td className="px-3 py-2 text-right font-mono">{paintTotal.toLocaleString()}</td>
                     </tr>
@@ -866,7 +866,7 @@ const InventoryView: React.FC = () => {
                       <td className="px-4 py-3 text-slate-800">{item.name}</td>
                       <td className="px-4 py-3 text-center text-slate-600">{item.unit}</td>
                       <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
-                      <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">{item.qty.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.qty.toLocaleString()}</td>
                     </tr>
                   ))}
                   {filteredPaintData.length === 0 && (
@@ -877,7 +877,7 @@ const InventoryView: React.FC = () => {
                   <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                     <tr>
                       <td colSpan={5} className="px-4 py-3 text-center">합계 (Total)</td>
-                      <td className="px-4 py-3 text-right font-mono text-emerald-600">{paintTotal.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-800">{paintTotal.toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 )}
@@ -894,21 +894,21 @@ const InventoryView: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">등록 품목</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{inventoryData.parts.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{inventoryData.parts.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">검색 결과</span>
-              <h3 className="text-lg font-black text-slate-800 mt-1">{filteredPartsData.length.toLocaleString()} Items</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{filteredPartsData.length.toLocaleString()} Items</h3>
             </div>
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
               <span className="text-xs font-bold text-slate-400">총 재고수량</span>
-              <h3 className="text-lg font-black text-violet-600 mt-1">{partsTotal.toLocaleString()} EA</h3>
+              <h3 className="text-lg font-bold text-slate-800 mt-1">{partsTotal.toLocaleString()} EA</h3>
             </div>
             {/* View Mode Toggle */}
             <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
               <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                <button onClick={() => setPartsViewMode('list')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'list' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400'}`}>리스트</button>
-                <button onClick={() => setPartsViewMode('pivot')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'pivot' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-400'}`}>피봇분석</button>
+                <button onClick={() => setPartsViewMode('list')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>리스트</button>
+                <button onClick={() => setPartsViewMode('pivot')} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${partsViewMode === 'pivot' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400'}`}>피봇분석</button>
               </div>
             </div>
           </div>
@@ -917,12 +917,12 @@ const InventoryView: React.FC = () => {
           {partsViewMode === 'list' && (
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
-                  <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+                <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                   부품재고 (창고별재고) 리스트
                 </h3>
                 <div className="flex items-center gap-2">
-                  <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                  <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
                     <span>📤 CSV 업로드</span>
                     <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
                   </label>
@@ -965,7 +965,7 @@ const InventoryView: React.FC = () => {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredPartsData.length > 0 && (
-                      <tr className="bg-blue-50 border-b-2 border-blue-200 text-[11px] font-bold text-blue-800 sticky top-[33px] z-10">
+                      <tr className="bg-slate-50 border-b-2 border-slate-200 text-[11px] font-bold text-slate-800 sticky top-[33px] z-10">
                         <td colSpan={10} className="px-3 py-2 text-right">집계 ({filteredPartsData.length}건)</td>
                         <td className="px-3 py-2 text-right font-mono">{partsTotal.toLocaleString()}</td>
                       </tr>
@@ -982,7 +982,7 @@ const InventoryView: React.FC = () => {
                         <td className="px-4 py-3 text-center text-slate-600">{item.status || '-'}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.location}</td>
                         <td className="px-4 py-3 text-center text-slate-600">{item.storageLocation || '-'}</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-violet-600">{item.qty.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-slate-800">{item.qty.toLocaleString()}</td>
                       </tr>
                     ))}
                     {filteredPartsData.length === 0 && (
@@ -993,7 +993,7 @@ const InventoryView: React.FC = () => {
                     <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                       <tr>
                         <td colSpan={10} className="px-4 py-3 text-center">합계 (Total)</td>
-                        <td className="px-4 py-3 text-right font-mono text-violet-600">{partsTotal.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-800">{partsTotal.toLocaleString()}</td>
                       </tr>
                     </tfoot>
                   )}
@@ -1012,7 +1012,7 @@ const InventoryView: React.FC = () => {
                     <span className="text-xs font-bold text-slate-500 block mb-2">행(Rows) - 그룹화 기준</span>
                     <div className="flex flex-wrap gap-2">
                       {PIVOT_FIELDS.filter(f => f.key !== pivotCol).map(field => (
-                        <button key={field.key} onClick={() => togglePivotRow(field.key)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${pivotRows.includes(field.key) ? 'bg-violet-100 text-violet-700 border border-violet-300' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                        <button key={field.key} onClick={() => togglePivotRow(field.key)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${pivotRows.includes(field.key) ? 'bg-slate-50 text-blue-600 border border-slate-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                           {field.label} {pivotRows.includes(field.key) && `(${pivotRows.indexOf(field.key) + 1})`}
                         </button>
                       ))}
@@ -1032,13 +1032,13 @@ const InventoryView: React.FC = () => {
               {/* Pivot Table */}
               <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-black text-slate-800 flex items-center gap-2">
-                    <span className="w-1 h-5 bg-violet-600 rounded-full"></span>
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="w-1 h-5 bg-slate-700 rounded-full"></span>
                     피봇 분석 테이블
                     <span className="text-xs font-normal text-slate-400 ml-2">({pivotData.rows.length.toLocaleString()} 그룹)</span>
                   </h3>
                   <div className="flex items-center gap-2">
-                    <label className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
+                    <label className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-all flex items-center gap-1">
                       <span>📤 CSV 업로드</span>
                       <input type="file" accept=".csv" onChange={(e) => handleUpload(e, 'parts')} className="hidden" />
                     </label>
@@ -1056,17 +1056,17 @@ const InventoryView: React.FC = () => {
                         {pivotRows.map(key => (
                           <th key={key} className="px-4 py-3 text-left cursor-pointer hover:bg-slate-100" onClick={() => handlePivotSort(key)}>
                             {PIVOT_FIELDS.find(f => f.key === key)?.label || key}
-                            <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === key ? 'text-violet-600' : 'text-slate-300'}`}>
+                            <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === key ? 'text-blue-600' : 'text-slate-300'}`}>
                               {pivotSortConfig?.key === key ? (pivotSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                             </span>
                           </th>
                         ))}
                         {pivotData.colValues.map(colVal => (
-                          <th key={colVal} className="px-4 py-3 text-right bg-violet-50 text-violet-700">{colVal}</th>
+                          <th key={colVal} className="px-4 py-3 text-right bg-slate-50 text-slate-500">{colVal}</th>
                         ))}
                         <th className="px-4 py-3 text-right bg-slate-100 cursor-pointer hover:bg-slate-200" onClick={() => handlePivotSort('_totalQty')}>
                           합계
-                          <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === '_totalQty' ? 'text-violet-600' : 'text-slate-300'}`}>
+                          <span className={`ml-1 text-[10px] ${pivotSortConfig?.key === '_totalQty' ? 'text-blue-600' : 'text-slate-300'}`}>
                             {pivotSortConfig?.key === '_totalQty' ? (pivotSortConfig.direction === 'asc' ? '▲' : '▼') : '⇅'}
                           </span>
                         </th>
@@ -1079,7 +1079,7 @@ const InventoryView: React.FC = () => {
                             <td key={key} className="px-4 py-2 text-slate-700">{row[key] || '-'}</td>
                           ))}
                           {pivotData.colValues.map(colVal => (
-                            <td key={colVal} className="px-4 py-2 text-right font-mono text-violet-600">
+                            <td key={colVal} className="px-4 py-2 text-right font-mono text-slate-800">
                               {(row[`_col_${colVal}`] || 0).toLocaleString()}
                             </td>
                           ))}
@@ -1093,7 +1093,7 @@ const InventoryView: React.FC = () => {
                       )}
                     </tbody>
                     {pivotData.rows.length > 0 && (
-                      <tfoot className="bg-violet-100 font-bold text-violet-800 border-t-2 border-violet-200">
+                      <tfoot className="bg-slate-100 font-bold text-slate-800 border-t-2 border-slate-200">
                         <tr>
                           <td colSpan={pivotRows.length} className="px-4 py-3 text-center">총계 (Grand Total)</td>
                           {pivotData.colValues.map(colVal => (
